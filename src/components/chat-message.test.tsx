@@ -5,6 +5,11 @@ import {agentName,seedThreads,type ChatMessage} from "@/data/mock";
 
 const render=(message:ChatMessage)=>renderToStaticMarkup(<MessageItem message={message} agentLabel={agentName} onRevert={()=>{}}/>);
 describe("Nike reference and live tool artifacts",()=>{
+ it.each(["cancelled","skipped","queued","unchanged"] as const)("keeps ordinary %s activities neutral",status=>{
+  const html=render({id:"group",role:"activity-group",summary:"Work",activities:[{id:"ordinary",kind:"terminal",label:"Run check",status}]});
+  expect(html).not.toContain("text-success");
+  expect(html).toContain(status[0].toUpperCase()+status.slice(1));
+ });
  it("keeps the Nike reference activity group and its tool rows",()=>{
   const group=seedThreads[0].messages.find(m=>m.role==="activity-group")!;
   const html=render(group);

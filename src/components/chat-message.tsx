@@ -57,6 +57,8 @@ import { DocumentArtifact } from "@/components/document-artifact";
 import { migrateProfessionalMessage } from "@/data/phase-two";
 import ThoughtLine from "@/components/thought-line";
 import { ThoughtArtifact } from "@/components/thought-artifact";
+import { FoundationRow, FoundationStatusIcon, foundationStateLabels } from "@/components/foundation-row";
+import { aggregateActivityState, normalizeActivityState } from "@/lib/foundation-events";
 
 interface MessageItemProps {
   message: ChatMessage;
@@ -213,7 +215,7 @@ export function MessageItem({
       );
 
     case "activity-group":
-      return <ActivityGroup summary={message.summary} activities={message.activities} startedAt={message.startedAt} />;
+      return <ActivityGroup summary={message.summary} activities={message.activities} startedAt={message.startedAt} gallery={message.foundationGallery} onOpenDocument={onOpenDoc?()=>onOpenDoc(message.id):undefined} />;
 
     case "subagent":
       return <SubagentCard message={message}/>;
@@ -490,6 +492,7 @@ const activityIcons: Record<ActivityKind, LucideIcon> = {
   mcp: GitBranch,
   plugin: Plug,
   browser: Monitor,
+  foundation: ShieldCheck,
 };
 
 function SubagentCard({message}:{message:Extract<ChatMessage,{role:"subagent"}>}) {
@@ -513,52 +516,56 @@ function ActivityGroup({
   summary,
   activities,
   startedAt,
+  gallery,
+  onOpenDocument,
 }: {
   summary: string;
   activities: ToolActivity[];
   startedAt?: number;
+  gallery?: ToolActivity[];
+  onOpenDocument?:()=>void;
 }) {
-  const isRunning = activities.some((a) => a.status === "running");
-  const hasFailure = activities.some((a) => a.status === "failed");
+  const group=aggregateActivityState(activities.map(a=>a.foundation?.state??a.status));
+  const isRunning = group.state==="running";
+  const isFoundation=!!gallery||activities.some(a=>a.foundation);
+  const {reduceMotion}=useSettings().appearance;
+  const [open,setOpen]=React.useState(isRunning||group.actionable);
+  const userToggled=React.useRef(false);
+  const previousActionable=React.useRef(group.actionable);
+  React.useEffect(()=>{
+    if(!userToggled.current&&group.actionable&&!previousActionable.current)setOpen(true);
+    previousActionable.current=group.actionable;
+  },[group.actionable]);
+  const bodyId=React.useId();
   const elapsed = startedAt !== undefined && isRunning ? Date.now() - startedAt : undefined;
 
   return (
-    <details open={isRunning} className="group/activity animate-pop overflow-hidden rounded-xl border border-border bg-card/80">
-      <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 text-[13px] text-muted-foreground transition-colors hover:bg-white/[0.025] [&::-webkit-details-marker]:hidden">
-        {isRunning ? (
-          <LoaderCircle className="size-3.5 shrink-0 animate-spin text-taro" />
-        ) : hasFailure ? (
-          <CircleX className="size-3.5 shrink-0 text-destructive" />
-        ) : (
-          <CircleCheck className="size-3.5 shrink-0 text-success" />
-        )}
+    <div className="group/activity min-w-0 animate-pop overflow-hidden rounded-xl border border-border bg-card/80">
+      <button type="button" aria-expanded={open} aria-controls={bodyId} onClick={()=>{userToggled.current=true;setOpen(v=>!v);}} className="flex w-full cursor-pointer items-center gap-2 px-3 py-2.5 text-left text-[13px] text-muted-foreground transition-colors hover:bg-white/[0.025] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-taro">
+        <FoundationStatusIcon state={group.state} reduceMotion={reduceMotion}/>
         <span className="min-w-0 flex-1 truncate text-foreground/80">{summary}</span>
+        {isFoundation&&activities.length>0&&<span className="text-[10px] text-muted-foreground">{foundationStateLabels[group.state]}</span>}
         {elapsed !== undefined && <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{formatDuration(elapsed)}</span>}
-        <span className="shrink-0 text-[10px] text-muted-foreground/70">{activities.length} {activities.length===1?"tool":"tools"}</span>
-        <ChevronDown className="size-3.5 shrink-0 transition-transform group-open/activity:rotate-180" />
-      </summary>
+        {group.hasFailure&&["running","queued"].includes(group.state)&&<span className="text-[10px] text-destructive">Includes failures</span>}
+        <span className="shrink-0 text-[10px] text-muted-foreground">{gallery?.length??activities.length} {isFoundation?(gallery?.length??activities.length)===1?"activity":"activities":activities.length===1?"tool":"tools"}</span>
+        <ChevronDown className={cn("size-3.5 shrink-0",open&&"rotate-180")} />
+      </button>
 
-      <div className="border-t border-border px-3 py-1.5">
+      <div id={bodyId} hidden={!open} className="min-w-0 border-t border-border px-3 py-1.5">
+        {gallery&&<FoundationGallery activities={gallery}/>}
         {activities.map((activity) => {
+          if(activity.foundation)return <FoundationRow key={activity.id} operation={activity.foundation} onOpenDocument={activity.foundation.kind==="design-plan"?onOpenDocument:undefined}/>;
           const Icon = activityIcons[activity.kind];
           return (
             <div key={activity.id} className="flex items-start gap-2.5 py-1.5 text-xs">
               <div className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
-                {activity.status === "running" ? (
-                  <LoaderCircle className="size-3.5 animate-spin text-taro" />
-                ) : activity.status === "failed" ? (
-                  <CircleX className="size-3.5 text-destructive" />
-                ) : (
-                  <Check className="size-3.5 text-success" />
-                )}
+                <FoundationStatusIcon state={normalizeActivityState(activity.status)} reduceMotion={reduceMotion}/>
               </div>
               <ActivityIcon activity={activity} Icon={Icon} />
               <div className="min-w-0 flex-1">
                 <p className={cn("leading-relaxed", activity.status === "failed" ? "text-destructive" : "text-foreground/80")}>
                   {activity.label}
-                  {activity.status === "running" && <span className="ml-1.5 text-muted-foreground">Running</span>}
-                  {activity.status === "failed" && <span className="ml-1.5 text-destructive/70">Failed</span>}
-                  {activity.status === "done" && <span className="ml-1.5 text-success/80">Done</span>}
+                  <span className={cn("ml-1.5",activity.status==="failed"?"text-destructive/70":activity.status==="done"||activity.status==="succeeded"?"text-success/80":"text-muted-foreground")}>{activity.status==="done"?"Done":foundationStateLabels[normalizeActivityState(activity.status)]}</span>
                 </p>
                 {activity.detail && <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">{activity.detail}</p>}
                 {activity.output && <details className="mt-1.5"><summary className="cursor-pointer text-[11px] text-taro">View result</summary><pre className="mt-1 max-h-48 overflow-auto rounded bg-background p-2 font-mono text-[11px] whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{activity.kind==="terminal"?terminalLogText(activity.output):activity.output}</pre></details>}
@@ -577,8 +584,13 @@ function ActivityGroup({
           );
         })}
       </div>
-    </details>
+    </div>
   );
+}
+
+function FoundationGallery({activities}:{activities:ToolActivity[]}) {
+  const families=[...new Set(activities.flatMap(a=>a.foundation?[a.foundation.kind]:[]))];
+  return <><p className="py-2 text-[11px] text-muted-foreground">Sample data · Explore outcomes without changing files or running commands.</p>{families.map(kind=><details key={kind} className="min-w-0 border-t border-border py-1.5"><summary className="cursor-pointer rounded-sm py-1 text-xs text-foreground/85 focus-visible:outline-2 focus-visible:outline-taro">{kind.replace(/-/g," ")} · {activities.filter(a=>a.foundation?.kind===kind).length} states</summary><div className="min-w-0">{activities.filter(a=>a.foundation?.kind===kind).map(a=><FoundationRow key={a.id} operation={a.foundation!}/>)}</div></details>)}</>;
 }
 
 /** Shared diff body used by the Edited artifact and grouped file-edit rows. */

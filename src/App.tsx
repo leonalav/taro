@@ -902,6 +902,9 @@ export default function App() {
         void save.catch(error=>setDocumentSaveError(`Plan could not be saved: ${String(error)}`));
       }
     }
+    else if(source?.role==="activity-group"&&source.activities.some(a=>a.foundation?.kind==="design-plan")) {
+      setThreads(previous=>previous.map(thread=>({...thread,messages:thread.messages.map(message=>message.id===id&&message.role==="activity-group"?{...message,activities:message.activities.map(activity=>activity.foundation?.kind==="design-plan"&&activity.foundation.result?{...activity,foundation:{...activity.foundation,result:{...activity.foundation.result,markdown:text}}}:activity)}:message)})));
+    }
     else setTokenDocs(previous=>({...previous,[id]:text}));
   };
 

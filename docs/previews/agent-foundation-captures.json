@@ -1,0 +1,27 @@
+{
+  "route": "Nike/Brand Discovery; isolated real MessageItem components",
+  "fixtureCount": 237,
+  "measurements": [
+    {
+      "name": "wide",
+      "width": 780,
+      "zoom": 1,
+      "client": 780,
+      "scroll": 780
+    },
+    {
+      "name": "narrow",
+      "width": 320,
+      "zoom": 1,
+      "client": 320,
+      "scroll": 320
+    },
+    {
+      "name": "zoom",
+      "width": 640,
+      "zoom": 2,
+      "client": 640,
+      "scroll": 640
+    }
+  ]
+}

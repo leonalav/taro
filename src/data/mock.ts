@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import type { ChipRef } from "./mentions";
 import type { ThoughtMessage } from "@/lib/agent-progress";
+import { upgradeFoundationPreviews } from "./foundation-previews";
 import { migrateProfessionalMessage, nikePhaseTwoArtifacts, type ProfessionalToolMessage, type PlanMessage, type ToolResultMessage } from "./phase-two";
 
 /* ------------------------------------------------------------------
@@ -115,10 +116,11 @@ export interface Segment {
   attachment?: { id: string; name: string; mime: string; size: number; dataUrl?: string; text?: string };
 }
 
-export type ActivityKind = "file-read" | "file-list" | "file-edit" | "terminal" | "search" | "skill" | "mcp" | "plugin" | "browser";
-export type ActivityStatus = "running" | "done" | "failed";
+export type ActivityKind = "file-read" | "file-list" | "file-edit" | "terminal" | "search" | "skill" | "mcp" | "plugin" | "browser" | "foundation";
+export type ActivityStatus = "done" | import("./foundation").FoundationState;
 
 export interface ToolActivity {
+  foundation?: import("./foundation").Operation;
   id: string;
   kind: ActivityKind;
   label: string;
@@ -164,7 +166,7 @@ export type ChatMessage =
       onceOnly?: boolean;
       decision?: PermissionChoice;
     }
-  | { id: string; role: "activity-group"; summary: string; activities: ToolActivity[]; startedAt?: number }
+  | { id: string; role: "activity-group"; summary: string; activities: ToolActivity[]; startedAt?: number; foundationGallery?: ToolActivity[] }
   | {
       id: string;
       role: "subagent";
@@ -517,8 +519,10 @@ export function ensureNikeSubagentArtifact(thread:Thread):Thread {
   const existing=new Set(messages.map(message=>message.id));
   const referenceMessages=seedThreads[0].messages.filter(message=>message.id===nikeSubagentArtifact.id||message.id.startsWith("nike-phase-two-"));
   const missing=referenceMessages.filter(message=>!existing.has(message.id));
-  return migrated||missing.length?{...thread,messages:[...messages,...missing]}:thread;
+  return upgradeFoundationPreviews(migrated||missing.length?{...thread,messages:[...messages,...missing]}:thread);
 }
+
+seedThreads[0]=upgradeFoundationPreviews(seedThreads[0]);
 
 export const seedFolders: Folder[] = [
   { id: "taro", name: "taro" },

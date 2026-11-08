@@ -55,3 +55,9 @@ The tool loop creates a separate `activity-group` for each model tool batch, lea
 The @ menu loads real file paths from the active folder and configured MCP servers. File chips retain their workspace-relative paths in the message sent to the model. Chat titles can be edited from the header, Explorer menu, or by double-clicking a chat in the Explorer sidebar.
 
 If a model still requests Bash for `ls`, `find`, `rg`, or similar file-inspection commands, the loop returns a tool result instructing it to use the read-only tools without showing a Bash approval card.
+
+## Agent foundation frontend previews
+
+Nike/Brand Discovery now includes a labeled sample workflow and a collapsed state gallery for checkpoint/review/restore, durable context, limits, instructions and recovery. All entries, including the foundation Design Plan, are groupable activity rows. The plan opens the existing Markdown editor; its edits persist independently in the chat payload. Saved Nike sessions gain missing samples once without replacing history or edited documents.
+
+Sample actions never invoke native filesystem, Git, process or model operations. Live actions without a connected handler remain disabled. This presentation phase does not implement the new native foundation runtime. See [verification and pending work](agent-foundation-verification.md) and [reference provenance](agent-foundation-reference-manifest.md).
