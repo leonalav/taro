@@ -12,7 +12,7 @@ Native intent and started markers survive closing/reopening SQLite. Started/unkn
 
 Context writes use compare-and-swap epochs, require a structured nonempty objective, and validate actual exchange boundaries. Original transcript rows are retained. This validates storage structure; full summary schema, complete tool-exchange grouping, model token budgets and compaction policy are Task 9.
 
-`foundation_commands.rs` supplies thirteen Tauri IPC handlers; `main.rs` registers the service under the Tauri app-data directory as `foundation.sqlite`. SQLite work runs off the UI thread and a connection mutex is never held across model calls, tool execution, or approvals. Storage initialization errors are retained as command errors so the application can still open for inspection. The transport source is registered, but desktop compilation remains unverified in this environment.
+`foundation_commands.rs` supplies thirteen Tauri IPC handlers; `main.rs` registers the service under the Tauri app-data directory as `foundation.sqlite`. SQLite work runs off the UI thread and a connection mutex is never held across model calls, tool execution, or approvals. Storage initialization errors are retained as command errors so the application can still open for inspection. The transport source is registered. A subsequent compatible Linux container run compiled the desktop feature and passed all native targets; see [Linux desktop tests](linux-desktop-tests.md).
 
 `src/lib/foundation-native.ts` supplies the typed TypeScript bridge and refuses to invent persistence in browser mode. `src/data/foundation-wire.json` is shared by Rust serde and TypeScript contract tests.
 
@@ -46,7 +46,7 @@ A fresh reviewer independently ran the then-current native 20 and focused TS 10 
 
 The `desktop` Cargo feature remains enabled by default. Existing desktop dependencies and binary tests remain in that default build. A new library target permits native domain tests with `--no-default-features --lib`, without requiring a webview; it does not pretend to run the existing desktop binary tests. rusqlite 0.32.1 uses the same libsqlite3-sys 0.30.1 generation already present through SQLx, and SQLite is built with its bundled source. Cargo.lock records the additions.
 
-Attempted `cargo check --manifest-path src-tauri/Cargo.toml --locked` failed in `glib-sys`: `pkg-config` cannot find `glib-2.0`. GLib/GTK/WebKit host packages still need provisioning to compile the desktop feature path. Tauri IPC/desktop startup and the existing native binary test suite remain unverified; static macro-source inspection found no definite handler-path/signature defect. Windows process/junction/permission behavior and live AI requests remain unverified.
+Attempted `cargo check --manifest-path src-tauri/Cargo.toml --locked` failed in `glib-sys`: `pkg-config` cannot find `glib-2.0`. GLib/GTK/WebKit host packages still need provisioning to compile the desktop feature path. The subsequent Docker compatibility run validates desktop compilation, the 65 existing native binary tests, two Tauri IPC command-boundary tests, and a real GTK/WebKit smoke test. Whole-application Wry startup/E2E remains unverified; the IPC tests use Tauri’s mock runtime. See [Linux desktop test evidence](linux-desktop-tests.md). Windows process/junction/permission behavior and live AI requests remain unverified.
 
 ## Remaining work
 
@@ -57,3 +57,7 @@ Attempted `cargo check --manifest-path src-tauri/Cargo.toml --locked` failed in 
 - Tasks 12–13: live event/action wiring to the gallery renderer, full acceptance and platform verification.
 
 Deferred review minors: reservation errors currently share the controller reason `limit` even for underlying storage failures (the error message still identifies the failure and execution pauses); some Rust transaction closures are densely formatted. Existing frontend minors (narrow collapsed labels and focused retained-focus unit coverage) remain as previously documented.
+
+## Compatible Linux desktop follow-up
+
+The user requested compatible GLib/GTK/WebKit tests, push and merge. Added the `desktop-tests` feature, test targets, a prerequisite-checking Xvfb/D-Bus runner and Ubuntu 24.04 GitHub Actions jobs. The full local container run passed 92 native tests (24 core +65 existing binary +2 IPC +1 actual WebKit), plus 148 frontend tests, TypeScript and build. This supersedes the earlier desktop-compilation limitation for the tested container; the cloud host still lacks those packages, and Windows/live-provider/unfinished-runtime limitations are unchanged.

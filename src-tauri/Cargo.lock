@@ -5128,6 +5128,7 @@ dependencies = [
  "base64 0.23.1",
  "futures-util",
  "globset",
+ "gtk",
  "keyring",
  "lopdf",
  "notify",
@@ -5147,6 +5148,7 @@ dependencies = [
  "tokio",
  "tokio-util",
  "walkdir",
+ "webkit2gtk",
  "windows-sys 0.61.2",
 ]
 
