@@ -1,0 +1,36 @@
+[package]
+name = "taro"
+version = "0.1.0"
+description = "Taro desktop app"
+authors = ["Taro"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+base64 = "0.23.1"
+futures-util = "0.3.34"
+globset = "0.4.21"
+keyring = { version = "4.2.0", features = ["windows-native-keyring-store"] }
+notify = "8"
+pdf-extract = "0.12.1"
+portable-pty = "0.9.0"
+regex = "1.13.1"
+reqwest = { version = "0.13.5", default-features = false, features = ["json", "stream", "rustls"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2.8.4"
+tauri-plugin-sql = { version = "2.6.0", features = ["sqlite"] }
+tokio = { version = "1.54.1", features = ["io-util", "macros", "net", "process", "time"] }
+tokio-util = { version = "0.7.20", features = ["rt"] }
+walkdir = "2.5.0"
+
+[dev-dependencies]
+lopdf = "0.42.0"
+tempfile = "3.27.0"
+
+[target."cfg(windows)".dependencies]
+windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_Security"] }
+

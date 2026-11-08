@@ -1,0 +1,203 @@
+@import "tailwindcss";
+
+/* Supplied ThoughtLine motion, scoped to avoid another component's group state. */
+.thought-line { color: var(--tl-color); font-family: inherit; font-size: var(--tl-font); }
+.thought-line-head { position: relative; display: inline-flex; align-items: center; gap: .3em; margin: 0; padding: 0; border: 0; background: transparent; text-align: left; white-space: nowrap; color: inherit; font: inherit; }
+.thought-line-layer { width: max-content; grid-area: 1 / 1; opacity: 0; filter: blur(var(--tl-blur)); transition: opacity var(--tl-settle) cubic-bezier(.23,1,.32,1), filter var(--tl-settle) cubic-bezier(.23,1,.32,1); }
+.thought-line-layer[data-active] { opacity: 1; filter: blur(0); }
+.thought-line-done[data-active] { opacity: var(--tl-done); }
+.thought-line[data-working] .thought-line-label[data-shimmer] { background-image: linear-gradient(100deg,color-mix(in srgb,var(--tl-color) 50%,transparent) 30%,var(--tl-color) 50%,color-mix(in srgb,var(--tl-color) 50%,transparent) 70%); background-size: 250% 100%; background-position: 125% 0; background-clip: text; -webkit-background-clip: text; color: inherit; -webkit-text-fill-color: transparent; animation: thought-line-shimmer var(--tl-shimmer) linear infinite; }
+.thought-line-timer { opacity: var(--tl-timer); transition: opacity var(--tl-settle) ease, transform var(--tl-settle) cubic-bezier(.77,0,.175,1); }
+.thought-line-timer[data-done] { opacity: var(--tl-done); }
+.thought-line-chevron { transition: transform 200ms cubic-bezier(.23,1,.32,1); }
+.thought-line[data-open] .thought-line-chevron { transform: rotate(180deg); }
+.thought-line-trace { grid-template-rows: 0fr; transition: grid-template-rows var(--tl-settle) cubic-bezier(.23,1,.32,1); }
+.thought-line-trace[data-open] { grid-template-rows: 1fr; }
+.thought-line-step { transition: opacity 200ms ease; }
+.thought-line-step[data-done] > span:last-child { opacity: .55; }
+.thought-line-current { animation: thought-line-pulse 1.6s cubic-bezier(.77,0,.175,1) infinite; }
+@keyframes thought-line-pulse { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
+@keyframes thought-line-shimmer { to { background-position: -125% 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .thought-line-layer { filter: none; transition: opacity var(--tl-settle) ease; }
+  .thought-line-timer { transition: opacity var(--tl-settle) ease; }
+  .thought-line-current { animation: none; }
+  .thought-line-trace, .thought-line-chevron { transition: none; }
+}
+
+/* ------------------------------------------------------------------
+ * Taro design tokens
+ * Geist dark palette (Vercel) + shadcn/ui variable naming.
+ * ------------------------------------------------------------------ */
+@theme inline {
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-taro: var(--taro);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+}
+
+:root {
+  color-scheme: dark;
+  --background: #000000;
+  --foreground: #ededed;
+  --card: #0a0a0a;
+  --card-foreground: #ededed;
+  --popover: #0f0f0f;
+  --popover-foreground: #ededed;
+  --primary: #ededed;
+  --primary-foreground: #0a0a0a;
+  --secondary: #141414;
+  --secondary-foreground: #ededed;
+  --muted: #161616;
+  --muted-foreground: #8f8f8f;
+  --accent: #1a1a1a;
+  --accent-foreground: #ededed;
+  --destructive: #e5484d;
+  --border: #1d1d1d;
+  --input: #2a2a2a;
+  --ring: #8b5cf6;
+  --sidebar: #070707;
+  --sidebar-foreground: #ededed;
+  --sidebar-accent: #161616;
+  --sidebar-border: #171717;
+  --taro: #a78bfa;
+  --success: #46a758;
+  --warning: #f5a623;
+  --info: #3b9eff;
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: var(--font-sans);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--taro) 30%, transparent);
+  }
+}
+
+/* Desktop window chrome helpers */
+.app-drag {
+  user-select: none;
+}
+.app-no-drag {
+  -webkit-app-region: no-drag;
+  user-select: auto;
+}
+
+/* Quiet scrollbars */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: #2a2a2a transparent;
+}
+.scrollbar-thin::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: #262626;
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Motion */
+@keyframes taro-pop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.animate-pop {
+  animation: taro-pop 140ms ease-out both;
+}
+
+@keyframes taro-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes taro-dialog {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+.animate-fade {
+  animation: taro-fade 160ms ease-out both;
+}
+.animate-dialog {
+  animation: taro-dialog 200ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-pop,
+  .animate-fade,
+  .animate-dialog {
+    animation: none;
+  }
+}
+
+/* UI scale (Settings → Appearance) */
+html[data-density="compact"] {
+  font-size: 15px;
+}
+html[data-density="comfortable"] {
+  font-size: 16px;
+}
+html[data-density="spacious"] {
+  font-size: 17px;
+}
+
+/* Reduced motion preference (Settings → Appearance) */
+html[data-motion="reduced"] *,
+html[data-motion="reduced"] *::before,
+html[data-motion="reduced"] *::after {
+  animation-duration: 0.001ms !important;
+  transition-duration: 0.001ms !important;
+}
