@@ -78,3 +78,33 @@
 @media(min-width:1051px) and (max-height:800px){.reception-content{padding:23px 30px 14px}.reception-symbol{width:62px;height:62px;border-radius:18px}.reception-symbol svg{width:43px;height:43px}.reception-hero h1{margin-top:14px;font-size:44px}.reception-subtitle{font-size:15px}.reception-composer{margin-top:22px}.reception-composer [role=textbox]{min-height:54px;padding-top:13px;font-size:16px}.reception-composer-mark{top:15px;width:44px;height:44px}.reception-composer-mark svg{width:26px;height:26px}.reception-suggestions{margin-top:14px}.reception-suggestions button{min-height:33px}.reception-workbench{margin-top:25px}.reception-panel{padding:16px}.reception-section-head{margin-bottom:16px}.reception-start-tile{min-height:148px;padding-top:16px}.reception-start-tile .reception-tile-icon{margin-bottom:14px}.reception-start-tile--primary .reception-tile-icon{margin-bottom:10px}.reception-recent{min-height:61px}.reception-footer{margin-top:23px;padding-top:13px}}
 @media(max-width:720px){.reception-composer-mark{display:none}.reception-composer [role=textbox]{padding-left:16px}.reception-composer [role=textbox]+div{padding-left:10px}}
 @media(prefers-reduced-motion:reduce){.reception-page *{scroll-behavior:auto!important;transition:none!important}}
+
+/* Welcome screen */
+.reception-page{background:#09090f;color:#f5f5f7}
+.reception-content{max-width:1290px;padding:42px 44px 36px}
+.reception-symbol{width:88px;height:88px;background:#111018;border-color:#65517e;box-shadow:none}
+.reception-hero h1{font-family:'Merriweather',serif;font-size:clamp(34px,3.5vw,52px);margin:20px 0 8px;letter-spacing:-.035em}
+.reception-hero h1 span{color:#b99aec;background:none;-webkit-text-fill-color:currentColor}
+.reception-subtitle{color:#bcbac4}
+.reception-composer{width:min(100%,1120px);margin-top:38px}
+.reception-composer-mark,.reception-suggestions{display:none}
+.reception-composer>div>div.rounded-2xl{background:#101016;border:1px solid #69666f;box-shadow:none;backdrop-filter:none}
+.reception-composer [role=textbox]{padding-left:20px;min-height:60px}
+.reception-composer [role=textbox]+div{padding-left:16px}
+.reception-composer button[aria-label="Send message"]{background:#eee;color:#111}
+.reception-workbench{display:grid;grid-template-columns:1fr 1fr;gap:60px 80px;margin-top:46px}
+.reception-panel{border:0;border-radius:0;background:none;padding:0}
+.reception-start{grid-column:1/-1;grid-row:1}
+.reception-start .reception-section-head{display:none}
+.reception-start-grid{grid-template-columns:repeat(4,minmax(0,1fr));gap:22px;padding:0}
+.reception-start-tile{min-height:145px;border-radius:18px;background:#101016;border-color:#38383f;padding:22px 28px}
+.reception-start-tile--primary{background:#292535;border-color:#bba5da;box-shadow:none}
+.reception-start-tile strong{font-size:17px}.reception-start-tile>span{font-size:13px}
+.reception-recents,.reception-quick{border-top:1px solid #24242c;padding-top:28px}
+.reception-section-head h2{font-size:19px}.reception-section-head h2>svg{display:none}
+.reception-thumbnail{width:36px;height:36px;background:none;color:#eee}.reception-thumbnail img{display:none}
+.reception-recent-copy{flex-direction:row;align-items:center;justify-content:space-between}.reception-recent{min-height:50px}.reception-resume{background:none}
+.reception-footer{margin-top:38px}
+@media(max-width:850px){.reception-workbench{gap:30px;grid-template-columns:1fr 1fr}.reception-start-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.reception-quick{grid-column:auto}.reception-content{padding:32px 24px}.reception-start-tile{min-height:135px}}
+@media(max-width:600px){.reception-workbench{grid-template-columns:1fr}.reception-start{grid-column:auto}.reception-start-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.reception-start-tile{display:flex;min-height:130px;padding:16px}.reception-start-tile>span{font-size:12px}.reception-recent-copy{gap:8px}.reception-content{padding:28px 18px}}
+.reception-templates{border-top:1px solid #24242c;padding-top:28px}.reception-template-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}.reception-template-grid button{display:flex;flex-direction:column;gap:18px;align-items:flex-start;min-height:112px;padding:20px;border:1px solid #303039;border-radius:15px;background:#101016;color:#f5f5f7;text-align:left}.reception-template-grid button:hover{border-color:#bba5da}.reception-template-grid svg{width:25px;height:25px}.reception-quick{grid-column:1/-1}.reception-quick-list{display:flex;flex-direction:row;flex-wrap:wrap}.reception-quick-list>button{width:auto;flex:1;min-width:190px}@media(max-width:600px){.reception-quick{grid-column:auto}.reception-template-grid{gap:8px}.reception-template-grid button{padding:12px;font-size:12px}}
