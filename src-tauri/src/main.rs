@@ -176,6 +176,17 @@ async fn stream_chat_inner(
 
 fn main() {
     tauri::Builder::default()
+        .setup(|app| {
+            let store=(|| -> Result<taro::run_store::RunStore,String> {
+                let data=app.path().app_data_dir().map_err(|error|error.to_string())?;
+                std::fs::create_dir_all(&data).map_err(|error|error.to_string())?;
+                taro::run_store::RunStore::open(&data.join("foundation.sqlite"))
+            })();
+            // Storage failures remain visible command errors. They must not make
+            // the app impossible to open for recovery or inspection.
+            app.manage(taro::foundation_commands::FoundationService::from_result(store));
+            Ok(())
+        })
         .manage(Streams::default())
         .manage(workspace_watch::WorkspaceWatches::default())
         .manage(terminals::TerminalManager::default())
@@ -197,6 +208,19 @@ fn main() {
             terminals::terminal_close,
             phase_two_tasks::agent_terminal_list,
             phase_two_tasks::agent_terminal_read,
+            taro::foundation_commands::foundation_begin_run,
+            taro::foundation_commands::foundation_load_run,
+            taro::foundation_commands::foundation_persist_output,
+            taro::foundation_commands::foundation_read_output,
+            taro::foundation_commands::foundation_reserve_request,
+            taro::foundation_commands::foundation_record_exchange,
+            taro::foundation_commands::foundation_record_tool_intent,
+            taro::foundation_commands::foundation_mark_tool_started,
+            taro::foundation_commands::foundation_record_tool_outcome,
+            taro::foundation_commands::foundation_save_context,
+            taro::foundation_commands::foundation_save_metadata,
+            taro::foundation_commands::foundation_finish_run,
+            taro::foundation_commands::foundation_list_recoverable,
             stream_chat,
             stop_chat,
             store_model_key,

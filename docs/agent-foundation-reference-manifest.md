@@ -1,6 +1,6 @@
 # Agent foundation reference manifest
 
-This pass implements frontend contracts, the Nike sample gallery, document editing, and lifecycle presentation. It does not implement native checkpoints, Git operations, a run ledger, instruction discovery, limits, or provider compaction. The user explicitly authorized frontend-first work while GTK/WebKit remain unavailable.
+The initial pass implemented frontend contracts and the Nike gallery. The native continuation now adds a real SQLite run ledger and controller building blocks, adapting OpenCode durable execution semantics. Native checkpoints, Git mutation tools, instruction discovery, full limits/compaction/recovery and live-loop integration remain pending. See [native milestone](agent-foundation-native-progress.md).
 
 All five checkouts were acquired before product edits. Each reviewed HEAD and clean working tree was verified; local acquisition evidence is `/workspace/.taro-setup/reference-acquisition.json`. Reference installation scripts were not run. Their runtime guidance is not inserted into Taro model context. Foreign suites are excluded from Taro test discovery by `vitest.config.ts`.
 
@@ -20,10 +20,14 @@ All five checkouts were acquired before product edits. Each reviewed HEAD and cl
 - Aider: root `LICENSE.txt`, Apache-2.0.
 - Claude comparison checkout: no root LICENSE was present. Its README describes leaked source-map provenance, and visibility does not establish reuse rights. No source text, prompts, implementation, or terminal presentation from this checkout is copied into Taro.
 
-The frontend code is original implementation of the user-supplied design matrix using Taro's incumbent React components. No foreign code or runtime dependencies were copied/adapted; no additional source notices are required for this pass. The independent Markdown document reproduces the user's attached design specification, not a reference repository prompt.
+The frontend code is original implementation of the user-supplied design matrix using Taro's incumbent React components. The initial frontend pass did not copy foreign implementation. The native continuation adapts OpenCode claim/release semantics and includes its MIT notice in `THIRD_PARTY_NOTICES.md`. No foreign runtime framework is imported. The independent Markdown document reproduces the user's attached design specification, not a reference repository prompt.
 
 ## Current tests and remaining research
 
 `foundation-previews.test.ts` checks idempotent upgrades, unrelated-chat isolation, history and edited-document preservation, unique explicit sample IDs. `foundation-events.test.ts` checks neutral cancellation, mixed failure/running precedence and stale/out-of-scope event rejection. `foundation-row.test.tsx` checks document callbacks, local-only sample actions, action admission, user disclosure choice, unavailable native handlers and queued-state motion.
 
 The entire native reference reading map in `cloud-agent-foundation-handoff.md` remains binding for implementation of Tasks 2–11. Do not interpret this frontend manifest as evidence that native algorithms or their tests have been ported, run, or verified.
+
+## Native continuation research
+
+Inspected OpenCode `packages/core/src/session/store.ts` claim/release/listSuspended/countResume implementations, `execution.ts` write-ahead lifecycle, `history.ts` immutable context boundaries and `execution/restart.ts` durable attempt accounting plus exclusive-owner assumptions. Source-to-destination mapping: native `run_store.rs`, Tauri `foundation_commands.rs`, TS `foundation-native.ts`, initial `run-controller.ts`. Cases translated from `session-execution.test.ts` and `usage-limits.test.ts` are tested natively: claim survival/terminal distinction, scope/child boundaries and request allowance. Taro strengthens outcome handling: unknown side effects are not replayed; cancelled/failed work remains discoverable until uncertainty is resolved. Full restart recovery remains pending. Claude `sessionStorage.ts` was inspected for comparison only; no implementation copied.

@@ -64,3 +64,7 @@ The regression run first reported seven failing tests, then all focused tests pa
 Deferred minor observations: collapsed subjects truncate heavily at narrow widths (full text remains available via accessible text/title; expanded paths wrap); direct DOM tests use clicks while keyboard behavior is verified in Chromium, and no focused unit test asserts retained focus during lifecycle updates. No unrelated visual redesign was made.
 
 Implementation rulings: use the already-isolated cloud checkout; deliver frontend presentation while native work remains pending under the user's revised scope; count 16 distinct families including separate redo; substitute direct incumbent-code and screenshot inspection for the unavailable Impeccable launcher/detector. These choices leave desktop behavior and automated design-detector validation unverified.
+
+## Native continuation
+
+The subsequent native storage/controller milestone supersedes Task 2's earlier “unimplemented” status above; it does not supersede the rest of the pending list. See [native progress, source attribution and validation](agent-foundation-native-progress.md). Live-loop integration and actual checkpoint/Git/restore/instruction/recovery tools remain pending.
