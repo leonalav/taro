@@ -19,9 +19,9 @@ import { migrateProfessionalMessage, nikePhaseTwoArtifacts, type ProfessionalToo
 
 export type Priority = "High" | "Medium" | "Low";
 export type Severity = "Critical" | "High" | "Medium" | "Low";
-export type TaskStatus = "Backlog" | "To Do" | "In Progress" | "Done";
+export type TaskStatus = "Failed" | "To Do" | "In Progress" | "Done";
 
-export const TASK_STATUSES: TaskStatus[] = ["Backlog", "To Do", "In Progress", "Done"];
+export const TASK_STATUSES: TaskStatus[] = ["Failed", "To Do", "In Progress", "Done"];
 
 export interface Task {
   id: string;
@@ -547,7 +547,7 @@ export const seedTasks: Task[] = [
     severity: "Medium",
     details: "The current data models repeat information in several places. This can make everyday searches slower and makes updates more fragile.",
     solution: ["Review the existing model relationships.", "Remove duplicated fields and add the missing indexes.", "Verify that common searches return the same results faster."],
-    status: "Backlog",
+    status: "Failed",
     tags: ["data", "models"],
   },
   {
@@ -558,7 +558,7 @@ export const seedTasks: Task[] = [
     severity: "High",
     details: "A single client can currently send too many requests, which may slow the service for everyone or exhaust the API budget.",
     solution: ["Measure normal request volume first.", "Add a per-user request limit with a clear retry message.", "Test both normal use and bursts before enabling it."],
-    status: "Backlog",
+    status: "Failed",
     tags: ["api", "security"],
   },
   {
@@ -569,7 +569,7 @@ export const seedTasks: Task[] = [
     severity: "High",
     details: "Large images delay the first screen and make the page feel unresponsive, especially on slower connections.",
     solution: ["Identify the largest images in the first viewport.", "Serve responsive sizes and modern formats.", "Lazy-load images below the fold and compare load time."],
-    status: "Backlog",
+    status: "Failed",
     tags: ["performance", "ux"],
   },
   {

@@ -18,6 +18,7 @@ import type { ChipInsertion } from "@/data/mentions";
 import type { PermissionRule } from "@/lib/permission-rules";
 import {retryFromMessage,revertToEdit} from "@/lib/chat-history";
 import { cn } from "@/utils/cn";
+import {useSettings} from '@/components/settings/settings-context';
 
 export type RightPanel = "explorer" | "review" | "tasks" | "git" | "docs" | null;
 
@@ -87,6 +88,7 @@ export function ChatPanel({
   onSetPermissionRule,
   onRemovePermissionRule,
 }: ChatPanelProps) {
+  const settings=useSettings();
   const [renaming,setRenaming]=React.useState(false);
   const [pendingEdit,setPendingEdit]=React.useState<{messageId:string;segments:Segment[]}|null>(null);
   const [revertEdit,setRevertEdit]=React.useState<{messageId:string;token:number}|null>(null);
@@ -184,7 +186,7 @@ export function ChatPanel({
               <MessageItem
                 key={message.id}
                 message={message}
-                agentLabel={agentName}
+                agentLabel={id=>settings.agents.find(agent=>agent.id===id)?.name??agentName(id)}
                 onRevert={requestRevert}
                 onRetry={onRetry}
                 editRequestToken={revertEdit?.messageId===message.id?revertEdit.token:undefined}

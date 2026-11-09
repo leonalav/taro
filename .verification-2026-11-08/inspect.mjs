@@ -1,0 +1,14 @@
+import { chromium } from './browser-tools/node_modules/playwright/index.mjs';
+const browser = await chromium.launch({channel:'msedge',headless:true,chromiumSandbox:true,args:['--no-proxy-server']});
+const context = await browser.newContext({viewport:{width:1440,height:1000},reducedMotion:'reduce'});
+const page = await context.newPage();
+page.on('pageerror',e=>console.log('PAGEERROR',e.message));
+await page.goto('http://127.0.0.1:1420',{waitUntil:'domcontentloaded'});
+await page.waitForTimeout(2500);
+console.log('VERSION',browser.version());
+await page.getByRole('button',{name:'Nike/Brand Discovery Edited',exact:false}).click();
+await page.waitForTimeout(1500);
+console.log(await page.locator('body').innerText());
+console.log('GROUPS',JSON.stringify(await page.locator('details').evaluateAll(ns=>ns.map(n=>({text:n.querySelector('summary')?.textContent,open:n.open})))));
+await page.screenshot({path:'.verification-2026-11-08/initial.png'});
+await browser.close();

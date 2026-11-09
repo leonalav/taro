@@ -3,10 +3,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { open as openDirectory } from "@tauri-apps/plugin-dialog";
 import {
   Check,
-  Crown,
-  Folder,
   Frame,
-  KeyRound,
   Laptop,
   Layers,
   Monitor,
@@ -20,7 +17,6 @@ import {
   TriangleAlert,
   X,
 } from "lucide-react";
-import { Dialog } from "@/components/ui/dialog";
 import { Avatar } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -30,10 +26,12 @@ import { Segmented } from "@/components/ui/segmented";
 import { Switch } from "@/components/ui/switch";
 import { SettingsGroup, SettingsRow, StatusDot } from "@/components/settings/primitives";
 import type { SectionProps } from "@/components/settings/sections-personal";
-import { effortLevels } from "@/data/mentions";
-import { MAX_CUSTOM_MODELS, modelOptions, type AgentConfig, type Plugin, type Rule } from "@/data/settings";
+import { modelOptions, type AgentConfig, type Plugin, type Rule } from "@/data/settings";
 import { compileWorkspaceRules, MAX_WORKSPACE_RULES, MAX_WORKSPACE_RULE_CHARS, MAX_WORKSPACE_RULES_PROMPT_CHARS, validateWorkspaceRuleChange } from "@/lib/workspace-rules";
 import { cn } from "@/utils/cn";
+import {SkillsSettings} from '@/components/skills-settings';
+import {listMcpTools} from '@/lib/agent-tools';
+import {mcpConnectionError,parseMcpArguments} from '@/lib/mcp-settings';
 
 let seq = 0;
 const newId = (prefix: string) => `${prefix}-${Date.now().toString(36)}-${seq++}`;
@@ -75,11 +73,7 @@ const mcpCatalog = [
 const transportLabels = { stdio: "stdio", http: "Streamable HTTP" } as const;
 type Transport = keyof typeof transportLabels;
 
-const sampleFolders = [
-  { name: "design-system", path: "~/Projects/design-system", files: 14 },
-  { name: "taro-skills", path: "~/Documents/taro-skills", files: 3 },
-  { name: "skills", path: "~/.taro/skills", files: 7 },
-];
+
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -92,7 +86,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 export function PluginsSection({ settings, update }: SectionProps) {
   const plugins = settings.plugins;
-  const skills = settings.skills;
   const [query, setQuery] = React.useState("");
   const [addOpen, setAddOpen] = React.useState(false);
   const [addTab, setAddTab] = React.useState<"catalog" | "custom">("catalog");
@@ -101,26 +94,45 @@ export function PluginsSection({ settings, update }: SectionProps) {
   const [cName, setCName] = React.useState("");
   const [cTransport, setCTransport] = React.useState<Transport>("stdio");
   const [cCommand, setCCommand] = React.useState("");
+  const [cArgs, setCArgs] = React.useState("[]");
   const [cUrl, setCUrl] = React.useState("");
   const [cKey, setCKey] = React.useState("");
   const [mcpError,setMcpError]=React.useState("");
-
-  /* skill folder picker */
-  const folderInputRef = React.useRef<HTMLInputElement>(null);
-  const [explorerOpen, setExplorerOpen] = React.useState(false);
+  const [adding,setAdding]=React.useState(false);
+  type Connection={signature:string;state:'testing'|'connected'|'failed';count?:number;error?:string};
+  const [connections,setConnections]=React.useState<Record<string,Connection>>({});
+  const latest=React.useRef(settings);latest.current=settings;
+  const mounted=React.useRef(true);
+  React.useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
+  const signature=(plugin:Plugin,root=latest.current.workspaceRoot)=>JSON.stringify([root,plugin.transport,plugin.command,plugin.args,plugin.url,plugin.enabled]);
 
   const setPlugin = (id: string, value: Partial<Plugin>) =>
-    update("plugins", plugins.map((p) => (p.id === id ? { ...p, ...value } : p)));
-
-  const setSkill = (id: string, value: Partial<(typeof skills)[number]>) =>
-    update("skills", skills.map((sk) => (sk.id === id ? { ...sk, ...value } : sk)));
+    update("plugins", latest.current.plugins.map((p) => (p.id === id ? { ...p, ...value } : p)));
+  const testConnection=async(plugin:Plugin)=>{
+    const workspaceRoot=latest.current.workspaceRoot?.trim();
+    const checked=signature(plugin);
+    if(!workspaceRoot){setConnections(current=>({...current,[plugin.id]:{signature:checked,state:'failed',error:'Choose a workspace folder before testing this server.'}}));return;}
+    setConnections(current=>({...current,[plugin.id]:{signature:checked,state:'testing'}}));
+    try{
+      const result=await listMcpTools(plugin,workspaceRoot);
+      if(!result||!Array.isArray(result.tools))throw Error('Invalid MCP tools response');
+      const current=latest.current.plugins.find(candidate=>candidate.id===plugin.id);
+      if(!mounted.current||!current||signature(current)!==checked)return;
+      setConnections(current=>({...current,[plugin.id]:{signature:checked,state:'connected',count:result.tools.length}}));
+      setPlugin(plugin.id,{status:'connected'});
+    }catch(error){
+      const current=latest.current.plugins.find(candidate=>candidate.id===plugin.id);
+      if(!mounted.current||!current||signature(current)!==checked)return;
+      setConnections(current=>({...current,[plugin.id]:{signature:checked,state:'failed',error:mcpConnectionError(error)}}));
+      setPlugin(plugin.id,{status:/\bHTTP\s+(401|403)\b/i.test(String(error))?'needs-auth':'off'});
+    }
+  };
 
   const q = query.trim().toLowerCase();
   const matches = (name: string, desc: string) => !q || name.toLowerCase().includes(q) || desc.toLowerCase().includes(q);
 
   const mcps = plugins.filter((p) => p.kind === "MCP" && matches(p.name, p.description));
   const integrations = plugins.filter((p) => p.kind === "Integration" && matches(p.name, p.description));
-  const allSkills = skills.filter((sk) => matches(sk.label, sk.description ?? ""));
 
   const installed = (id: string) => plugins.some((p) => p.id === id || (p.name === mcpCatalog.find(c=>c.id===id)?.name && Boolean(p.transport)));
   const isCustom = (id: string) => !mcpCatalog.some((c) => c.id === id);
@@ -128,74 +140,64 @@ export function PluginsSection({ settings, update }: SectionProps) {
   const addCatalog = (item: { id: string; name: string; description: string }) => {setCName(item.name);setAddTab("custom");};
 
   const addCustom = async () => {
-    if (!cName.trim() || (cTransport==="stdio"?!cCommand.trim():!cUrl.trim())) return;
+    if (adding || !cName.trim() || (cTransport==="stdio"?!cCommand.trim():!cUrl.trim())) return;
+    let args:string[]=[];
+    try{
+      if(cTransport==='stdio')args=parseMcpArguments(cArgs);
+      else{
+        const url=new URL(cUrl.trim());
+        if(!['http:','https:'].includes(url.protocol)||url.username||url.password)throw Error('Use an HTTP or HTTPS MCP URL without embedded credentials.');
+      }
+      if(cKey.trim()&&!isTauri())throw Error('Open the desktop app to save API keys in the operating-system credential store.');
+    }catch(error){setMcpError(error instanceof Error?error.message:'Check the server configuration.');return;}
     const id=newId("mcp");
-    if(cKey.trim() && isTauri()) {try{await invoke("store_model_key",{modelId:`mcp:${id}`,secret:cKey.trim()});}catch(error){setMcpError(String(error));return;}}
+    setAdding(true);
+    if(cKey.trim()) {try{await invoke("store_model_key",{modelId:`mcp:${id}`,secret:cKey.trim()});}catch{setMcpError('Could not save the API key in the operating-system credential store.');setAdding(false);return;}}
     setMcpError("");
-    const parts=cCommand.trim().split(/\s+/).filter(Boolean);
     update("plugins", [
-      ...plugins,
+      ...latest.current.plugins,
       {
         id,
         name: cName.trim(),
         description: `Custom · ${transportLabels[cTransport]}`,
         kind: "MCP" as const,
         enabled: true,
-        status: "connected" as const,
+        status: "off" as const,
         transport:cTransport,
-        command:cTransport==="stdio"?parts[0]:undefined,
-        args:cTransport==="stdio"?parts.slice(1):undefined,
+        command:cTransport==="stdio"?cCommand.trim():undefined,
+        args:cTransport==="stdio"?args:undefined,
         url:cTransport!=="stdio"?cUrl.trim():undefined,
       },
     ]);
     setCName("");
     setCCommand("");
+    setCArgs("[]");
     setCUrl("");
     setCKey("");
     setAddOpen(false);
-  };
-
-  const addSkill = (label: string, path: string, description: string) => {
-    if (skills.some((sk) => sk.label === label)) return;
-    update("skills", [...skills, { id: newId("sk"), label, path, description, source: "custom", enabled: true }]);
-    setExplorerOpen(false);
-  };
-
-  const pickFolder = () => {
-    const input = folderInputRef.current;
-    if (input && "webkitdirectory" in input) input.click();
-    else setExplorerOpen(true);
-  };
-
-  const onFolderPicked = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const list = e.target.files;
-    if (list && list.length > 0) {
-      const first = list[0] as File & { webkitRelativePath?: string };
-      const rel = first.webkitRelativePath || first.name;
-      const folder = rel.split("/")[0];
-      addSkill(folder, `~/${folder}`, `${list.length} files detected`);
-    }
-    e.target.value = "";
+    setAdding(false);
   };
 
   /* live mcp.json preview for the custom form */
   const slug = cName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
   const serverSpec: Record<string, unknown> = {};
   if (cTransport === "stdio") {
-    const parts = cCommand.trim().split(/\s+/).filter(Boolean);
-    serverSpec.command = parts[0] ?? "npx";
-    if (parts.length > 1) serverSpec.args = parts.slice(1);
+    serverSpec.command = cCommand.trim() || "npx";
+    try{serverSpec.args=parseMcpArguments(cArgs);}catch{serverSpec.args="Enter a JSON array of strings";}
   } else {
     if (cTransport === "http") serverSpec.type = "streamableHttp";
     if (cUrl.trim()) serverSpec.url = cUrl.trim();
   }
-  if (cKey.trim()) serverSpec.headers = { Authorization: `Bearer ${cKey.trim()}` };
+  if (cKey.trim()) serverSpec.headers = { Authorization: "Bearer [stored in OS credential store]" };
   const mcpJson = JSON.stringify({ mcpServers: { [slug || "my-server"]: serverSpec } }, null, 2);
 
   const pluginRow = (plugin: Plugin, removable: boolean) => {
     const Icon = pluginIcons[plugin.id] ?? Plug;
+    const previous=connections[plugin.id];
+    const connection=previous?.signature===signature(plugin)?previous:undefined;
+    const configured=plugin.transport==='stdio'?Boolean(plugin.command?.trim()):Boolean(plugin.transport&&plugin.url?.trim());
     return (
-      <div key={plugin.id} className="group flex items-center gap-3 px-4 py-3">
+      <div key={plugin.id} className="group flex flex-wrap items-center gap-3 px-4 py-3">
         <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-background text-foreground/80">
           <Icon className="size-4" />
         </span>
@@ -205,14 +207,10 @@ export function PluginsSection({ settings, update }: SectionProps) {
             {plugin.kind === "MCP" && isCustom(plugin.id) && <Badge variant="taro">custom</Badge>}
           </div>
           <p className="truncate text-xs text-muted-foreground">{plugin.description}</p>
+          {connection?.error&&<p role="alert" className="mt-1 text-xs text-destructive">{connection.error}</p>}
         </div>
-        {plugin.enabled && plugin.status === "needs-auth" ? (
-          <Button variant="secondary" size="sm" onClick={() => setPlugin(plugin.id, { status: "connected" })}>
-            Connect
-          </Button>
-        ) : (
-          <StatusDot tone={plugin.enabled && plugin.transport ? "success" : "muted"}>{plugin.enabled ? (plugin.transport ? "Configured" : "Needs setup") : "Off"}</StatusDot>
-        )}
+        <StatusDot tone={plugin.enabled&&connection?.state==='connected'?'success':connection?.state==='failed'?'warning':'muted'}>{!plugin.enabled?'Off':connection?.state==='testing'?'Testing…':connection?.state==='connected'?`Connected · ${connection.count} tool${connection.count===1?'':'s'}`:connection?.state==='failed'?'Connection failed':configured?'Not tested':'Needs setup'}</StatusDot>
+        {configured&&<Button variant="secondary" size="sm" aria-label={`Test ${plugin.name} connection`} disabled={!plugin.enabled||connection?.state==='testing'} onClick={()=>void testConnection(plugin)}>{connection?.state==='testing'?'Testing…':'Test connection'}</Button>}
         {removable && (
           <button
             type="button"
@@ -229,7 +227,7 @@ export function PluginsSection({ settings, update }: SectionProps) {
           onCheckedChange={(enabled) =>
             setPlugin(plugin.id, {
               enabled,
-              status: enabled ? (plugin.id === "github" ? "needs-auth" : "connected") : "off",
+              status: "off",
             })
           }
         />
@@ -254,18 +252,6 @@ export function PluginsSection({ settings, update }: SectionProps) {
           className="pl-8"
         />
       </div>
-
-      {/* Native folder picker — opens the OS file explorer on desktop */}
-      <input
-        ref={folderInputRef}
-        type="file"
-        className="hidden"
-        multiple
-        {...({ webkitdirectory: "true" } as Record<string, string>)}
-        onChange={onFolderPicked}
-        aria-hidden="true"
-        tabIndex={-1}
-      />
 
       {/* ---- MCPs ---- */}
       <SettingsGroup
@@ -344,16 +330,16 @@ export function PluginsSection({ settings, update }: SectionProps) {
               })}
             </div>
           ) : (
-            <div className="grid grid-cols-[250px_1fr] gap-5">
+            <div className="grid grid-cols-1 gap-5 sm:grid-cols-[250px_1fr]">
               <div className="space-y-3">
                 <Field label="Name">
-                  <Input value={cName} onChange={(e) => setCName(e.target.value)} placeholder="e.g. Notion" />
+                  <Input aria-label="MCP server name" value={cName} onChange={(e) => setCName(e.target.value)} placeholder="e.g. Notion" disabled={adding} />
                 </Field>
                 <Field label="Transport">
                   <Segmented
                     ariaLabel="Transport"
                     value={cTransport}
-                    onValueChange={setCTransport}
+                    onValueChange={value=>{if(!adding){setCTransport(value);setCKey("");}}}
                     options={[
                       { value: "stdio", label: "stdio" },
                       { value: "http", label: "Streamable HTTP" },
@@ -361,35 +347,42 @@ export function PluginsSection({ settings, update }: SectionProps) {
                   />
                 </Field>
                 {cTransport === "stdio" ? (
-                  <Field label="Command">
+                  <><Field label="Executable path (no shell quotes)">
                     <Input
+                      aria-label="MCP executable path"
                       value={cCommand}
                       onChange={(e) => setCCommand(e.target.value)}
-                      placeholder="npx @my/mcp-server"
+                      placeholder="npx or C:\Program Files\MCP\server.exe"
                       className="font-mono text-xs"
+                      disabled={adding}
                     />
-                  </Field>
+                  </Field><Field label="Arguments (JSON array)"><Input aria-label="MCP arguments JSON" value={cArgs} onChange={event=>setCArgs(event.target.value)} placeholder={'["@my/mcp-server", "--folder", "my project"]'} className="font-mono text-xs" disabled={adding}/></Field></>
                 ) : (
                   <Field label="URL">
                     <Input
+                      aria-label="MCP server URL"
                       value={cUrl}
                       onChange={(e) => setCUrl(e.target.value)}
                       placeholder="https://mcp.example.com/mcp"
                       className="font-mono text-xs"
+                      disabled={adding}
                     />
                   </Field>
                 )}
-                <Field label="API key (if available)">
+                {cTransport==='http'?<Field label="API key (HTTP bearer token)">
                   <Input
+                    aria-label="MCP API key"
                     type="password"
                     value={cKey}
                     onChange={(e) => setCKey(e.target.value)}
                     placeholder="ntok_…"
                     className="font-mono text-xs"
+                    autoComplete="new-password"
+                    disabled={adding}
                   />
-                </Field>
-                <Button size="sm" onClick={addCustom} disabled={!cName.trim() || (cTransport==="stdio"?!cCommand.trim():!cUrl.trim())} className="w-full">
-                  Add MCP server
+                </Field>:<p className="text-xs text-muted-foreground">Stdio servers inherit your environment. Keep secrets in environment variables rather than command arguments.</p>}
+                <Button size="sm" onClick={addCustom} disabled={adding || !cName.trim() || (cTransport==="stdio"?!cCommand.trim():!cUrl.trim())} className="w-full">
+                  {adding?'Saving…':'Add MCP server'}
                 </Button>
                 {mcpError && <p role="alert" className="text-xs text-red-400">{mcpError}</p>}
               </div>
@@ -404,60 +397,7 @@ export function PluginsSection({ settings, update }: SectionProps) {
         </div>
       )}
 
-      {/* ---- Skills ---- */}
-      <SettingsGroup
-        title="Skills"
-        description="Reusable commands invoked with / in chat."
-        action={
-          <Button variant="secondary" size="sm" onClick={pickFolder}>
-            <Plus />
-            Add skill
-          </Button>
-        }
-      >
-        {allSkills.length === 0 && (
-          <p className="px-4 py-8 text-center text-xs text-muted-foreground">No skills match.</p>
-        )}
-        {allSkills.map((skill) => (
-          <div key={skill.id} className="group flex items-center gap-3 px-4 py-2.5">
-            <span
-              className={cn(
-                "flex size-8 shrink-0 items-center justify-center rounded-lg border border-border bg-background",
-                skill.source === "custom" ? "text-taro" : "text-foreground/80"
-              )}
-            >
-              {skill.source === "custom" ? <Folder className="size-4" /> : <Layers className="size-4" />}
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <span className="truncate font-mono text-[13px] text-foreground">/{skill.label}</span>
-                {skill.source === "custom" && skill.path && (
-                  <Badge variant="default" className="max-w-[140px] truncate">
-                    {skill.path}
-                  </Badge>
-                )}
-              </div>
-              {skill.description && <p className="truncate text-xs text-muted-foreground">{skill.description}</p>}
-            </div>
-            {skill.source === "custom" && (
-              <button
-                type="button"
-                aria-label={`Remove ${skill.label}`}
-                onClick={() => update("skills", skills.filter((sk) => sk.id !== skill.id))}
-                className="rounded-md p-1 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive focus-visible:opacity-100"
-              >
-                <Trash2 className="size-3.5" />
-              </button>
-            )}
-            <Switch
-              aria-label={`Enable /${skill.label}`}
-              checked={skill.enabled}
-              onCheckedChange={(enabled) => setSkill(skill.id, { enabled })}
-            />
-          </div>
-        ))}
-      </SettingsGroup>
-
+      <SkillsSettings workspaceRoot={settings.workspaceRoot} skills={settings.skills} onChange={skills=>update("skills",skills)} />
       {/* ---- Integrations ---- */}
       <SettingsGroup title="Integrations" description="One-way syncs and embeds.">
         {integrations.length === 0 && (
@@ -466,29 +406,7 @@ export function PluginsSection({ settings, update }: SectionProps) {
         {integrations.map((plugin) => pluginRow(plugin, true))}
       </SettingsGroup>
 
-      {/* ---- Folder picker fallback (browsers without native dir picker) ---- */}
-      <Dialog open={explorerOpen} onOpenChange={setExplorerOpen} labelledBy="folder-dialog-title" className="w-[440px]">
-        <div className="p-5">
-          <h3 id="folder-dialog-title" className="text-sm font-medium text-foreground">
-            Choose a skills folder
-          </h3>
-          <p className="mt-1 text-xs text-muted-foreground">Taro reads any SKILL.md or prompt files it contains.</p>
-          <div className="mt-4 space-y-1">
-            {sampleFolders.map((f) => (
-              <button
-                key={f.path}
-                type="button"
-                onClick={() => addSkill(f.name, f.path, `${f.files} files`)}
-                className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-colors hover:bg-accent"
-              >
-                <Folder className="size-4 shrink-0 text-muted-foreground" />
-                <span className="min-w-0 flex-1 truncate font-mono text-xs text-foreground">{f.path}</span>
-                <span className="shrink-0 text-[11px] text-muted-foreground">{f.files} files</span>
-              </button>
-            ))}
-          </div>
-        </div>
-      </Dialog>
+
     </div>
   );
 }
@@ -660,262 +578,6 @@ export function RulesSection({ settings, update }: SectionProps) {
  * Models
  * ------------------------------------------------------------------ */
 
-export function ModelsSection({ settings, update }: SectionProps) {
-  const models = settings.models;
-  const patch = (value: Partial<typeof models>) => update("models", { ...models, ...value });
-
-  const [adding, setAdding] = React.useState(false);
-  const [draftName, setDraftName] = React.useState("");
-  const [draftEndpoint, setDraftEndpoint] = React.useState("");
-  const [draftKey, setDraftKey] = React.useState("");
-
-  const customCount = models.customModels.length;
-  const atLimit = customCount >= MAX_CUSTOM_MODELS;
-  const options = modelOptions(models.customModels);
-
-  const [modelError,setModelError]=React.useState("");
-  const addCustomModel = async () => {
-    if (!draftName.trim() || !draftEndpoint.trim() || atLimit) return;
-    const slug = draftName.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "custom";
-    const id=`custom-${slug}-${Date.now().toString(36)}`;
-    if(draftKey.trim() && isTauri()) {
-      try { await invoke("store_model_key",{modelId:id,secret:draftKey.trim()}); } catch(e) { setModelError(String(e)); return; }
-    }
-    setModelError("");
-    patch({
-      defaultModel:id,
-      customModels: [
-        ...models.customModels,
-        {
-          id,
-          label: draftName.trim(),
-          endpoint: draftEndpoint.trim(),
-        },
-      ],
-    });
-    setDraftName("");
-    setDraftEndpoint("");
-    setDraftKey("");
-    setAdding(false);
-  };
-
-  const removeCustomModel = (id: string) => {
-    const removed = models.customModels.find((m) => m.id === id);
-    if (!removed) return;
-    if(isTauri()) void invoke("delete_model_key",{modelId:id}).catch(console.error);
-    patch({
-      customModels: models.customModels.filter((m) => m.id !== id),
-      defaultModel: models.defaultModel === id ? options[0].value : models.defaultModel,
-      reviewModel: models.reviewModel === id ? options[0].value : models.reviewModel,
-    });
-  };
-
-  return (
-    <div className="space-y-8">
-      <SettingsGroup title="Model catalog" description="Chat and review pickers use the built-in catalog plus your custom endpoint models.">
-        <SettingsRow label="Chat model" description="Used for new threads and design work.">
-          <DropdownMenu
-            align="end"
-            ariaLabel="Chat model"
-            value={models.defaultModel}
-            options={options}
-            onValueChange={(defaultModel) => patch({ defaultModel })}
-            triggerClassName="w-52"
-          />
-        </SettingsRow>
-        <SettingsRow label="Review model" description="Runs visual QA and annotation passes.">
-          <DropdownMenu
-            align="end"
-            ariaLabel="Review model"
-            value={models.reviewModel}
-            options={options}
-            onValueChange={(reviewModel) => patch({ reviewModel })}
-            triggerClassName="w-52"
-          />
-        </SettingsRow>
-        <SettingsRow
-          label="Custom models"
-          description={`OpenAI-compatible endpoints · ${customCount} of ${MAX_CUSTOM_MODELS} slots used.`}
-        >
-          <Button
-            variant="secondary"
-            size="sm"
-            disabled={atLimit}
-            title={atLimit ? "Two custom models max on this plan — more requires Lite+" : undefined}
-            onClick={() => setAdding((a) => !a)}
-            aria-expanded={adding}
-          >
-            <Plus />
-            Add provider
-          </Button>
-        </SettingsRow>
-
-        {adding && (
-          <div className="space-y-3 px-4 pb-4">
-            <p className="text-[11px] leading-relaxed text-muted-foreground">
-              Point at any OpenAI-compatible endpoint. It appears in the chat and review pickers immediately.
-            </p>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-              <div>
-                <label className="mb-1 block px-0.5 text-[11px] font-medium text-muted-foreground" htmlFor="cm-name">Model name</label>
-                <Input id="cm-name" value={draftName} onChange={(e) => setDraftName(e.target.value)} placeholder="e.g. Llama 4.1" className="h-7 text-xs" />
-              </div>
-              <div>
-                <label className="mb-1 block px-0.5 text-[11px] font-medium text-muted-foreground" htmlFor="cm-endpoint">Base URL (OpenAI-compatible)</label>
-                <Input
-                  id="cm-endpoint"
-                  value={draftEndpoint}
-                  onChange={(e) => setDraftEndpoint(e.target.value)}
-                  placeholder="https://api.myprovider.com/v1"
-                  className="h-7 font-mono text-xs"
-                />
-              </div>
-              <div>
-                <label className="mb-1 block px-0.5 text-[11px] font-medium text-muted-foreground" htmlFor="cm-key">API key</label>
-                <Input
-                  id="cm-key"
-                  type="password"
-                  value={draftKey}
-                  onChange={(e) => setDraftKey(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && addCustomModel()}
-                  placeholder="sk-…"
-                  className="h-7 font-mono text-xs"
-                />
-              </div>
-            </div>
-            {modelError && <p role="alert" className="text-xs text-red-400">{modelError}</p>}
-            <div className="flex items-center gap-2">
-              <Button size="sm" onClick={addCustomModel} disabled={!draftName.trim() || !draftEndpoint.trim()}>
-                Save model
-              </Button>
-              <Button size="sm" variant="ghost" onClick={() => setAdding(false)}>Cancel</Button>
-              {atLimit && (
-                <span className="ml-auto flex items-center gap-1 text-[11px] text-muted-foreground">
-                  <Crown className="size-3" /> Lite+ for more
-                </span>
-              )}
-            </div>
-          </div>
-        )}
-
-        {models.customModels.length > 0 && (
-          <div>
-            {models.customModels.map((model) => (
-              <div key={model.id} className="px-4 py-3">
-                <div className="flex items-center gap-3">
-                  <span className="flex size-6 shrink-0 items-center justify-center rounded-md border border-border bg-background">
-                    <Plug className="size-3 text-muted-foreground" />
-                  </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[13px] text-foreground">{model.label}</span>
-                    <span className="block truncate font-mono text-[11px] text-muted-foreground">{model.endpoint}</span>
-                  </span>
-                  <Badge variant="taro">custom</Badge>
-                  <button
-                    type="button"
-                    aria-label={`Remove ${model.label}`}
-                    onClick={() => removeCustomModel(model.id)}
-                    className="rounded-md p-1 text-muted-foreground transition-colors hover:text-destructive"
-                  >
-                    <Trash2 className="size-3.5" />
-                  </button>
-                </div>
-                <div className="mt-2 flex items-center gap-2 pl-9">
-                  <KeyRound className="size-3.5 shrink-0 text-muted-foreground" />
-                  <label className="sr-only" htmlFor={`cm-key-${model.id}`}>{model.label} API key</label>
-                  <Input
-                    id={`cm-key-${model.id}`}
-                    type="password"
-                    value={model.apiKey ?? ""}
-                    onChange={(e) =>
-                      patch({
-                        customModels: models.customModels.map((m) =>
-                          m.id === model.id ? { ...m, apiKey: e.target.value || undefined } : m
-                        ),
-                      })
-                    }
-                    placeholder="API key — sk-…"
-                    className="h-7 flex-1 font-mono text-xs"
-                  />
-                  <span className={cn("shrink-0 text-[11px]", model.apiKey ? "text-success" : "text-muted-foreground")}>
-                    {model.apiKey ? "Key saved" : "No key"}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </SettingsGroup>
-
-      <SettingsGroup
-        title="Thinking effort"
-        description={`Low through High are always available. Max unlocks with Lite+. Syncs with the chat bar.`}
-      >
-        <SettingsRow label="Default effort">
-          <Segmented
-            ariaLabel="Thinking effort"
-            value={String(models.effort)}
-            onValueChange={(v) => patch({ effort: Number(v) })}
-            options={effortLevels.map((level, i) => ({
-              value: String(i),
-              label: level.label,
-              icon: level.pro ? <Crown /> : undefined,
-              disabled: Boolean(level.pro),
-              disabledHint: level.pro ? "Max requires Lite+" : undefined,
-            }))}
-          />
-        </SettingsRow>
-      </SettingsGroup>
-
-      <SettingsGroup>
-        <div className="flex items-center gap-2 px-4 pt-3.5">
-          <h3 className="text-[13px] font-medium text-foreground">Providers</h3>
-          <Badge variant="taro"><Crown className="size-3" />Lite+ and above</Badge>
-        </div>
-        <p className="px-4 pt-1 text-xs text-muted-foreground">
-          Add Anthropic, OpenAI, Google or local providers on the Lite+ plan or higher. Your plan includes two
-          custom OpenAI-compatible models above.
-        </p>
-        <div className="pointer-events-none mt-2 select-none opacity-45" aria-disabled="true">
-          {models.providers.map((provider) => (
-            <SettingsRow
-              key={provider.id}
-              label={
-                <span className="flex items-center gap-2.5">
-                  <KeyRound className="size-3.5 text-muted-foreground" />
-                  {provider.name}
-                </span>
-              }
-              description={
-                <span className="pl-6 font-mono text-[11px]">{provider.connected ? provider.keyHint : "Not connected"}</span>
-              }
-            >
-              {provider.connected && <StatusDot tone="success">Connected</StatusDot>}
-              <Button variant={provider.connected ? "ghost" : "secondary"} size="sm">
-                {provider.connected ? "Disconnect" : "Add key"}
-              </Button>
-            </SettingsRow>
-          ))}
-        </div>
-      </SettingsGroup>
-
-      <SettingsGroup title="Streaming">
-        <SettingsRow label="Stream responses" description="Reveal replies word by word. Turn off to show the completed reply at once.">
-          <Switch
-            aria-label="Stream responses"
-            checked={models.streamResponses}
-            onCheckedChange={(streamResponses) => patch({ streamResponses })}
-          />
-        </SettingsRow>
-      </SettingsGroup>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------
- * Agents
- * ------------------------------------------------------------------ */
-
 const agentTone: Record<string, "taro" | "ocean" | "neutral"> = { aria: "taro", theo: "ocean", rin: "neutral" };
 
 export function AgentsSection({ settings, update }: SectionProps) {
@@ -961,7 +623,7 @@ export function AgentsSection({ settings, update }: SectionProps) {
                 triggerClassName="w-44"
               />
             </SettingsRow>
-            <SettingsRow label="Autonomy" description="Ask first, suggest changes, or apply automatically.">
+            <SettingsRow label="Autonomy" description="Suggest is read-only. Ask confirms delegation. Tool permissions always apply.">
               <Segmented
                 ariaLabel={`${agent.name} autonomy`}
                 value={agent.autonomy}
@@ -973,7 +635,7 @@ export function AgentsSection({ settings, update }: SectionProps) {
                 ]}
               />
             </SettingsRow>
-            <SettingsRow label="Can write code" description="Only after a design is approved.">
+            <SettingsRow label="Can write code" description="Allows workspace changes with the user's tool permissions.">
               <Switch
                 aria-label={`${agent.name} can write code`}
                 checked={agent.canWriteCode}
@@ -989,166 +651,6 @@ export function AgentsSection({ settings, update }: SectionProps) {
 
 /* ------------------------------------------------------------------
  * Source Control
- * ------------------------------------------------------------------ */
-
-export function SourceControlSection({ settings, update }: SectionProps) {
-  const sc = settings.sourceControl;
-  const account = settings.account;
-  const patch = (value: Partial<typeof sc>) => update("sourceControl", { ...sc, ...value });
-  const [authing, setAuthing] = React.useState(false);
-
-  const signIn = () => {
-    setAuthing(true);
-    window.setTimeout(() => {
-      setAuthing(false);
-      update("sourceControl", {
-        ...sc,
-        signedIn: true,
-        provider: "github",
-        repo: sc.repos[0] ?? sc.repo,
-        defaultBranch: sc.branches[0] ?? sc.defaultBranch,
-      });
-    }, 1000);
-  };
-
-  const exampleBranch = `${sc.branchPrefix}hero-variant-b`;
-
-  return (
-    <div className="space-y-8">
-      <SettingsGroup title="Account">
-        <SettingsRow label="GitHub" description="Connect GitHub to pick repositories and branches.">
-          {sc.signedIn ? (
-            <>
-              <span className="inline-flex h-7 items-center gap-2 rounded-full border border-border bg-background px-3 text-xs text-foreground">
-                <GitHubMark className="size-3.5" />
-                {account.handle || "account"}
-              </span>
-              <Button variant="ghost" size="sm" onClick={() => patch({ signedIn: false })}>
-                Sign out
-              </Button>
-            </>
-          ) : (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={signIn}
-              disabled={authing}
-              className="rounded-full px-3"
-            >
-              <GitHubMark className="size-3.5" />
-              {authing ? "Redirecting…" : "Sign in to GitHub"}
-            </Button>
-          )}
-        </SettingsRow>
-      </SettingsGroup>
-
-      <SettingsGroup title="Repository">
-        <SettingsRow label="Provider">
-          <Segmented
-            ariaLabel="Provider"
-            value={sc.provider}
-            onValueChange={(provider) => patch({ provider })}
-            options={[
-              { value: "github", label: "GitHub" },
-              { value: "gitlab", label: "GitLab" },
-              { value: "bitbucket", label: "Bitbucket" },
-            ]}
-          />
-        </SettingsRow>
-        <SettingsRow
-          label="Repository"
-          description={sc.signedIn ? undefined : "Sign in to GitHub to choose a repository."}
-        >
-          {sc.signedIn ? (
-            <DropdownMenu
-              align="end"
-              ariaLabel="Repository"
-              value={sc.repo}
-              options={sc.repos.map((r) => ({ value: r, label: r }))}
-              onValueChange={(repo) => patch({ repo })}
-              triggerClassName="w-56"
-            />
-          ) : (
-            <Input disabled value={sc.repo} aria-label="Repository" className="w-56 font-mono text-xs" />
-          )}
-        </SettingsRow>
-        <SettingsRow
-          label="Default branch"
-          description={sc.signedIn ? undefined : "Sign in to GitHub to choose a branch."}
-        >
-          {sc.signedIn ? (
-            <DropdownMenu
-              align="end"
-              ariaLabel="Default branch"
-              value={sc.defaultBranch}
-              options={sc.branches.map((b) => ({ value: b, label: b }))}
-              onValueChange={(defaultBranch) => patch({ defaultBranch })}
-              triggerClassName="w-56"
-            />
-          ) : (
-            <Input disabled value={sc.defaultBranch} aria-label="Default branch" className="w-56 font-mono text-xs" />
-          )}
-        </SettingsRow>
-        <SettingsRow
-          label="Branch prefix"
-          htmlFor="sc-prefix"
-          description={
-            <span>
-              Agents branch as <span className="font-mono text-foreground/80">{exampleBranch}</span>
-            </span>
-          }
-        >
-          <Input
-            id="sc-prefix"
-            value={sc.branchPrefix}
-            onChange={(e) => patch({ branchPrefix: e.target.value.replace(/\s/g, "") })}
-            className="w-60 font-mono text-xs"
-          />
-        </SettingsRow>
-      </SettingsGroup>
-
-      <SettingsGroup title="Commits">
-        <SettingsRow
-          label="Require design approval"
-          description="Agents can only commit code for designs you've approved."
-        >
-          <Switch
-            aria-label="Require design approval"
-            checked={sc.requireApproval}
-            onCheckedChange={(requireApproval) => patch({ requireApproval })}
-          />
-        </SettingsRow>
-        <SettingsRow label="Auto-commit" description="Commit approved changes without asking.">
-          <Switch aria-label="Auto-commit" checked={sc.autoCommit} onCheckedChange={(autoCommit) => patch({ autoCommit })} />
-        </SettingsRow>
-        <SettingsRow label="Sign commits" description="Sign with your SSH key.">
-          <Switch aria-label="Sign commits" checked={sc.signCommits} onCheckedChange={(signCommits) => patch({ signCommits })} />
-        </SettingsRow>
-        <SettingsRow
-          label="Message style"
-          description={
-            <span className="font-mono text-[11px]">
-              {sc.commitStyle === "conventional" ? "feat(hero): add variant B layout" : "Add variant B layout to the hero"}
-            </span>
-          }
-        >
-          <Segmented
-            ariaLabel="Commit message style"
-            value={sc.commitStyle}
-            onValueChange={(commitStyle) => patch({ commitStyle })}
-            options={[
-              { value: "conventional", label: "Conventional" },
-              { value: "descriptive", label: "Descriptive" },
-            ]}
-          />
-        </SettingsRow>
-      </SettingsGroup>
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------
- * Browser
  * ------------------------------------------------------------------ */
 
 export function BrowserSection({ settings, update }: SectionProps) {

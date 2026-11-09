@@ -23,11 +23,11 @@ export function canApplyAiTitle(thread:Pick<Thread,"name"|"titleSource">,fallbac
   return thread.titleSource!=="manual"&&thread.name===fallbackTitle;
 }
 
-export async function generateChatTitle(model:Pick<CustomModel,"id"|"label"|"endpoint">,description:string,requestId:string,stream:typeof streamModel=streamModel):Promise<string|null> {
+export async function generateChatTitle(model:Pick<CustomModel,"id"|"label"|"endpoint"|"model">,description:string,requestId:string,stream:typeof streamModel=streamModel):Promise<string|null> {
   if(!description.trim())return null;
   let output="";
   try {
-    await stream({requestId,endpoint:model.endpoint,model:model.label,credentialId:model.id,messages:[{role:"system",content:TITLE_PROMPT},{role:"user",content:description.slice(0,4000)}],tools:undefined},delta=>{output+=delta;});
+    await stream({requestId,endpoint:model.endpoint,model:model.model||model.label,credentialId:model.id,messages:[{role:"system",content:TITLE_PROMPT},{role:"user",content:description.slice(0,4000)}],tools:undefined},delta=>{output+=delta;});
     return parseChatTitle(output);
   } catch {return null;}
 }

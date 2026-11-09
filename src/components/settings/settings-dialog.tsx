@@ -6,11 +6,11 @@ import { AccountSection, AppearanceSection, type SectionProps } from "@/componen
 import {
   AgentsSection,
   BrowserSection,
-  ModelsSection,
   PluginsSection,
   RulesSection,
-  SourceControlSection,
 } from "@/components/settings/sections-workspace";
+import {ModelsSettings} from '@/components/model-settings';
+import {SourceControlSettings} from '@/components/source-control-settings';
 import { settingsSections, type Settings, type SettingsSectionId } from "@/data/settings";
 import { cn } from "@/utils/cn";
 
@@ -19,9 +19,9 @@ const sectionComponents: Record<SettingsSectionId, (props: SectionProps) => Reac
   appearance: AppearanceSection,
   plugins: PluginsSection,
   rules: RulesSection,
-  models: ModelsSection,
+  models: ModelsSettings,
   agents: AgentsSection,
-  "source-control": SourceControlSection,
+  "source-control": SourceControlSettings,
   browser: BrowserSection,
 };
 

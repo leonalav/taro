@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ChatPanel } from "./components/chat-panel";
 import type { ToolCall } from "./lib/model-stream";
 import App from "./App";
+import {invoke} from '@tauri-apps/api/core';
 import { defaultSettings } from "./data/settings";
 import {getUsageMetricsSnapshot} from "./lib/usage-metrics";
 
@@ -14,7 +15,7 @@ vi.mock("@tauri-apps/plugin-dialog",()=>({open:io.chooseFolder}));
 vi.mock("@tauri-apps/api/core",()=>({isTauri:()=>true,invoke:vi.fn().mockResolvedValue([])}));
 vi.mock("./components/title-bar",()=>({TitleBar:({onHome}:{onHome?:()=>void})=><button aria-label="Go to welcome" onClick={onHome}>Home</button>}));
 vi.mock("./components/chat-panel",()=>({ChatPanel:(props:View)=>{io.view=props;return null;}}));
-vi.mock("./lib/chat-db",()=>({loadChat:io.load,persistChat:io.persist,persistModels:io.persist,persistPermissionRules:io.persist,persistWorkspaceRules:io.persist}));
+vi.mock("./lib/chat-db",()=>({loadChat:io.load,persistChat:io.persist,persistModels:io.persist,persistWorkspaceSettings:io.persist,persistPermissionRules:io.persist,persistWorkspaceRules:io.persist}));
 vi.mock("./lib/model-stream",()=>({streamModel:io.stream,stopModel:io.stop}));
 vi.mock("./lib/agent-tools",async importOriginal=>({...await importOriginal<typeof import("./lib/agent-tools")>(),executeAgentTool:io.execute,listMcpTools:io.list}));
 
@@ -32,6 +33,27 @@ const thought=()=>io.view!.thread.messages.find(message=>message.role==="thought
 const send=async()=>{await act(async()=>{root.render(<App/>);});await act(async()=>{io.view!.onSend([{type:"text",text:"Inspect a.ts"}]);});};
 
 describe("agentic ThoughtLine lifecycle",()=>{
+  it('shares discovered skills with the slash menu and the first agent request without a Settings toggle',async()=>{
+    vi.mocked(invoke).mockImplementation(async(command)=>command==='discover_installed_skills'?[{name:'review',description:'Review workspace changes',path:'A:/taro/.taro/skills/review/SKILL.md',source:'Taro workspace'}]:[]);
+    io.stream.mockResolvedValue([]);
+    try{
+      await act(async()=>root.render(<App/>));
+      await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="Insert a slash command"]')!.click());
+      expect(host.querySelector('[data-menu-item="skill:review"]')).not.toBeNull();
+      await act(async()=>host.querySelector<HTMLButtonElement>('[data-menu-item="skill:review"]')!.click());
+      await act(async()=>host.querySelector<HTMLButtonElement>('[aria-label="Send message"]')!.click());
+      const request=io.stream.mock.calls.map(([request])=>request).find(request=>Array.isArray(request.tools));
+      expect(request.tools.map((tool:{function:{name:string}})=>tool.function.name)).toContain('Skill');
+      expect(JSON.stringify(request.messages)).toContain('Review workspace changes');
+      expect(JSON.stringify(request.messages)).toContain('by invoking the Skill tool');
+    }finally{vi.mocked(invoke).mockResolvedValue([]);}
+  });
+  it('preserves unknown durable state when initial storage loading fails',async()=>{
+    io.load.mockRejectedValueOnce(Error('disk inaccessible'));
+    await act(async()=>root.render(<App/>));
+    expect(io.persist).not.toHaveBeenCalled();
+    expect(host.textContent).toContain('disk inaccessible');
+  });
   it("preserves an unsent welcome draft when a project is resumed and Home is opened",async()=>{
     await act(async()=>root.render(<App/>));
     const editor=host.querySelector<HTMLElement>('[data-reception-surface] [aria-label="Message"]')!;

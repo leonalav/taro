@@ -2,6 +2,7 @@ import Database from "@tauri-apps/plugin-sql";
 import type { Folder, Thread } from "@/data/mock";
 import { seedThreads,ensureNikeSubagentArtifact } from "@/data/mock";
 import type {PermissionRule} from "@/lib/permission-rules";
+import type {Settings} from '@/data/settings';
 import { recoverThoughts } from "@/lib/agent-progress";
 let db: Promise<Database> | undefined;
 export const chatDb = () => db ??= Database.load("sqlite:taro.db");
@@ -22,8 +23,10 @@ export async function loadChat() {
  const reference=threads.find(t=>t.id==="brand");
  if(reference) { reference.name="Nike/Brand Discovery"; reference.folderId="taro"; reference.archived=false; reference.messages=ensureNikeSubagentArtifact(reference).messages; }
  else threads.push(seedThreads[0]);
- return {threads,folders,activeThreadId:prefs.activeThreadId ?? undefined,models:prefs.models?JSON.parse(prefs.models):undefined,plugins:prefs.plugins?JSON.parse(prefs.plugins):undefined,workspaceRoot:prefs.workspaceRoot??undefined,workspaceRules:prefs.workspaceRules?JSON.parse(prefs.workspaceRules):undefined,permissionRules:prefs.permissionRules?JSON.parse(prefs.permissionRules) as PermissionRule[]:[]};
+ return {threads,folders,activeThreadId:prefs.activeThreadId ?? undefined,preferences:prefs.workspacePreferences?JSON.parse(prefs.workspacePreferences):undefined,models:prefs.models?JSON.parse(prefs.models):undefined,plugins:prefs.plugins?JSON.parse(prefs.plugins):undefined,workspaceRoot:prefs.workspaceRoot??undefined,workspaceRules:prefs.workspaceRules?JSON.parse(prefs.workspaceRules):undefined,permissionRules:prefs.permissionRules?JSON.parse(prefs.permissionRules) as PermissionRule[]:[]};
 }
+let preferenceWrite:Promise<void>=Promise.resolve();
+export function persistWorkspaceSettings(settings:Settings){const value=JSON.stringify(settings),models=JSON.stringify(settings.models),plugins=JSON.stringify(settings.plugins);preferenceWrite=preferenceWrite.catch(()=>{}).then(async()=>{const db=await chatDb();await schema(db);await db.execute("INSERT OR REPLACE INTO settings(key,value) VALUES('workspacePreferences',?),('models',?),('plugins',?),('workspaceRoot',?)",[value,models,plugins,settings.workspaceRoot??'']);});return preferenceWrite;}
 let ruleWrite:Promise<void>=Promise.resolve();
 export function persistWorkspaceRules(rules:unknown){const serialized=JSON.stringify(rules);ruleWrite=ruleWrite.catch(()=>{}).then(async()=>{const d=await chatDb();await schema(d);await d.execute("INSERT OR REPLACE INTO settings(key,value) VALUES('workspaceRules',?)",[serialized]);});return ruleWrite;}
 export async function persistPermissionRules(rules:PermissionRule[]) { const d=await chatDb(); await schema(d); await d.execute("INSERT OR REPLACE INTO settings(key,value) VALUES('permissionRules',?)",[JSON.stringify(rules)]); }

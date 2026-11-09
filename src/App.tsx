@@ -13,20 +13,14 @@ import { ReviewCanvas, EmptyReviewCanvas } from "@/components/review-canvas";
 import { TasksBoard } from "@/components/tasks-board";
 import { TitleBar } from "@/components/title-bar";
 import {
-  TASK_STATUSES,
-  agents,
   seedFolders,
-  seedTasks,
   seedThreads,
   ensureNikeSubagentArtifact,
   type ChatMessage,
-  type ActivityKind,
   type DocComment,
   type Folder,
   type Segment,
   type PermissionChoice,
-  type Task,
-  type TaskStatus,
   type ToolActivity,
   type SkeletalLayerData,
   type Thread,
@@ -43,8 +37,11 @@ import { DocsPanel, type DocSelection } from "@/components/markdown-doc";
 import { SEED_DESIGN_DOC } from "@/data/design-doc";
 import { artifactDocument } from "@/lib/artifact-documents";
 import { advanceThought, recoverThoughts, settleThought, startThought } from "@/lib/agent-progress";
-import { loadChat, persistChat, persistModels, persistPermissionRules, persistWorkspaceRules } from "@/lib/chat-db";
+import { loadChat, persistChat, persistWorkspaceSettings, persistPermissionRules, persistWorkspaceRules } from "@/lib/chat-db";
+import {restoreSettings,settingsForStorage,migrateLegacyModelKeys} from '@/lib/settings-store';
+import {recordActivity,recordDesignActivity,getActivityStorageStatus,subscribeActivityStorageStatus,retryActivityPersistence} from '@/lib/activity-store';
 import {compileWorkspaceRules} from "@/lib/workspace-rules";
+import {useWorkspaceSkills} from '@/lib/workspace-skills';
 import {restoreWorkspaceRuleSets,workspaceRuleKey,type WorkspaceRuleSets} from "@/lib/workspace-preferences";
 import {recordAiMessage,recordAiCodeChange} from "@/lib/usage-metrics";
 import { permissionRuleFromChoice, removePermissionRule, resolvePermissionRule, upsertPermissionRule, type PermissionRule } from "@/lib/permission-rules";
@@ -60,15 +57,11 @@ import {boundedModelContext} from "@/lib/model-context";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { open as openDirectory } from "@tauri-apps/plugin-dialog";
 import { SettingsDialog } from "@/components/settings/settings-dialog";
-import { SettingsContext } from "@/components/settings/settings-context";
-import { accents, defaultSettings, type Settings, type SettingsSectionId } from "@/data/settings";
+import { SettingsContext,SettingsUpdateContext } from "@/components/settings/settings-context";
+import { accents, type Settings, type SettingsSectionId } from "@/data/settings";
 import { cn } from "@/utils/cn";
 
-const REPLIES = [
-  "On it. I'll break that down and keep the board in sync as I go.",
-  "Got it. I'll draft a short spec first, then propose a plan for review.",
-  "Understood. I can look through the affected files and summarize the changes.",
-];
+
 
 const CHAT_DEFAULT_WIDTH = 440;
 const CHAT_MIN_WIDTH = 320;
@@ -84,11 +77,12 @@ const toTitle = (text: string, max: number) => {
 };
 
 function modelContent(segments: Segment[]): ModelContent {
-  if(!segments.some(s=>s.type==="attachment")) return segments.map(s=>s.type==="chip"?s.chip?.label??"":s.text??"").join("");
+  const chipText=(chip:NonNullable<Segment['chip']>)=>chip.kind==='skill'?`Use the workspace skill ${JSON.stringify(chip.label)} by invoking the Skill tool. `:chip.label;
+  if(!segments.some(s=>s.type==="attachment")) return segments.map(s=>s.type==="chip"&&s.chip?chipText(s.chip):s.text??"").join("");
   const parts: Exclude<ModelContent,string> = [];
   for(const segment of segments) {
     if(segment.type==="text" && segment.text) parts.push({type:"text",text:segment.text});
-    if(segment.type==="chip" && segment.chip) parts.push({type:"text",text:segment.chip.label});
+    if(segment.type==="chip" && segment.chip) parts.push({type:"text",text:chipText(segment.chip)});
     const file=segment.attachment;
     if(segment.type!=="attachment" || !file) continue;
     if(file.mime.startsWith("image/") && file.dataUrl) parts.push({type:"image_url",image_url:{url:file.dataUrl}});
@@ -98,98 +92,8 @@ function modelContent(segments: Segment[]): ModelContent {
   return parts;
 }
 
-const singular = (count: number, one: string, many = `${one}s`) => `${count} ${count === 1 ? one : many}`;
-
-function summarizeActivities(items: ToolActivity[]) {
-  const countKind = (kind: ActivityKind) => items.filter((item) => item.kind === kind).length;
-  const fileReads = items.filter((item) => item.kind === "file-read").reduce((n, item) => {
-    const match = item.label.match(/\b(\d+) files?\b/i);
-    return n + (match ? Number(match[1]) : 1);
-  }, 0);
-  const edits = items.filter((item) => item.kind === "file-edit").reduce((n, item) => {
-    const match = item.label.match(/\b(\d+) files?\b/i);
-    return n + (match ? Number(match[1]) : 1);
-  }, 0);
-  const parts: string[] = [];
-  if (fileReads) parts.push(`Read ${singular(fileReads, "file")}`);
-  if (countKind("search")) parts.push(`searched ${singular(countKind("search"), "query")}`);
-  if (edits) parts.push(`edited ${singular(edits, "file")}`);
-  if (countKind("terminal")) parts.push(`ran ${singular(countKind("terminal"), "command")}`);
-  const special = items.find((item) => item.kind === "skill" || item.kind === "mcp" || item.kind === "plugin");
-  if (parts.length) return parts.join(", ");
-  return special?.label ?? `${items.length} tool calls`;
-}
-
-/** Which tool an agent would call on a given MCP server. */
-function mcpToolName(server: string) {
-  const name = server.toLowerCase();
-  if (name.includes("figma")) return "get_frame";
-  if (name.includes("linear")) return "create_issue";
-  if (name.includes("sentry")) return "search_issues";
-  return "get_content";
-}
-
-function planActivities(text: string, segments: Segment[]): ToolActivity[] {
-  const items: ToolActivity[] = [];
-  const push = (kind: ActivityKind, label: string, detail?: string, errorTrace?: string) => {
-    const failed = Boolean(errorTrace);
-    items.push({
-      id: uid("tool"),
-      kind,
-      label,
-      status: failed ? "failed" : "running",
-      detail,
-      errorTrace,
-    });
-  };
-
-  const files = segments.filter((s) => s.type === "chip" && s.chip?.kind === "file").map((s) => s.chip!.label);
-  const skill = segments.find((s) => s.chip?.kind === "skill")?.chip;
-  const mcp = segments.find((s) => s.chip?.kind === "mcp")?.chip;
-  const wantsEdit = /\b(edit|fix|update|change|implement|write|build|style|refactor|remove|add|create)\b/i.test(text);
-  const wantsSearch = /\b(search|find|look|audit|review|check|where)\b/i.test(text);
-  const wantsRead = files.length > 0 || wantsSearch || wantsEdit || /\b(read|inspect|explain|open)\b/i.test(text);
-  const wantsCommand = /\b(run|test|build|install|terminal|command|lint)\b/i.test(text);
-
-  if (skill) push("skill", `Invoked skill: /${skill.label}`, "Skill request queued for the active agent.");
-
-  if (mcp) {
-    const server = mcp.label;
-    const tool = mcpToolName(server);
-    const failed = /\b(fail|error|broken|unavailable|denied)\b/i.test(text);
-    push(
-      "mcp",
-      failed ? `${server}: Attempted to use '${tool}'` : `${server}: Used MCP tool '${tool}'`,
-      failed ? "The server did not return a usable response." : "Returned context for the agent.",
-      failed ? `console.error("${tool} failed:", error);\nError: MCP server request failed\n    at ${tool} (mcp-${server.toLowerCase()}/client.ts:42:13)\n    at invokeMcpTool (agent/tools.ts:88:9)` : undefined
-    );
-    if (server.toLowerCase() === "figma" && !failed) push("plugin", "Plugin used: Figma · read selected frame");
-  }
-
-  if (wantsRead) {
-    if (files.length) files.slice(0, 4).forEach((file) => push("file-read", `Read ${file}`));
-    else push("file-read", "Read 2 relevant workspace files");
-  }
-  if (wantsSearch) push("search", `Searched workspace for “${toTitle(text, 32)}”`);
-  if (wantsEdit) push("file-edit", `Edited ${files.length > 1 ? files.length : 3} files`, "Changes are presented as a reviewable diff.");
-  if (wantsCommand) {
-    const command = /test/i.test(text) ? "pnpm test" : /build/i.test(text) ? "pnpm build" : /lint/i.test(text) ? "pnpm lint" : "workspace check";
-    push("terminal", `Ran ${command}`);
-  }
-  if (!mcp && /\b(plugin|figma|linear|sentry)\b/i.test(text)) {
-    const failed = /\b(fail|error|broken|unavailable|denied)\b/i.test(text);
-    push(
-      "plugin",
-      failed ? "Figma: Attempted to use 'read_frame'" : "Plugin used: Figma · read selected frame",
-      failed ? "The plugin action did not complete." : undefined,
-      failed ? `console.error("read_frame failed:", error);\nError: Plugin request failed\n    at read_frame (plugins/figma.ts:38:11)` : undefined
-    );
-  }
-
-  return items;
-}
-
 export default function App() {
+  const activityStorageStatus=React.useSyncExternalStore(subscribeActivityStorageStatus,getActivityStorageStatus,getActivityStorageStatus);
   const savedChat = React.useMemo(() => {
     try { const saved=JSON.parse(localStorage.getItem("taro-chat-v1") || "null");if(saved?.threads) saved.threads=saved.threads.map((thread:Thread)=>({...thread,messages:recoverThoughts(thread.messages)}));return saved; } catch { return null; }
   }, []);
@@ -204,6 +108,9 @@ export default function App() {
   });
   const [activeThreadId, setActiveThreadId] = React.useState<string>(()=>threads.some(t=>t.id===savedChat?.activeThreadId&&!t.archived)?savedChat.activeThreadId:"brand");
   const [chatLoaded, setChatLoaded] = React.useState(false);
+  const [nativeStorageReady,setNativeStorageReady]=React.useState(()=>!isTauri());
+  const [storageLoadError,setStorageLoadError]=React.useState('');
+  const [loadAttempt,setLoadAttempt]=React.useState(0);
   const [receptionOpen,setReceptionOpen]=React.useState(true);
   const [receptionAction,setReceptionAction]=React.useState<ReceptionAction|null>(null);
   const [receptionError,setReceptionError]=React.useState("");
@@ -212,18 +119,20 @@ export default function App() {
   const importRequest=React.useRef<string|undefined>(undefined);
   React.useEffect(() => {
     if (!isTauri()) { setChatLoaded(true); return; }
+    setStorageLoadError('');
     void loadChat().then(data => {
       if(data.threads.length) { setThreads(data.threads); setFolders(data.folders ?? seedFolders); setActiveThreadId(data.threads.some(t=>t.id===data.activeThreadId&&!t.archived)?data.activeThreadId!:"brand"); }
-      if(data.models) setSettings(s=>({...s,models:{...s.models,...data.models}}));
-      if(data.plugins || data.workspaceRoot) setSettings(s=>({...s,plugins:(data.plugins??s.plugins).filter((p:Settings["plugins"][number])=>p.kind!=="MCP"||Boolean(p.transport)),workspaceRoot:data.workspaceRoot??s.workspaceRoot}));
+      if(data.preferences)setSettings(restoreSettings(data.preferences));
+      else if(data.models) setSettings(s=>restoreSettings({...s,models:{...s.models,...data.models},agents:undefined}));
+      if(!data.preferences&&(data.plugins || data.workspaceRoot)) setSettings(s=>({...s,plugins:(data.plugins??s.plugins).filter((p:Settings["plugins"][number])=>Boolean(p.transport)),workspaceRoot:data.workspaceRoot??s.workspaceRoot}));
       if(data.workspaceRules)setWorkspaceRuleSets(restoreWorkspaceRuleSets(data.workspaceRules));
       persistentPermissions.current=data.permissionRules;
       setPermissionRevision(value=>value+1);
-    }).catch(console.error).finally(()=>setChatLoaded(true));
-  }, []);
+      setNativeStorageReady(true);
+    }).catch(error=>{setNativeStorageReady(false);setStorageLoadError(`Saved data could not be loaded: ${String(error)}. Existing data will not be overwritten.`);}).finally(()=>setChatLoaded(true));
+  }, [loadAttempt]);
   React.useEffect(() => { if(!isTauri()) try { localStorage.setItem("taro-chat-v1", JSON.stringify({ folders, threads, activeThreadId })); } catch(consoleError) { console.error(consoleError); } }, [folders, threads, activeThreadId]);
-  React.useEffect(() => { if(!chatLoaded || !isTauri()) return; const timer=window.setTimeout(()=>{void persistChat(folders, threads, activeThreadId).catch(console.error);},200); return ()=>window.clearTimeout(timer); }, [chatLoaded, folders, threads, activeThreadId]);
-  const [tasks, setTasks] = React.useState<Task[]>(seedTasks);
+  React.useEffect(() => { if(!chatLoaded || !nativeStorageReady || !isTauri()) return; const timer=window.setTimeout(()=>{void persistChat(folders, threads, activeThreadId).catch(console.error);},200); return ()=>window.clearTimeout(timer); }, [chatLoaded,nativeStorageReady, folders, threads, activeThreadId]);
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState<boolean>(
     () => typeof window !== "undefined" && window.innerWidth < 1180
   );
@@ -248,7 +157,7 @@ export default function App() {
   const [focusComment, setFocusComment] = React.useState<DocComment | null>(null);
   const [editingSkeletal, setEditingSkeletal] = React.useState<Extract<ChatMessage, { role: "skeletal" }> | null>(null);
   const library = useLibrary();
-  const [activeAgentId, setActiveAgentId] = React.useState(agents[0].id);
+  const [activeAgentId, setActiveAgentId] = React.useState('planner');
   const [thinking, setThinking] = React.useState(false);
   const [runningThreadId,setRunningThreadId] = React.useState<string|null>(null);
   const activeGeneration = React.useRef<{requestId:string;toolRequestIds:Set<string>;stopRequested:boolean;stopLocal?:()=>void;cancelPending?:()=>void}|null>(null);
@@ -257,10 +166,23 @@ export default function App() {
   const sessionPermissions = React.useRef<PermissionRule[]>([]);
   const [permissionRevision,setPermissionRevision] = React.useState(0);
   const pendingApprovals = React.useRef(new Map<string,{threadId:string;server?:string;tool?:string;resolve:(allowed:boolean)=>void}>());
-  const [settings, setSettings] = React.useState<Settings>(defaultSettings);
+  const [settings, setSettings] = React.useState<Settings>(()=>{try{return restoreSettings(JSON.parse(localStorage.getItem('taro-preferences-v1')||'null'));}catch{return restoreSettings(null);}});
+  const [settingsSaveError,setSettingsSaveError]=React.useState('');
+  const [preferenceRetry,setPreferenceRetry]=React.useState(0);
   const [workspaceRuleSets,setWorkspaceRuleSets]=React.useState<WorkspaceRuleSets>(()=>{try{return restoreWorkspaceRuleSets(JSON.parse(localStorage.getItem("taro-workspace-rules-v1")||"null"));}catch{return {};}});
-  React.useEffect(()=>{if(!chatLoaded)return;try{localStorage.setItem("taro-workspace-rules-v1",JSON.stringify(workspaceRuleSets));}catch(e){console.error(e);}if(isTauri())void persistWorkspaceRules(workspaceRuleSets).catch(console.error);},[chatLoaded,workspaceRuleSets]);
-  React.useEffect(() => { if(chatLoaded && isTauri()) void persistModels({...settings.models,customModels:settings.models.customModels.map(({apiKey: _apiKey,...model})=>model)},settings.plugins,settings.workspaceRoot).catch(console.error); }, [chatLoaded,settings.models,settings.plugins,settings.workspaceRoot]);
+  React.useEffect(()=>{if(!chatLoaded||!nativeStorageReady)return;try{localStorage.setItem("taro-workspace-rules-v1",JSON.stringify(workspaceRuleSets));}catch(e){console.error(e);}if(isTauri())void persistWorkspaceRules(workspaceRuleSets).catch(console.error);},[chatLoaded,nativeStorageReady,workspaceRuleSets]);
+  React.useEffect(()=>{
+    if(!chatLoaded||!nativeStorageReady)return;
+    if(settings.models.customModels.some(model=>model.apiKey)){
+      if(!isTauri()){setSettingsSaveError('Open the desktop app to move legacy API keys into secure credential storage. Existing saved metadata is preserved.');return;}
+      let active=true;
+      void migrateLegacyModelKeys(settings,async(modelId,secret)=>{await invoke('store_model_key',{modelId,secret});}).then(clean=>{if(active)setSettings(previous=>previous.models===settings.models?{...previous,models:clean.models}:previous);}).catch(error=>{if(active)setSettingsSaveError(`API key migration could not complete: ${String(error)}. Existing settings are preserved.`);});
+      return()=>{active=false;};
+    }
+    const saved=settingsForStorage(settings);
+    try{localStorage.setItem('taro-preferences-v1',JSON.stringify(saved));if(!isTauri())setSettingsSaveError('');}catch(error){setSettingsSaveError(`Preferences could not be saved: ${String(error)}`);}
+    if(isTauri())void persistWorkspaceSettings(saved).then(()=>setSettingsSaveError('')).catch(error=>setSettingsSaveError(`Preferences could not be saved: ${String(error)}`));
+  },[chatLoaded,nativeStorageReady,settings,preferenceRetry]);
   const [settingsOpen, setSettingsOpen] = React.useState(false);
   const [settingsSection, setSettingsSection] = React.useState<SettingsSectionId>("account");
   const mainRef = React.useRef<HTMLElement>(null);
@@ -299,14 +221,25 @@ export default function App() {
   const workspaceRoot = activeFolder.path || (activeFolder.id === "taro" ? settings.workspaceRoot : undefined);
   const rulesKey=workspaceRuleKey(workspaceRoot,activeFolder.id);
   const workspaceRules=workspaceRuleSets[rulesKey]??settings.rules;
-  const workspaceSettings={...settings,workspaceRoot,rules:workspaceRules};
+  const normalizeSkillPath=(path:string)=>path.replace(/^\\\\\?\\/,'').replace(/\\/g,'/').replace(/\/+$/,'').toLowerCase();
+  const belongsToWorkspace=(path?:string)=>!!workspaceRoot&&!!path&&normalizeSkillPath(path).startsWith(`${normalizeSkillPath(workspaceRoot)}/`);
+  const workspaceSkills=useWorkspaceSkills(workspaceRoot,settings.skills);
+  const workspaceSettings={...settings,workspaceRoot,rules:workspaceRules,skills:workspaceSkills};
   const updateWorkspaceSettings=(next:Settings)=>{
     if(next.rules!==workspaceRules)setWorkspaceRuleSets(previous=>({...previous,[rulesKey]:next.rules}));
     if(next.workspaceRoot!==workspaceRoot)setFolders(previous=>previous.map(folder=>folder.id===activeFolder.id?{...folder,path:next.workspaceRoot}:folder));
-    setSettings({...next,rules:settings.rules,workspaceRoot:next.workspaceRoot===workspaceRoot?settings.workspaceRoot:next.workspaceRoot});
+    const custom=next.models.customModels;
+    const firstConfigured=custom.find(m=>m.id===next.models.defaultModel);
+    const agents=next.models!==settings.models&&firstConfigured?next.agents.map(agent=>custom.some(m=>m.id===agent.model||m.label===agent.model)?agent:{...agent,model:firstConfigured.id}):next.agents;
+    setSettings({...next,agents,skills:next.skills!==workspaceSkills?[...settings.skills.filter(skill=>!belongsToWorkspace(skill.path)),...next.skills]:settings.skills,rules:settings.rules,workspaceRoot:next.workspaceRoot===workspaceRoot?settings.workspaceRoot:next.workspaceRoot});
   };
+  React.useEffect(()=>{
+    const onGitSuccess=(event:Event)=>{const detail=(event as CustomEvent<{workspaceRoot?:string;command:string;operationId:string;result?:unknown}>).detail;if(detail?.workspaceRoot&&['sc_commit','sc_revert'].includes(detail.command))recordActivity({id:`git:${typeof detail.result==='string'?detail.result:detail.operationId}`,workspace:workspaceRuleKey(detail.workspaceRoot,'taro'),kind:'commit',timestamp:Date.now()});};
+    window.addEventListener('taro:source-control-success',onGitSuccess);return()=>window.removeEventListener('taro:source-control-success',onGitSuccess);
+  },[]);
   const folderThreads = threads.filter((t) => t.folderId === activeFolder.id && !t.archived);
-  const activeAgent = agents.find((a) => a.id === activeAgentId) ?? agents[0];
+  const configuredAgent=settings.agents.find(a=>a.id===activeAgentId)??settings.agents.find(a=>a.enabled)??settings.agents[0];
+  const activeAgent={id:configuredAgent?.id??'planner',name:configuredAgent?.name??'Orchestrator',status:thinking?'running' as const:'idle' as const};
 
   // ⌘B toggles the sidebar, ⌘, opens Settings — like a native desktop app.
   React.useEffect(() => {
@@ -495,13 +428,16 @@ export default function App() {
     const threadId = activeThread.id;
     const agent = activeAgent;
     const contextMessages=history??activeThread.messages;
-    const replyIndex = contextMessages.length;
+
     const startTurn=(...messages:ChatMessage[])=>{
       if(!history){pushMessages(threadId,...messages);return;}
       setThreads(prev=>prev.map(thread=>thread.id===threadId?{...thread,updated:"now",messages:[...history,...messages]}:thread));
     };
     const text = plainText(segments);
-    const chosen = settings.models.customModels.find(m => m.id === settings.models.defaultModel);
+    const selectedRole=settings.agents.find(config=>config.id===agent.id);
+    if(selectedRole&&!selectedRole.enabled){startTurn({id:uid('u'),role:'user',segments},{id:uid('a'),role:'agent',agentId:agent.id,text:'This agent is disabled. Enable it in Settings → Agents before sending a request.'});return;}
+    const chosen = selectedRole?settings.models.customModels.find(m=>m.id===selectedRole.model||m.label===selectedRole.model):settings.models.customModels.find(m => m.id === settings.models.defaultModel);
+    if(isTauri()&&!chosen){startTurn({id:uid('u'),role:'user',segments},{id:uid('a'),role:'agent',agentId:agent.id,text:'The selected agent needs a configured model. Add an endpoint in Settings → Models, then choose it for this role in Settings → Agents.'});openSettings('agents');return;}
     const firstTurn=contextMessages.length===0 && threadId!=="brand";
     const titleInput=text || segments.find(segment=>segment.attachment)?.attachment?.name || "";
     const fallbackTitle=toTitle(titleInput,40);
@@ -536,11 +472,11 @@ export default function App() {
       const mentionedFiles=segments.filter(segment=>segment.type==="chip"&&segment.chip?.kind==="file").map(segment=>segment.chip!.label);
       const messages:unknown[]=[{role:"system",content:`You are Taro, a coding agent. Use available tools to inspect and change the selected workspace. Never claim a tool ran unless you received its result. Workspace: ${workspaceRoot || "not selected"}. Use ListFiles to inspect directories, Glob to find paths, Grep to search contents, and Read to inspect files; do not use Bash for file listing or searching. File paths mentioned with @ are relative to this workspace: ${mentionedFiles.join(", ") || "none"}. Read relevant mentioned files before answering. If no workspace is selected, ask the user to open a folder in Explorer or choose one in Settings → Plugins before using coding tools.`},...context,{role:"user",content:modelContent(segments)}];
       const updateActivity=(groupId:string,activity:ToolActivity)=>setThreads(prev=>prev.map(t=>t.id===threadId?{...t,messages:t.messages.map(m=>m.id===groupId&&m.role==="activity-group"?{...m,summary:`${m.activities.some(a=>a.id===activity.id)?m.activities.length:m.activities.length+1} tool call(s)`,activities:m.activities.some(a=>a.id===activity.id)?m.activities.map(a=>a.id===activity.id?activity:a):[...m.activities,activity]}:m)}:t));
-      const configured=settings.plugins.filter(p=>p.kind==="MCP"&&p.enabled&&p.transport&&(p.command||p.url));
-      const runtime=new ProfessionalToolRuntime({sessionId:threadId,workspaceRoot:workspaceRoot||"",agentId:agent.id,model:chosen,models:settings.models.customModels,plugins:configured,rules:compiledRules.text,
-        native:async(call,input,owner,approved,requestId)=>{const result=await executeAgentTool(call,input,owner.workspaceRoot,approved,call.name==="MCP"?configured.find(plugin=>plugin.id===input.server):undefined,requestId,{sessionId:owner.sessionId,readOnly:owner.readOnly,planningAncestors:owner.ancestors});recordAiCodeChange({eventId:`${threadId}:${requestId}`,workspaceId:rulesKey,toolName:call.name,result});return result;},
+      const configured=settings.plugins.filter(p=>p.enabled&&p.transport&&(p.command||p.url));
+      const runtime=new ProfessionalToolRuntime({sessionId:threadId,workspaceRoot:workspaceRoot||"",agentId:agent.id,model:chosen,models:settings.models.customModels,plugins:configured,rules:compiledRules.text,agents:settings.agents,skills:workspaceSkills,
+        native:async(call,input,owner,approved,requestId)=>{const result=await executeAgentTool(call,input,owner.workspaceRoot,approved,call.name==="MCP"?configured.find(plugin=>plugin.id===input.server):undefined,requestId,{sessionId:owner.sessionId,readOnly:owner.readOnly,planningAncestors:owner.ancestors});recordAiCodeChange({eventId:`${threadId}:${requestId}`,workspaceId:rulesKey,toolName:call.name,result});if(['Write','Edit','NotebookEdit'].includes(call.name)&&result.artifact.before!==result.artifact.after&&result.artifact.status!=='failed')recordActivity({id:requestId,workspace:rulesKey,kind:'code',timestamp:Date.now()});return result;},
         stream:streamModel,stopRequest:stopModel,
-        emit:message=>pushMessages(threadId,message),
+        emit:message=>{pushMessages(threadId,message);if(message.role==='plan'&&message.kind==='Design Plan')recordDesignActivity({workspace:rulesKey,path:message.path,markdown:message.markdown});},
         updateChild:(childId,patch)=>setThreads(previous=>previous.map(thread=>thread.id===threadId?{...thread,messages:thread.messages.map(message=>message.role==="subagent"&&message.childId===childId?{...message,...patch}:message)}:thread)),
         approve:async(call,input,{owner,force,plan})=>{
           const server=call.name==="MCP"?String(input.server??""):"workspace";
@@ -582,12 +518,14 @@ export default function App() {
           const failures=listed.flatMap((r,i)=>r.status==="rejected"?[{plugin:configured[i],error:String(r.reason)}]:[]);
           if(failures.length){const failureGroupId=uid("activity");const firstResponseId=responseId;const group:ChatMessage={id:failureGroupId,role:"activity-group",summary:"MCP connection failed",activities:[],startedAt:Date.now()};setThreads(prev=>prev.map(t=>{if(t.id!==threadId)return t;const at=t.messages.findIndex(m=>m.id===firstResponseId);const list=[...t.messages];list.splice(at<0?list.length:at,0,group);return {...t,messages:list};}));for(const failure of failures)updateActivity(failureGroupId,{id:uid("mcp"),kind:"mcp",label:`Connect ${failure.plugin.name}`,status:"failed",errorTrace:failure.error});}
         }
+        let rounds=0;
         while(!run.stopRequested){
+          if(++rounds>64)throw Error('The agent reached its 64-round tool limit. Review the retained outputs before continuing.');
           progress("Thinking…","Waiting for the model");
           run.requestId=uid("request");
           received="";
-          if(!messageLogged){recordAiMessage({eventId:`${threadId}:${thoughtId}`,workspaceId:rulesKey});messageLogged=true;}
-          const calls=await streamModel({requestId:run.requestId,endpoint:chosen.endpoint,model:chosen.label,credentialId:chosen.id,messages:boundedModelContext([...messages,{role:"system",content:runtime.instructions()}]),tools:workspaceRoot?runtime.definitions():undefined},delta=>{if(run.stopRequested)return;if(!received)progress("Writing response…","Receiving model response");received+=delta;if(settings.models.streamResponses)reveal.push(delta);});
+          const calls=await streamModel({requestId:run.requestId,endpoint:chosen.endpoint,model:chosen.model||chosen.label,credentialId:chosen.id,messages:boundedModelContext([...messages,{role:"system",content:runtime.instructions()}]),tools:workspaceRoot?runtime.definitions():undefined},delta=>{if(run.stopRequested)return;if(!received)progress("Writing response…","Receiving model response");received+=delta;if(settings.models.streamResponses)reveal.push(delta);});
+          if(!messageLogged&&(received.trim()||calls.length)){recordAiMessage({eventId:`${threadId}:${thoughtId}`,workspaceId:rulesKey});recordActivity({id:`${threadId}:${thoughtId}`,workspace:rulesKey,kind:'message',timestamp:Date.now()});messageLogged=true;}
           if(run.stopRequested || !calls.length) break;
           if(settings.models.streamResponses)await reveal.finish();else if(received)show(responseId,received);
           messages.push({role:"assistant",content:received||null,tool_calls:calls.map(c=>({id:c.id,type:"function",function:{name:c.name,arguments:c.arguments}}))});
@@ -618,9 +556,11 @@ export default function App() {
           run.stopLocal=()=>{reveal.stop();runtime.stop();};
         }
         if(run.stopRequested){reveal.stop();const partial=settings.models.streamResponses?reveal.shown():received;show(responseId,partial?`${partial}\n\n*Stopped*`:"Response stopped.");return;}
+        await runtime.settleChildren();
         if(settings.models.streamResponses){await reveal.finish();if(!received)show(responseId,"The model returned an empty response.");}else show(responseId,received||"The model returned an empty response.");
         if(run.stopRequested){const partial=settings.models.streamResponses?reveal.shown():received;show(responseId,partial?`${partial}\n\n*Stopped*`:"Response stopped.");}
       })().catch(error=>{
+        void runtime.stopAll().catch(stopError=>pushMessages(threadId,{id:uid('cleanup-error'),role:'event',text:`Some background work could not be stopped: ${String(stopError)}`}));
         completionStatus="failed";
         if(!run.stopRequested)progress("Response interrupted…","The response could not complete");
         reveal.stop();
@@ -629,129 +569,7 @@ export default function App() {
       }).finally(()=>{setThreads(previous=>previous.map(thread=>thread.id===threadId?{...thread,messages:thread.messages.map(message=>message.id===thoughtId&&message.role==="thought"?settleThought(message,run.stopRequested?"stopped":completionStatus):message)}:thread));if(activeGeneration.current===run){activeGeneration.current=null;setThinking(false);setRunningThreadId(null);}});
       return;
     }
-    if (!chosen) {
-      startTurn({id:uid("u"),role:"user",segments},{id:uid("a"),role:"agent",agentId:agent.id,text:"Choose a custom model in Settings → Models to connect an OpenAI-compatible endpoint."});
-      return;
-    }
-    const mcp = segments.find((s) => s.chip?.kind === "mcp")?.chip;
-    const skill = segments.find((s) => s.chip?.kind === "skill")?.chip;
-    const plannedActivities = planActivities(text, segments);
-    // An MCP call needs explicit permission first — hold that row back.
-    const needsPermission = Boolean(mcp);
-    const activities = needsPermission
-      ? plannedActivities.filter((a) => a.kind !== "mcp" && a.kind !== "plugin")
-      : plannedActivities;
-    const groupId = activities.length ? uid("activity") : undefined;
-    const permissionId = needsPermission ? uid("perm") : undefined;
-    const startedAt = Date.now();
-    const thoughtId=uid("thought");
-    const previewRun={requestId:"preview",toolRequestIds:new Set<string>(),stopRequested:false,stopLocal:undefined as (()=>void)|undefined};
-    activeGeneration.current=previewRun;
-
-    startTurn(
-      { id: uid("u"), role: "user", segments },
-      {...startThought(thoughtId,agent.id,startedAt),label:activities.length?"Using tools…":"Thinking…",steps:activities.length?activities.map(activity=>activity.label):["Preparing response"]},
-      ...(permissionId && mcp
-        ? [{
-            id: permissionId,
-            role: "permission" as const,
-            agentId: agent.id,
-            mcp: mcp.label,
-            tool: mcpToolName(mcp.label),
-          }]
-        : []),
-      ...(groupId
-        ? [{
-            id: groupId,
-            role: "activity-group" as const,
-            summary: summarizeActivities(activities),
-            activities,
-            startedAt,
-          }]
-        : [])
-    );
-    setThinking(true);
-    setRunningThreadId(threadId);
-
-    const previewTimer=window.setTimeout(() => {
-      const wantsTask = /task|ticket|bug|backlog|issue/i.test(text);
-      const carriesPlan = /\b(plan|fix|change|implement|design|build|update|create|refactor|audit|review)\b/i.test(text);
-      const logPlan = wantsTask || carriesPlan;
-      const mcpFailed = plannedActivities.some((activity) => activity.kind === "mcp" && activity.status === "failed");
-
-      if (groupId) {
-        setThreads((prev) =>
-          prev.map((thread) =>
-            thread.id !== threadId
-              ? thread
-              : {
-                  ...thread,
-                  messages: thread.messages.map((message) =>
-                    message.id !== groupId || message.role !== "activity-group"
-                      ? message
-                      : {
-                          ...message,
-                          activities: message.activities.map((activity) =>
-                            activity.status === "failed"
-                              ? { ...activity, durationMs: 624 }
-                              : { ...activity, status: "done", durationMs: activity.kind === "terminal" ? 850 : activity.kind === "mcp" ? 326 : 72 }
-                          ),
-                        }
-                  ),
-                }
-          )
-        );
-      }
-
-      pushMessages(threadId, {
-        id: uid("a"),
-        role: "agent",
-        agentId: agent.id,
-        text: mcpFailed
-          ? `I couldn't reach ${mcp?.label ?? "the MCP server"}. The failed call and error trace are available above.`
-          : needsPermission
-            ? `I need your permission before I can use ${mcp?.label} : ${mcp ? mcpToolName(mcp.label) : ""}.`
-            : logPlan
-          ? "I've added a clear task summary and solution plan to the Tasks panel for review."
-          : skill
-            ? `Invoked /${skill.label}. I'll report back with the result and any diffs.`
-            : mcp
-              ? `Connected to ${mcp.label}. I used the available tool and pulled the latest context.`
-              : REPLIES[replyIndex % REPLIES.length],
-        durationMs: Date.now() - startedAt,
-      });
-      setThreads(previous=>previous.map(thread=>thread.id===threadId?{...thread,messages:thread.messages.map(message=>message.id===thoughtId&&message.role==="thought"?settleThought(advanceThought(message,"Writing response…","Prepared response"),mcpFailed?"failed":"completed"):message)}:thread));
-
-      if (logPlan) {
-        setTasks((prev) => [
-          {
-            id: uid("t"),
-            title: toTitle(text, 56),
-            description: `Created by ${agent.name} from this thread.`,
-            priority: "Medium",
-            severity: /payment|checkout|charge|security/i.test(text) ? "Critical" : /bug|error|broken|issue/i.test(text) ? "High" : "Medium",
-            details: `The request is to ${text.replace(/\s+/g, " ").trim()}. The agent has recorded what this means in plain language and will keep the changes reviewable.`,
-            solution: [
-              "Confirm the problem in the current workspace and identify who is affected.",
-              "Make the smallest change that addresses the cause without changing unrelated behavior.",
-              "Verify the fix, then summarize what changed before marking the task done.",
-            ],
-            status: "Backlog",
-            tags: ["chat"],
-          },
-          ...prev,
-        ]);
-        setPanel("tasks");
-      }
-
-      setThinking(false);
-      setRunningThreadId(null);
-      if(activeGeneration.current===previewRun)activeGeneration.current=null;
-    }, 900);
-    previewRun.stopLocal=()=>{
-      window.clearTimeout(previewTimer);
-      setThreads(previous=>previous.map(thread=>thread.id===threadId?{...thread,messages:thread.messages.map(message=>message.id===thoughtId&&message.role==="thought"?settleThought(message,"stopped"):message.id===groupId&&message.role==="activity-group"?{...message,activities:message.activities.map(activity=>activity.status==="running"?{...activity,status:"failed",errorTrace:"Stopped"}:activity)}:message)}:thread));
-    };
+    startTurn({id:uid("u"),role:"user",segments},{id:uid("a"),role:"agent",agentId:agent.id,text:"Real model requests and tools require the Taro desktop app. Your message is saved."});
   };
 
   React.useEffect(()=>{if(receptionTurn&&chatLoaded&&activeThread.id===receptionTurn.threadId){setReceptionTurn(null);handleSend(receptionTurn.segments);}},[receptionTurn,chatLoaded,activeThread.id]);
@@ -859,16 +677,6 @@ export default function App() {
         trace: ["Recorded your permission choice.", "Skipped the external tool call."],
       });
     }
-  };
-
-  const handleCycleStatus = (id: string) => {
-    setTasks((prev) =>
-      prev.map((t) => {
-        if (t.id !== id) return t;
-        const next: TaskStatus = TASK_STATUSES[(TASK_STATUSES.indexOf(t.status) + 1) % TASK_STATUSES.length];
-        return { ...t, status: next };
-      })
-    );
   };
 
   /* ---- right panel ------------------------------------------------ */
@@ -1211,11 +1019,14 @@ export default function App() {
     setChipInsertion((pending) => pending?.requestId === requestId ? null : pending);
   }, []);
 
-  const chatHidden = maximized && panel !== null;
+  const chatHidden = maximized && panel !== null && panel !== "tasks";
 
   return (
-    <SettingsContext.Provider value={workspaceSettings}>
+    <SettingsContext.Provider value={workspaceSettings}><SettingsUpdateContext.Provider value={patch=>setSettings(previous=>({...previous,...patch}))}>
       <div className="flex h-screen w-screen flex-col overflow-hidden bg-background text-foreground">
+        {activityStorageStatus.error&&<div role='alert' className='flex shrink-0 items-center gap-3 border-b border-destructive/40 bg-background px-4 py-2 text-xs text-destructive'><span className='flex-1'>{activityStorageStatus.error}</span><button type='button' onClick={()=>retryActivityPersistence()}>Retry saving activity</button></div>}
+        {storageLoadError&&<div role='alert' className='flex shrink-0 items-center gap-3 border-b border-destructive/40 bg-background px-4 py-2 text-xs text-destructive'><span className='flex-1'>{storageLoadError}</span><button type='button' onClick={()=>setLoadAttempt(value=>value+1)}>Retry loading saved data</button></div>}
+        {settingsSaveError&&<div role='alert' className='flex shrink-0 items-center gap-3 border-b border-destructive/40 bg-background px-4 py-2 text-xs text-destructive'><span className='flex-1'>{settingsSaveError}</span><button type='button' onClick={()=>setPreferenceRetry(value=>value+1)}>Retry saving</button></div>}
         <TitleBar
           welcome={receptionOpen}
           onHome={()=>setReceptionOpen(true)}
@@ -1282,7 +1093,7 @@ export default function App() {
                 thinking={thinking}
                 panel={panel}
                 onTogglePanel={handleTogglePanel}
-                width={panel ? chatWidth : undefined}
+                width={panel && panel !== "tasks" ? chatWidth : undefined}
                 onSelectThread={setActiveThreadId}
                 onRenameThread={handleRenameThread}
                 onNewThread={() => handleNewThread()}
@@ -1307,14 +1118,14 @@ export default function App() {
               />
             </div>
 
-            {panel && !chatHidden && <Resizer containerRef={mainRef} width={chatWidth} onChange={setChatWidth} />}
+            {panel && panel !== "tasks" && !chatHidden && <Resizer containerRef={mainRef} width={chatWidth} onChange={setChatWidth} />}
 
             {panel === "explorer" && (
               <ExplorerPanel key={activeFolder.id} root={workspaceRoot} folderName={activeFolder.name} onChooseFolder={handleChooseExplorerFolder} maximized={maximized} onToggleMaximize={() => setMaximized((m) => !m)} onClose={closePanel} />
             )}
             {panel === "review" && (activeThread.id === "brand" ? <ReviewCanvas /> : <EmptyReviewCanvas />)}
-            {panel === "tasks" && <TasksBoard tasks={tasks} onCycleStatus={handleCycleStatus} onClose={closePanel} />}
-            {panel === "git" && <GitPanel onClose={closePanel} />}
+            {panel === "tasks" && <TasksBoard workspaceId={rulesKey} workspaceRoot={workspaceRoot} settings={workspaceSettings} onClose={closePanel} />}
+            {panel === "git" && <GitPanel workspaceRoot={workspaceRoot} sourceControl={settings.sourceControl} onClose={closePanel} onOpenTasks={()=>setPanel('tasks')} />}
             {panel === "docs" && openDocId && (
               <DocsPanel
                 key={openDocId}
@@ -1392,7 +1203,7 @@ export default function App() {
           onSettingsChange={updateWorkspaceSettings}
         />
       </div>
-    </SettingsContext.Provider>
+    </SettingsUpdateContext.Provider></SettingsContext.Provider>
   );
 }
 

@@ -5147,6 +5147,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "tokio-util",
+ "url",
  "walkdir",
  "webkit2gtk",
  "windows-sys 0.61.2",

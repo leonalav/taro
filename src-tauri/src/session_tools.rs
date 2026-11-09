@@ -877,6 +877,7 @@ fn skill_name(name: &str) -> bool {
         && name.len() <= 120
         && name != "."
         && name != ".."
+        && !name.starts_with(".import-")
         && name
             .chars()
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
@@ -884,7 +885,7 @@ fn skill_name(name: &str) -> bool {
 
 fn discover_skills(root: &Path) -> Result<BTreeMap<String, PathBuf>, String> {
     let mut found = BTreeMap::new();
-    for base in [".taro/skills", ".claude/skills", ".agents/skills"] {
+    for base in [".taro/skills", ".claude/skills", ".agents/skills", ".codex/skills", ".opencode/skills"] {
         let directory = contained(root, Path::new(base))?;
         if !directory.exists() {
             continue;

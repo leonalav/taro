@@ -1,19 +1,17 @@
 import * as React from "react";
-import { ArrowLeft, ChartColumn, Info, Gauge, Zap } from "lucide-react";
+import { ArrowLeft, ChartColumn, Info } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/utils/cn";
 import {
-  creditsUsed,
-  designsTrend,
   heatColor,
   heatmapRanges,
   statCards,
   totalContributions,
-  buildHeatmap,
   type HeatDay,
 } from "@/data/statistics";
 import { getUsageMetricsSnapshot, subscribeUsageMetrics, summarizeUsage } from "@/lib/usage-metrics";
+import {getActivitySnapshot,subscribeActivity,activityHeatmap} from '@/lib/activity-store';
 
 interface StatisticsPageProps {
   onBack: () => void;
@@ -21,15 +19,20 @@ interface StatisticsPageProps {
 
 export function StatisticsPage({ onBack }: StatisticsPageProps) {
   const usage = React.useSyncExternalStore(subscribeUsageMetrics, getUsageMetricsSnapshot, getUsageMetricsSnapshot);
+  const activity=React.useSyncExternalStore(subscribeActivity,getActivitySnapshot,getActivitySnapshot);
   const summary = summarizeUsage(usage);
   const cards = statCards.map(card => card.id === "messages"
     ? { ...card, value: usage.totalMessages.toLocaleString(), hint: `${summary.messagesThisMonth.toLocaleString()} this month` }
     : card.id === "lines"
       ? { ...card, value: usage.totalLinesAdded.toLocaleString(), hint: `${summary.linesAddedThisMonth.toLocaleString()} added this month` }
-      : card);
+      : card.id==='designs'?{...card,value:activity.filter(e=>e.kind==='design').length.toLocaleString(),hint:'Saved design plans on this device'}:card.id==='tasks'?{...card,value:activity.filter(e=>e.kind==='task').length.toLocaleString(),hint:'Completed and described'}:card);
   const [rangeId, setRangeId] = React.useState<string>("6m");
   const range = heatmapRanges.find((r) => r.id === rangeId) ?? heatmapRanges[2];
-  const days = React.useMemo(() => buildHeatmap(range.months), [range.months]);
+  const days = React.useMemo(() => {
+    const messageCounts=new Map<string,number>();for(const e of activity.filter(e=>e.kind==='message')){const d=new Date(e.timestamp);const date=`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;messageCounts.set(date,(messageCounts.get(date)??0)+1);}
+    return activityHeatmap(activity,range.months).map(day=>{const retainedMessages=usage.days.find(d=>d.date===day.date)?.messages??0;const count=day.count+Math.max(0,retainedMessages-(messageCounts.get(day.date)??0));return {...day,count,label:`${day.date} · ${count} contribution${count===1?'':'s'}`};});
+  }, [range.months,activity,usage]);
+  const designsTrend=React.useMemo(()=>Array.from({length:24},(_,index)=>{const end=Date.now()-(23-index)*7*86400000,start=end-7*86400000;return activity.filter(e=>e.kind==='design'&&e.timestamp>start&&e.timestamp<=end).length;}),[activity]);
   const total = totalContributions(days);
 
   return (
@@ -67,40 +70,6 @@ export function StatisticsPage({ onBack }: StatisticsPageProps) {
           <BarChart title="Messages sent" subtitle="per day, last 28 days" data={summary.messagesTrend} accent="#3b9eff" unit="messages" />
         </div>
 
-        {/* Credits */}
-        <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
-          <div className="rounded-xl border border-border bg-card p-4 lg:col-span-2">
-            <div className="flex items-center gap-2">
-              <Zap className="size-3.5 text-amber-400" />
-              <p className="text-[11px] tracking-[0.08em] text-muted-foreground uppercase">Credits left</p>
-            </div>
-            <div className="mt-3 flex items-end gap-3">
-              <p className="text-2xl font-semibold tracking-tight text-foreground tabular-nums">
-                {(creditsUsed.total - creditsUsed.used).toLocaleString()}
-              </p>
-              <p className="pb-1 text-[11px] text-muted-foreground">of {creditsUsed.total.toLocaleString()} this cycle</p>
-            </div>
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/[0.06]">
-              <div className="h-full rounded-full bg-amber-400/80" style={{ width: `${(creditsUsed.used / creditsUsed.total) * 100}%` }} />
-            </div>
-            <p className="mt-2 text-[11px] text-muted-foreground">
-              {creditsUsed.used.toLocaleString()} used · resets on the 1st of next month
-            </p>
-          </div>
-
-          <div className="flex flex-col justify-between rounded-xl border border-border bg-card p-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <Gauge className="size-3.5 text-taro" />
-                <p className="text-[11px] tracking-[0.08em] text-muted-foreground uppercase">Design score</p>
-              </div>
-              <p className="mt-3 text-2xl font-semibold tracking-tight text-foreground tabular-nums">92</p>
-              <p className="mt-1 text-[11px] text-muted-foreground">avg across last 12 reviews</p>
-            </div>
-            <Badge variant="success" className="mt-3 w-fit">+4 vs last month</Badge>
-          </div>
-        </div>
-
         {/* Contribution heatmap */}
         <div className="mt-3 rounded-xl border border-border bg-card p-4">
           <div className="flex flex-wrap items-center gap-2">
@@ -124,7 +93,7 @@ export function StatisticsPage({ onBack }: StatisticsPageProps) {
               ))}
             </div>
           </div>
-          <p className="mt-1 text-[11px] text-muted-foreground">Designs, code and reviews contributed through Taro.</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">Recorded messages, successful file edits, saved design plans, commits, and completed tasks.</p>
 
           <Heatmap days={days} months={range.months} />
 
@@ -139,7 +108,7 @@ export function StatisticsPage({ onBack }: StatisticsPageProps) {
 
         <p className="mt-4 flex items-start gap-2 text-[11px] leading-relaxed text-muted-foreground/70">
           <Info className="mt-px size-3 shrink-0" />
-          Messages count submitted AI requests. Code counts added lines from successful AI Write, Edit and notebook code-cell changes, including replacements. These counters are stored on this device from now on; other figures are sample data.
+          Messages count successful AI requests. Code counts added lines from successful AI Write, Edit and notebook code-cell changes, including replacements. Activity is stored on this device. Empty days stay empty; failed operations do not create contributions.
         </p>
         <div className="h-6" />
       </div>

@@ -9,7 +9,6 @@ import {
   ScrollText,
   type LucideIcon,
 } from "lucide-react";
-import { skills as builtinSkills } from "./mentions";
 import { DEFAULT_WORKSPACE_RULES } from "../lib/workspace-rules";
 
 /* ------------------------------------------------------------------
@@ -159,6 +158,8 @@ export interface CustomModel {
   label: string;
   /** Base URL of the OpenAI-compatible endpoint. */
   endpoint: string;
+  /** Provider model ID, separate from the display label. */
+  model?: string;
   /** API key for that endpoint, stored per model on this device. */
   apiKey?: string;
 }
@@ -201,47 +202,40 @@ export const defaultSettings: Settings = {
     showCodeByDefault: false,
     canvasGrid: true,
   },
-  plugins: [
-    { id: "storybook", name: "Storybook", description: "Preview components in isolation.", kind: "Integration", enabled: false, status: "off" },
-  ],
-  skills: builtinSkills.map((s) => ({
-    id: s.id,
-    label: s.label,
-    description: s.description,
-    source: "builtin" as const,
-    enabled: true,
-  })),
+  plugins: [],
+  skills: [],
   rules: DEFAULT_WORKSPACE_RULES.map((rule) => ({ ...rule })),
   models: {
     defaultModel: "gpt-6-luna",
     reviewModel: "grok-4.7",
     effort: 1,
     providers: [
-      { id: "anthropic", name: "Anthropic", connected: true, keyHint: "sk-ant-…4f2a" },
+      { id: "anthropic", name: "Anthropic", connected: false },
       { id: "openai", name: "OpenAI", connected: false },
       { id: "google", name: "Google", connected: false },
-      { id: "local", name: "Local (Ollama)", connected: true, keyHint: "localhost:11434" },
+      { id: "local", name: "Local (Ollama)", connected: false },
     ],
     streamResponses: true,
     customModels: [],
   },
   agents: [
     { id: "aria", name: "Aria", role: "Designer agent", model: "gpt-6-luna", enabled: true, autonomy: "suggest", canWriteCode: false },
-    { id: "theo", name: "Theo", role: "Type & QA", model: "grok-4.7", enabled: true, autonomy: "suggest", canWriteCode: false },
+    { id: "theo", name: "Theo", role: "Type & QA", model: "grok-4.7", enabled: true, autonomy: "ask", canWriteCode: true },
     { id: "rin", name: "Rin", role: "Code agent", model: "deepseek-v4.1-flash", enabled: true, autonomy: "ask", canWriteCode: true },
+    { id: "planner", name: "Kai", role: "Orchestrator agent", model: "gpt-6-luna", enabled: true, autonomy: "ask", canWriteCode: true },
   ],
   sourceControl: {
     provider: "github",
-    repo: "taro-labs/discovery",
-    defaultBranch: "main",
+    repo: "",
+    defaultBranch: "",
     branchPrefix: "taro/",
     autoCommit: false,
     requireApproval: true,
     signCommits: true,
     commitStyle: "conventional",
     signedIn: false,
-    repos: ["taro-labs/discovery", "maya/aria-studio", "maya/tokens", "taro-labs/checkout"],
-    branches: ["main", "develop", "design-next"],
+    repos: [],
+    branches: [],
   },
   browser: {
     engine: "chromium",

@@ -1,0 +1,55 @@
+{
+  "browser": "157.0.4341.42",
+  "checks": [
+    {
+      "name": "Gallery defaults collapsed",
+      "passed": true
+    },
+    {
+      "name": "Enter expands gallery and retains focus",
+      "passed": true
+    },
+    {
+      "name": "Space collapses gallery",
+      "passed": true
+    },
+    {
+      "name": "All 16 sample families exist",
+      "passed": true
+    },
+    {
+      "name": "All family disclosures expand",
+      "passed": true
+    },
+    {
+      "name": "237 gallery rows",
+      "passed": true
+    },
+    {
+      "name": "No nested buttons",
+      "passed": true
+    },
+    {
+      "name": "Reduced motion disables spinner animation",
+      "passed": true
+    },
+    {
+      "name": "Sample restore stays local and retains focus",
+      "passed": true
+    },
+    {
+      "name": "Sample action leaves persisted chats unchanged",
+      "passed": true
+    },
+    {
+      "name": "Plan opens existing Markdown editor",
+      "passed": true
+    },
+    {
+      "name": "Harness exception",
+      "passed": false,
+      "detail": "TimeoutError: locator.waitFor: Timeout 10000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByRole('button', { name: /^Design plan · Agent foundation artifacts.*1 activity$/ }) to be visible\u001b[22m\n"
+    }
+  ],
+  "errors": []
+}

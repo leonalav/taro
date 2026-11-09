@@ -5,11 +5,12 @@ import { ProfessionalToolRuntime, type RuntimeOptions } from "./professional-run
 
 let serial=0;
 const call=(name:string):ToolCall=>({id:`call-${serial++}`,name,arguments:"{}"});
+const completedResponse:RuntimeOptions["stream"]=async(_request,delta)=>{delta("Completed inspection.");return [];};
 function setup(){
   const emitted:ChatMessage[]=[];
   const native=vi.fn<RuntimeOptions["native"]>().mockImplementation(async(tool,_input,owner)=>tool.name==="Agent"?{text:"Authorized",artifact:{kind:"agent-authorization",workspaceRoot:owner.workspaceRoot}}:tool.name==="EnterPlanMode"?{text:"Planning",artifact:{kind:"plan-mode",path:".taro/plans/test.md"}}:tool.name==="ExitPlanMode"?{text:"Plan",artifact:{kind:"plan",path:".taro/plans/test.md",name:"My plan",markdown:"# My plan",planKind:"Plan"}}:{text:"Read result",artifact:{kind:"read"}});
   const approve=vi.fn<RuntimeOptions["approve"]>().mockResolvedValue(true);
-  const stream=vi.fn<RuntimeOptions["stream"]>().mockResolvedValue([]);
+  const stream=vi.fn<RuntimeOptions["stream"]>().mockImplementation(completedResponse);
   const stop=vi.fn().mockResolvedValue(undefined),update=vi.fn();
   const options:RuntimeOptions={sessionId:`test-${serial++}`,workspaceRoot:"A:/test",agentId:"planner",model:{id:"model",label:"Test model",endpoint:"https://example.invalid"},models:[{id:"model",label:"Test model",endpoint:"https://example.invalid"}],plugins:[],native,approve,stream,stopRequest:stop,emit:message=>emitted.push(message),updateChild:update};
   return {runtime:new ProfessionalToolRuntime(options),native,approve,stream,stop,update,emitted,options};
@@ -77,7 +78,7 @@ describe("callable professional tool runtime",()=>{
     const {runtime,stream,approve,native}=setup();
     let allowWrite!:(allowed:boolean)=>void;
     approve.mockImplementation(()=>new Promise(resolve=>{allowWrite=resolve;}));
-    stream.mockResolvedValueOnce([{id:"write",name:"Write",arguments:'{"file_path":"a.ts","content":"unsafe"}'}]).mockResolvedValue([]);
+    stream.mockResolvedValueOnce([{id:"write",name:"Write",arguments:'{"file_path":"a.ts","content":"unsafe"}'}]).mockImplementation(completedResponse);
     const launched=await runtime.execute(call("Agent"),{description:"Update file",prompt:"Update a.ts",run_in_background:true});
     for(let i=0;i<8&&!allowWrite;i++)await Promise.resolve();
     expect(allowWrite).toBeDefined();
@@ -117,5 +118,118 @@ describe("callable professional tool runtime",()=>{
     await expect(moved.execute(call("TaskOutput"),{task_id:"shell-child-test",block:false})).rejects.toThrow(/No task found/);
     await runtime.execute(call("TaskStop"),{task_id:child.artifact.task_id});
     expect(shellStatus).toBe("stopped");
+  });
+});
+
+// A role's write permission must survive delegation, skills, and tool discovery.
+describe("configured roles and skills",()=>{
+  const role=(id:string,extra:Record<string,unknown>={})=>({id,name:id,role:id,model:"other",enabled:true,autonomy:"auto" as const,canWriteCode:true,...extra});
+  it("denies disabled root agents before native calls",async()=>{
+    const s=setup();const runtime=new ProfessionalToolRuntime({...s.options,agents:[role("planner",{enabled:false})]});
+    await expect(runtime.execute(call("Read"),{})).rejects.toThrow(/disabled/);expect(s.native).not.toHaveBeenCalled();
+  });
+  it("uses configured role model and carries role instructions into the child",async()=>{
+    const s=setup();const runtime=new ProfessionalToolRuntime({...s.options,agents:[role("code")],models:[...s.options.models,{id:"other",label:"Other model",endpoint:"https://other.invalid"}]});
+    await runtime.execute(call("Agent"),{description:"Implement",prompt:"Build",subagent_type:"Code"});
+    expect(s.stream.mock.calls[0][0]).toMatchObject({credentialId:"other",endpoint:"https://other.invalid"});
+    expect(JSON.stringify(s.stream.mock.calls[0][0].messages)).toContain("Role: code");
+  });
+  it("keeps suggest roles read-only and prevents granting write authority by delegation",async()=>{
+    const s=setup();const runtime=new ProfessionalToolRuntime({...s.options,agents:[role("planner",{autonomy:"suggest"}),role("code")],models:[...s.options.models,{id:"other",label:"Other",endpoint:"https://other.invalid"}]});
+    await expect(runtime.execute(call("Write"),{})).rejects.toThrow(/read-only|unavailable/);
+    s.stream.mockResolvedValueOnce([{id:"bad",name:"Write",arguments:"{}"}]).mockImplementation(completedResponse);
+    await runtime.execute(call("Agent"),{description:"Implement",prompt:"Build",subagent_type:"Code"});
+    expect(s.native.mock.calls.some(([tool])=>tool.name==="Write")).toBe(false);
+  });
+  it("requires ask-role delegation approval and never skips normal approvals for auto",async()=>{
+    const s=setup();const runtime=new ProfessionalToolRuntime({...s.options,agents:[role("planner",{autonomy:"ask"}),role("code")],models:[...s.options.models,{id:"other",label:"Other",endpoint:"https://other.invalid"}]});
+    s.approve.mockResolvedValueOnce(false);
+    await expect(runtime.execute(call("Agent"),{description:"Implement",prompt:"Build",subagent_type:"Code"})).rejects.toThrow(/denied/);
+    expect(s.stream).not.toHaveBeenCalled();
+  });
+  it("denies disabled skills and filters them from discovery",async()=>{
+    const s=setup();const runtime=new ProfessionalToolRuntime({...s.options,skills:[{id:"review",label:"Review",path:"A:/test/.taro/skills/review/SKILL.md",source:"custom",enabled:false}]});
+    await expect(runtime.execute(call("Skill"),{skill:"review"})).rejects.toThrow(/disabled/);
+    s.native.mockResolvedValueOnce({text:"Skills review, other",artifact:{kind:"skill-list",skills:[{skill:"review"},{skill:"other"}]}});
+    const out=await runtime.execute(call("Skill"),{skill:"list"});expect(out.artifact.skills).toEqual([{skill:"other"}]);expect(out.text).not.toContain("review");
+  });
+  it("root cancellation stops background children while preserving partial output",async()=>{
+    const s=setup();s.stream.mockImplementation(async(_r,delta)=>{delta("partial");return new Promise(()=>{});});
+    const child=await s.runtime.execute(call("Agent"),{description:"Job",prompt:"Inspect",run_in_background:true});s.runtime.stop();
+    await Promise.resolve();expect(s.update).toHaveBeenCalledWith(child.artifact.task_id,expect.objectContaining({status:"stopped",result:"partial"}));
+  });
+});
+
+describe("owned child lifecycle",()=>{
+  it("waits for background children before completing the owning task",async()=>{
+    const s=setup();let finish!:()=>void;s.stream.mockImplementation((_request,delta)=>new Promise(resolve=>{finish=()=>{delta("Inspection finished.");resolve([]);};}));
+    await s.runtime.execute(call("Agent"),{description:"Work",prompt:"Inspect",run_in_background:true});
+    let settled=false;const wait=s.runtime.settleChildren().then(()=>{settled=true;});await Promise.resolve();expect(settled).toBe(false);finish();await wait;expect(settled).toBe(true);
+  });
+  it("reports failed background children and stops all child scopes",async()=>{
+    const s=setup();s.stream.mockRejectedValue(new Error("provider unavailable"));
+    await s.runtime.execute(call("Agent"),{description:"Work",prompt:"Inspect",run_in_background:true});
+    await expect(s.runtime.settleChildren()).rejects.toThrow(/provider unavailable/);await s.runtime.stopAll();expect(s.native.mock.calls.some(([tool])=>tool.name==="StopChildTasks")).toBe(true);
+  });
+});
+
+describe("configured delegation cannot bypass role policy",()=>{
+  it("does not use legacy general-purpose delegation to bypass a disabled Code role",async()=>{
+    const s=setup();const runtime=new ProfessionalToolRuntime({...s.options,agents:[{id:"code",name:"Rin",role:"Code agent",model:"model",enabled:false,autonomy:"auto",canWriteCode:true}]});
+    await expect(runtime.execute(call("Agent"),{description:"Build",prompt:"Build",subagent_type:"general-purpose"})).rejects.toThrow(/disabled/);expect(s.stream).not.toHaveBeenCalled();
+  });
+  it("intersects nested fork skill tools with its parent's tool allowance",async()=>{
+    const s=setup();s.native.mockImplementation(async(tool,_input,owner)=>tool.name==="Skill"?{text:"Inspect",artifact:{kind:"skill",context:"fork",allowedTools:["Skill","Agent"]}}:{text:"Scope",artifact:{kind:"agent-authorization",workspaceRoot:owner.workspaceRoot}});
+    s.stream.mockResolvedValueOnce([{id:"spawn",name:"Agent",arguments:JSON.stringify({description:"Nested",prompt:"nested"})}]).mockImplementation(completedResponse);
+    await s.runtime.execute(call("Skill"),{skill:"outer"});const nested=s.stream.mock.calls.find(([request])=>(request.messages as {role:string;content:string}[]).some(message=>message.role==="user"&&message.content==="nested"));
+    expect(JSON.stringify(nested?.[0].tools)).not.toContain('"name":"Write"');
+  });
+});
+
+describe("skill policy normalization",()=>{
+  it("does not bypass disabled skills by adding whitespace accepted by native parsing",async()=>{
+    const s=setup();const runtime=new ProfessionalToolRuntime({...s.options,skills:[{id:"review",label:"Review",source:"custom",enabled:false}]});
+    await expect(runtime.execute(call("Skill"),{skill:" review "})).rejects.toThrow(/disabled/);expect(s.native).not.toHaveBeenCalled();
+  });
+});
+
+describe("configured runtime context",()=>{
+  it("lists enabled configured roles and workspace skill candidates with models and capabilities",()=>{
+    const s=setup();const runtime=new ProfessionalToolRuntime({...s.options,agents:[{id:"code",name:"Rin",role:"Code agent",model:"model",enabled:true,autonomy:"ask",canWriteCode:true},{id:"hidden",name:"Disabled role",role:"Designer",model:"model",enabled:false,autonomy:"auto",canWriteCode:false}],skills:[{id:"review",label:"Review",description:"Check real changes",source:"custom",path:"A:\\test\\.taro\\skills\\review\\SKILL.md",enabled:true},{id:"hidden-skill",label:"Hidden skill",source:"custom",path:"A:/test/.taro/skills/hidden-skill/SKILL.md",enabled:false}]});
+    const context=runtime.instructions();expect(context).toContain('"id":"code"');expect(context).toContain('"model":"model"');expect(context).toContain('"canWriteCode":true');expect(context).toContain('"autonomy":"ask"');expect(context).toContain('Check real changes');expect(context).not.toContain('Disabled role');expect(context).not.toContain('Hidden skill');expect(context).toMatch(/verif/i);
+  });
+  it("does not advertise external, missing-path or traversing skills as workspace skills",()=>{
+    const s=setup();const runtime=new ProfessionalToolRuntime({...s.options,skills:[{id:"outside",label:"External private skill",source:"custom",path:"A:/elsewhere/.taro/skills/private/SKILL.md",enabled:true},{id:"fake",label:"Invented skill",source:"builtin",enabled:true},{id:"escape",label:"Traversing skill",source:"custom",path:"A:/test/.taro/skills/../../outside/SKILL.md",enabled:true}]});
+    expect(runtime.instructions()).not.toMatch(/External private|Invented skill|Traversing skill/);
+  });
+});
+
+describe("cleanup failure isolation",()=>{
+  it("still cancels root shell tasks when a child scope cancellation fails",async()=>{
+    const s=setup();s.stream.mockImplementation(()=>new Promise(()=>{}));
+    await s.runtime.execute(call("Agent"),{description:"Child",prompt:"Inspect",run_in_background:true});
+    s.native.mockImplementation(async(tool,_input,owner)=>{if(tool.name==="StopChildTasks"&&owner.depth>0)throw Error("Child scope unavailable");return {text:"Stopped",artifact:{kind:"task-stop"}};});
+    await expect(s.runtime.stopAll()).rejects.toThrow(/Child scope unavailable/);
+    expect(s.native.mock.calls.some(([tool,,owner])=>tool.name==="StopChildTasks"&&owner.depth===0)).toBe(true);
+  });
+});
+
+describe("durable child responses",()=>{
+  it("publishes partial child text before the request finishes",async()=>{
+    const s=setup();s.stream.mockImplementation(async(_r,delta)=>{delta("Durable partial child response");return new Promise(()=>{});});
+    const launched=await s.runtime.execute(call("Agent"),{description:"Inspect",prompt:"Inspect",run_in_background:true});
+    expect(s.update).toHaveBeenCalledWith(launched.artifact.task_id,expect.objectContaining({result:"Durable partial child response"}));
+    await s.runtime.stopAll();
+  });
+  it("retains complete child text across tool rounds without truncating durable output",async()=>{
+    const s=setup();const first="x".repeat(100100);
+    s.stream.mockImplementationOnce(async(_r,delta)=>{delta(first);return [{id:"read",name:"Read",arguments:"{}"}];}).mockImplementationOnce(async(_r,delta)=>{delta("Final finding");return [];});
+    const out=await s.runtime.execute(call("Agent"),{description:"Inspect",prompt:"Inspect"});
+    expect(out.text.length).toBe(first.length+"\n\nFinal finding".length);expect(out.text.startsWith(first)).toBe(true);expect(out.text.endsWith("\n\nFinal finding")).toBe(true);expect(s.update).toHaveBeenLastCalledWith(expect.any(String),expect.objectContaining({result:out.text,status:"completed"}));
+  });
+  it("fails an empty child provider response instead of reporting completion",async()=>{
+    const s=setup();s.stream.mockImplementation(async()=>[]);
+    await expect(s.runtime.execute(call("Agent"),{description:"Inspect",prompt:"Inspect"})).rejects.toThrow(/empty response/i);
+    expect(s.update).toHaveBeenLastCalledWith(expect.any(String),expect.objectContaining({status:"failed"}));
   });
 });

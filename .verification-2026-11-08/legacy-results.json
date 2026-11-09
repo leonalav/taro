@@ -1,0 +1,34 @@
+[
+  {
+    "name": "canvas-settings-check.mjs",
+    "exit": 1
+  },
+  {
+    "name": "comments-editable-check.mjs",
+    "exit": 1
+  },
+  {
+    "name": "composer-comment-check.mjs",
+    "exit": 1
+  },
+  {
+    "name": "docs-check.mjs",
+    "exit": 1
+  },
+  {
+    "name": "docs-editor-check.mjs",
+    "exit": 1
+  },
+  {
+    "name": "permission-check.mjs",
+    "exit": 1
+  },
+  {
+    "name": "reuse-browser-check.mjs",
+    "exit": 1
+  },
+  {
+    "name": "skeletal-layers-check.mjs",
+    "exit": 1
+  }
+]

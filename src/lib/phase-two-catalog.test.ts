@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import { DeferredToolCatalog, phaseTwoDefinitions } from "./phase-two-catalog";
 
 describe("Phase 2 callable catalog",()=>{
+  it('exposes the Skill loader on the first model request, including read-only agents',()=>{
+    expect(new DeferredToolCatalog().definitions().map(t=>t.function.name)).toContain('Skill');
+    expect(new DeferredToolCatalog(true).definitions().map(t=>t.function.name)).toContain('Skill');
+  });
   it("defines all nine requested tool families and loads deferred schemas through search",()=>{
     const names=phaseTwoDefinitions.map(tool=>tool.function.name);
     expect(names).toEqual(expect.arrayContaining(["LSP","PowerShell","Agent","TaskOutput","TaskStop","EnterPlanMode","ExitPlanMode","EnterWorktree","ExitWorktree","Skill","ToolSearch"]));

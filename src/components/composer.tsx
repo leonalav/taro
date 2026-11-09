@@ -29,7 +29,8 @@ import {
 import type { Segment } from "@/data/mock";
 import { MAX_FREE_EFFORT } from "@/data/settings";
 import { cn } from "@/utils/cn";
-import { useSettings } from "@/components/settings/settings-context";
+import { useSettings, SettingsUpdateContext } from "@/components/settings/settings-context";
+import { RepositoryPicker } from "@/components/repository-picker";
 import { PermissionGate } from "@/components/permission-gate";
 import type { PermissionRule } from "@/lib/permission-rules";
 
@@ -315,7 +316,8 @@ export function Composer({
   React.useEffect(()=>{if(disabled){setToken(null);setEffortOpen(false);setMenuDismissed(true);}},[disabled]);
 
   const effort = effortLevels[Math.min(effortIdx, MAX_FREE_EFFORT)];
-  const {skills:settingsSkills,plugins} = useSettings();
+  const {skills:settingsSkills,plugins,sourceControl} = useSettings();
+  const updateSettings=React.useContext(SettingsUpdateContext);
   const [mentionFiles,setMentionFiles]=React.useState<ChipRef[]>([]);
   React.useEffect(()=>{
     let active=true;
@@ -459,7 +461,7 @@ export function Composer({
     }
   };
 
-  const menuOpen = Boolean(token) && !menuDismissed && items.length > 0;
+  const menuOpen = Boolean(token) && !menuDismissed && (token?.kind === "skill" || items.length > 0);
 
   /* ---- render ---------------------------------------------------- */
 
@@ -568,6 +570,7 @@ export function Composer({
             <span className="text-[15px] leading-none">/</span>
           </button>
 
+          <RepositoryPicker sourceControl={sourceControl} workspaceRoot={workspaceRoot} patch={patch=>updateSettings({sourceControl:{...sourceControl,...patch}})} />
           <PermissionGate rules={permissionRules} plugins={plugins} onSet={onSetPermissionRule} onRemove={onRemovePermissionRule} />
 
           <div className="ml-auto flex items-center gap-2">
@@ -632,6 +635,7 @@ function MenuPanel({
       </div>
 
       <div className="scrollbar-thin max-h-64 overflow-y-auto p-1">
+        {items.length===0&&<p className='px-3 py-4 text-xs text-muted-foreground'>No enabled workspace skills found. Open a workspace and import or enable skills in Settings → Plugins.</p>}
         {groups.map((group) => (
           <div key={group.title}>
             <p className="px-2.5 py-1.5 text-[11px] text-muted-foreground/70">{group.title}</p>

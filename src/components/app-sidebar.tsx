@@ -17,7 +17,8 @@ import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import { BrandMark } from "@/components/taro-mark";
 import { SessionTree } from "@/components/session-tree";
-import { agents, navSections, disabledNavSections, type Folder as FolderType, type NavItem, type Thread } from "@/data/mock";
+import { navSections, disabledNavSections, type Folder as FolderType, type NavItem, type Thread } from "@/data/mock";
+import {useSettings} from '@/components/settings/settings-context';
 import { cn } from "@/utils/cn";
 
 export interface AppSidebarProps {
@@ -349,6 +350,7 @@ function AgentGroup({
   onActivate: () => void;
 }) {
   const [open, setOpen] = React.useState(true);
+  const {agents}=useSettings();
 
   return (
     <div>
@@ -381,6 +383,7 @@ function AgentGroup({
                 key={agent.id}
                 type="button"
                 onClick={() => onAgentChange(agent.id)}
+                disabled={!agent.enabled}
                 aria-current={selected ? "true" : undefined}
                 className={cn(
                   "flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-[13px] text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground",
@@ -394,7 +397,7 @@ function AgentGroup({
                   )}
                 />
                 <span className="flex-1 truncate text-left">{agent.name}</span>
-                {agent.status === "running" && <span className="size-1.5 rounded-full bg-success" />}
+                {!agent.enabled && <span className="text-[10px] text-muted-foreground">Off</span>}
               </button>
             );
           })}
