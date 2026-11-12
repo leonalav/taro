@@ -7,8 +7,8 @@ import { cn } from "@/utils/cn";
 const chipStyles = {
   file: "border-sky-500/30 bg-sky-500/10 text-sky-300",
   mcp: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
-  skill: "border-violet-500/30 bg-violet-500/10 text-violet-300",
-  artifact: "border-[#453951] bg-[#1c1623] text-[#ddcfee]",
+  skill: "border-[#5a564d] bg-white/[0.07] text-[#efe9dc]",
+  artifact: "border-[#423f37] bg-[#1b1a17] text-[#e6e0d4]",
   comment: "border-amber-500/40 bg-amber-500/10 text-amber-300",
 } as const;
 

@@ -9,7 +9,7 @@ const icons: Record<ToolResultMessage["tool"], LucideIcon> = { LSP: Code2, TaskO
 export function ToolResultRow({ message }: { message: ToolResultMessage }) {
   const Icon = icons[message.tool];
   return <details data-tool-result={message.tool} className="artifact-sheet artifact-sheet--compact group/tool-result animate-pop min-w-0">
-    <summary className="artifact-row cursor-pointer list-none justify-start gap-2 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#dcc6ff] [&::-webkit-details-marker]:hidden">
+    <summary className="artifact-row cursor-pointer list-none justify-start gap-2 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#f2eee6] [&::-webkit-details-marker]:hidden">
       <Icon className="size-3.5 shrink-0 text-[#9a93aa]" strokeWidth={1.75} />
       <span className="shrink-0 text-[#a8a3b3]">{message.action}</span>
       <span className="min-w-0 truncate text-[#e2deea]" title={message.subject}>{message.subject}</span>

@@ -497,12 +497,12 @@ function SubagentCard({message}:{message:Extract<ChatMessage,{role:"subagent"}>}
     <div className="flex items-start gap-3">
       <Avatar initials={message.subagentType.slice(0,2).toUpperCase()} size="md" tone="taro"/>
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2"><GitFork className="size-3.5 text-[#c9a8ff]"/><span className="font-mono text-[12px] font-semibold tracking-tight text-[#f7f5fb]">Deploy subagent</span><span className="artifact-label text-[#c9a8ff]">{message.subagentType}</span><span className={cn("ml-auto inline-flex items-center gap-1 font-mono text-[10px] tracking-wide",running?"text-[#c9a8ff]":message.status==="failed"?"text-[#ff8f9a]":message.status==="stopped"?"text-[#918b9e]":"text-[#7ee2a8]")}>{running?<LoaderCircle className="size-3 animate-spin"/>:message.status==="failed"?<CircleX className="size-3"/>:<CircleCheck className="size-3"/>}{running?"Running":message.status==="failed"?"Failed":message.status==="stopped"?"Stopped":"Completed"}</span></div>
+        <div className="flex flex-wrap items-center gap-2"><GitFork className="size-3.5 text-[#e9e3d6]"/><span className="font-mono text-[12px] font-semibold tracking-tight text-[#f7f5fb]">Deploy subagent</span><span className="artifact-label text-[#e9e3d6]">{message.subagentType}</span><span className={cn("ml-auto inline-flex items-center gap-1 font-mono text-[10px] tracking-wide",running?"text-[#e9e3d6]":message.status==="failed"?"text-[#ff8f9a]":message.status==="stopped"?"text-[#918b9e]":"text-[#7ee2a8]")}>{running?<LoaderCircle className="size-3 animate-spin"/>:message.status==="failed"?<CircleX className="size-3"/>:<CircleCheck className="size-3"/>}{running?"Running":message.status==="failed"?"Failed":message.status==="stopped"?"Stopped":"Completed"}</span></div>
         <p className="mt-1.5 font-mono text-[11.5px] leading-6 text-[#d6d1e0]">{message.description}</p>
         <div className="mt-2.5 flex flex-wrap gap-1.5 font-mono text-[9.5px] tracking-wide text-[#a8a3b3]"><span className="rounded border border-[#2b2b33] bg-[#15151a] px-1.5 py-0.5">{message.childId}</span>{message.runInBackground&&<span className="rounded border border-[#2b2b33] px-1.5 py-0.5">Background</span>}{message.isolation==="worktree"&&<span className="rounded border border-[#2b2b33] px-1.5 py-0.5">Worktree</span>}{message.model&&<span className="rounded border border-[#2b2b33] px-1.5 py-0.5">{message.model} model</span>}</div>
       </div>
     </div>
-    <details className="mt-3 font-mono text-[11px]"><summary className="cursor-pointer rounded text-[#a8a3b3] hover:text-[#f7f5fb] focus-visible:outline-2 focus-visible:outline-[#dcc6ff]">View task brief</summary><p className="mt-2 rounded-lg border border-[#1f1f25] bg-[#08080b] px-3 py-2 leading-6 text-[#c9c4d4]">{message.prompt}</p></details>
+    <details className="mt-3 font-mono text-[11px]"><summary className="cursor-pointer rounded text-[#a8a3b3] hover:text-[#f7f5fb] focus-visible:outline-2 focus-visible:outline-[#f2eee6]">View task brief</summary><p className="mt-2 rounded-lg border border-[#1f1f25] bg-[#08080b] px-3 py-2 leading-6 text-[#c9c4d4]">{message.prompt}</p></details>
     {message.activities.length>0&&<div className="mt-3"><ActivityGroup summary={`${message.activities.length} tool calls by ${message.subagentType}`} activities={message.activities}/></div>}
     {message.result&&<div className="mt-3 border-t border-[#1f1f25] pt-3"><p className="artifact-label">Result</p><p className="mt-1.5 font-mono text-[11px] leading-6 text-[#d6d1e0]">{message.result}</p></div>}
   </div>;
@@ -537,7 +537,7 @@ function ActivityGroup({
 
   return (
     <div className="artifact-sheet artifact-sheet--compact group/activity min-w-0 animate-pop">
-      <button type="button" aria-expanded={open} aria-controls={bodyId} onClick={()=>{userToggled.current=true;setOpen(v=>!v);}} className="artifact-row min-h-[38px] cursor-pointer px-3 py-2.5 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#dcc6ff]">
+      <button type="button" aria-expanded={open} aria-controls={bodyId} onClick={()=>{userToggled.current=true;setOpen(v=>!v);}} className="artifact-row min-h-[38px] cursor-pointer px-3 py-2.5 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#f2eee6]">
         <FoundationStatusIcon state={group.state} reduceMotion={reduceMotion}/>
         <span className="min-w-0 flex-1 truncate text-foreground/80">{summary}</span>
         {isFoundation&&activities.length>0&&<span className="text-[10px] text-muted-foreground">{foundationStateLabels[group.state]}</span>}
@@ -757,7 +757,7 @@ function ToolCard({
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="artifact-row px-3 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#dcc6ff]"
+        className="artifact-row px-3 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#f2eee6]"
       >
         <FileCode className="size-3.5 text-muted-foreground/60" strokeWidth={1.75} />
         <span className="text-muted-foreground">{action}</span>
@@ -841,11 +841,11 @@ function QuestionsCard({
               className={cn(
                 "flex items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left text-[13px] transition-colors",
                 chosen
-                  ? "border-[#6b5486] bg-[#a78bfa19] text-[#f7f5fb]"
+                  ? "border-[#6b6558] bg-[#ffffff14] text-[#f7f5fb]"
                   : "border-[#24242b] text-[#ded9e7] hover:border-[#3a3a44] hover:bg-white/[0.03]"
               )}
             >
-              <span className={cn("flex size-5 shrink-0 items-center justify-center rounded-md border font-mono text-[10px]", chosen ? "border-[#8a68b1] bg-[#a78bfa] text-[#1a1026]" : "border-[#2b2b33] bg-[#15151a] text-[#a8a3b3]")}>
+              <span className={cn("flex size-5 shrink-0 items-center justify-center rounded-md border font-mono text-[10px]", chosen ? "border-[#efe9dc] bg-[#efe9dc] text-[#141414]" : "border-[#2b2b33] bg-[#15151a] text-[#a8a3b3]")}>
                 {letter}
               </span>
               <span className="min-w-0 flex-1">{opt}</span>
@@ -926,18 +926,18 @@ function SkeletalPreview({
             borderRadius: layer.kind === "circle" ? "50%" : layer.kind === "rect" ? layer.radius : 0,
           }} className={cn("flex items-center justify-center", layer.kind === "line" && "border-t")}>
             {(layer.kind === "triangle" || layer.kind === "line") && <svg className="pointer-events-none absolute inset-0 size-full overflow-visible" viewBox={`0 0 ${layer.w} ${layer.h}`} preserveAspectRatio="none" aria-hidden="true">{layer.kind === "triangle" ? <polygon points={`${layer.w / 2},1 ${layer.w - 1},${layer.h - 1} 1,${layer.h - 1}`} fill={layer.noFill ? "none" : layer.fill} stroke={layer.stroke} strokeWidth={layer.strokeWidth} strokeDasharray={layer.dashed ? "4 3" : undefined}/> : <line x1={0} y1={layer.lineReverse ? layer.h : 0} x2={layer.w} y2={layer.lineReverse ? 0 : layer.h} stroke={layer.stroke} strokeWidth={layer.strokeWidth}/>}</svg>}
-            {layer.showLabel && layer.label && <span className="relative z-10 max-w-full truncate px-1 text-center text-[clamp(5px,1.1vw,9px)] tracking-[0.15em] text-violet-200/90" style={{ fontFamily: layer.fontFamily, fontSize: `clamp(5px, ${layer.fontSize / stageWidth * 100}vw, 9px)`, fontWeight: layer.fontWeight, lineHeight: layer.lineHeight, letterSpacing: `${Math.max(0.3, layer.letterSpacing / 3)}px` }}>{layer.label}</span>}
+            {layer.showLabel && layer.label && <span className="relative z-10 max-w-full truncate px-1 text-center text-[clamp(5px,1.1vw,9px)] tracking-[0.15em] text-white/85" style={{ fontFamily: layer.fontFamily, fontSize: `clamp(5px, ${layer.fontSize / stageWidth * 100}vw, 9px)`, fontWeight: layer.fontWeight, lineHeight: layer.lineHeight, letterSpacing: `${Math.max(0.3, layer.letterSpacing / 3)}px` }}>{layer.label}</span>}
           </div>
         );
       }) : (
         <div className="absolute inset-3 flex flex-col gap-1.5">
-          <div className="flex h-[9%] items-center justify-center rounded border border-dashed border-violet-400/50 bg-violet-400/[0.035] text-[8px] tracking-[0.2em] text-violet-200/80">NAV</div>
-          <div className="flex h-[8%] items-center justify-center rounded border border-dashed border-violet-400/50 bg-violet-400/[0.035] text-[8px] tracking-[0.2em] text-violet-200/80">ANNOUNCEMENT</div>
+          <div className="flex h-[9%] items-center justify-center rounded border border-dashed border-white/25 bg-white/[0.03] text-[8px] tracking-[0.2em] text-white/70">NAV</div>
+          <div className="flex h-[8%] items-center justify-center rounded border border-dashed border-white/25 bg-white/[0.03] text-[8px] tracking-[0.2em] text-white/70">ANNOUNCEMENT</div>
           {variant === "hero" ? <>
-            <div className="flex h-[28%] items-center justify-center rounded border border-dashed border-violet-400/50 bg-violet-400/[0.035] text-[8px] tracking-[0.2em] text-violet-200/80">HERO DISPLAY</div>
-            <div className="grid h-[11%] grid-cols-2 gap-1.5"><div className="flex items-center justify-center rounded border border-dashed border-violet-400/50 bg-violet-400/[0.035] text-[7px] tracking-[0.15em] text-violet-200/80">BODY COPY</div><div className="flex items-center justify-center rounded-full border border-dashed border-violet-400/50 bg-violet-400/[0.035] text-[7px] tracking-[0.15em] text-violet-200/80">CTA PAIR</div></div>
-            <div className="grid flex-1 grid-cols-3 gap-1.5">{[0,1,2].map((n)=><div key={n} className="flex items-center justify-center rounded border border-dashed border-violet-400/50 bg-violet-400/[0.035] text-[7px] tracking-[0.15em] text-violet-200/80">PRODUCT</div>)}</div>
-          </> : <div className="grid flex-1 grid-cols-3 gap-1.5">{Array.from({length: variant === "cards" ? 6 : 4}, (_,i)=><div key={i} className="rounded border border-dashed border-violet-400/50 bg-violet-400/[0.035]" />)}</div>}
+            <div className="flex h-[28%] items-center justify-center rounded border border-dashed border-white/25 bg-white/[0.03] text-[8px] tracking-[0.2em] text-white/70">HERO DISPLAY</div>
+            <div className="grid h-[11%] grid-cols-2 gap-1.5"><div className="flex items-center justify-center rounded border border-dashed border-white/25 bg-white/[0.03] text-[7px] tracking-[0.15em] text-white/70">BODY COPY</div><div className="flex items-center justify-center rounded-full border border-dashed border-white/25 bg-white/[0.03] text-[7px] tracking-[0.15em] text-white/70">CTA PAIR</div></div>
+            <div className="grid flex-1 grid-cols-3 gap-1.5">{[0,1,2].map((n)=><div key={n} className="flex items-center justify-center rounded border border-dashed border-white/25 bg-white/[0.03] text-[7px] tracking-[0.15em] text-white/70">PRODUCT</div>)}</div>
+          </> : <div className="grid flex-1 grid-cols-3 gap-1.5">{Array.from({length: variant === "cards" ? 6 : 4}, (_,i)=><div key={i} className="rounded border border-dashed border-white/25 bg-white/[0.03]" />)}</div>}
         </div>
       )}
       {annotations?.length ? <svg className="pointer-events-none absolute inset-0 z-[1000] size-full" viewBox={`0 0 ${stageWidth} ${stageHeight}`} aria-label="Saved visual feedback" dangerouslySetInnerHTML={{ __html: annotations.map((annotation, index) => annotationSvg(annotation, index + 1)).join("") }}/> : null}

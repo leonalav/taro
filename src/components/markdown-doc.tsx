@@ -414,7 +414,7 @@ export function DocsPanel({
               {comments.length > 0 && (
                 <span
                   data-comment-count={comments.length}
-                  className="absolute -top-1 -right-1 flex min-w-4 items-center justify-center rounded-full bg-taro px-1 text-[9px] leading-4 font-semibold text-white ring-2 ring-card"
+                  className="absolute -top-1 -right-1 flex min-w-4 items-center justify-center rounded-full bg-taro px-1 text-[9px] leading-4 font-semibold text-black ring-2 ring-card"
                 >
                   {comments.length}
                 </span>

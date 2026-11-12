@@ -29,7 +29,7 @@ export function WebResearchRow({activity}:{activity:ToolActivity}){
  if(initialOpen.current===undefined)initialOpen.current=running||failed||(web.kind==='web-search'&&success&&web.sources.length===0);
  const destination=web.kind==='web-fetch'?safeWebUrl(web.finalUrl):undefined;
  return <details open={initialOpen.current} data-web-research={web.kind} className="group/web my-1.5 min-w-0 overflow-hidden rounded-lg border border-[#24242b] bg-[#0e0e12]">
-  <summary className="flex min-w-0 cursor-pointer list-none items-center gap-2 px-3 py-2.5 font-mono text-[11px] hover:bg-white/[0.025] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#dcc6ff] [&::-webkit-details-marker]:hidden">
+  <summary className="flex min-w-0 cursor-pointer list-none items-center gap-2 px-3 py-2.5 font-mono text-[11px] hover:bg-white/[0.025] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#f2eee6] [&::-webkit-details-marker]:hidden">
    <Icon aria-hidden="true" className={cn('size-3.5 shrink-0 text-muted-foreground',running&&'animate-spin motion-reduce:animate-none')} strokeWidth={1.75}/>
    <span className={cn('min-w-0 flex-1 truncate',failed?'text-destructive':'text-foreground/85')} title={webLabel(web,activity.status)}>{webLabel(web,activity.status)}</span>
    <span className="shrink-0 text-[10px] text-muted-foreground">{running?'Running':failed?'Failed':stopped?'Stopped':'Completed'}</span>

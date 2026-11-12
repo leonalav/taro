@@ -17,7 +17,7 @@ const sizes: Record<AvatarSize, string> = {
 };
 
 const tones: Record<AvatarTone, string> = {
-  taro: "bg-gradient-to-br from-violet-300 via-violet-500 to-fuchsia-600",
+  taro: "bg-gradient-to-br from-zinc-600 via-zinc-800 to-black",
   neutral: "bg-gradient-to-br from-zinc-500 to-zinc-800",
   ocean: "bg-gradient-to-br from-sky-300 to-indigo-600",
   sunset: "bg-gradient-to-br from-amber-200 via-orange-400 to-rose-500",

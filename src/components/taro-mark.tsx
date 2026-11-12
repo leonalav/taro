@@ -21,11 +21,11 @@ export function BrandMark({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "flex size-8 shrink-0 items-center justify-center rounded-lg bg-taro/15 ring-1 ring-inset ring-taro/30",
+        "flex size-8 shrink-0 items-center justify-center rounded-lg bg-[#241a33] ring-1 ring-inset ring-[#3a2d4d]",
         className
       )}
     >
-      <TaroMark className="size-4 text-taro" />
+      <TaroMark className="size-4 text-[#c9a8ff]" />
     </div>
   );
 }

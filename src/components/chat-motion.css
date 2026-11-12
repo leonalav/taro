@@ -22,15 +22,15 @@
   border: 1px solid transparent;
   background:
     linear-gradient(180deg, #101015, #0c0c11) padding-box,
-    linear-gradient(145deg, #3f344e, #23232b 45%, #2c2338) border-box;
+    linear-gradient(145deg, #3f3d36, #232323 45%, #302e28) border-box;
   box-shadow:
     inset 0 1px 0 #ffffff0b,
     0 22px 50px -38px #000,
-    0 0 50px -42px #8b6bc433;
+    0 0 50px -42px #ffffff20;
 }
 
 .chat-composer .chat-composer__box:has([role="textbox"]:focus-visible) {
-  outline: 2px solid #dcc6ff;
+  outline: 2px solid #f2eee6;
   outline-offset: 2px;
 }
 
@@ -38,22 +38,22 @@
   border-color: transparent;
   background:
     linear-gradient(180deg, #121218, #0d0d12) padding-box,
-    linear-gradient(145deg, #9475bf, #463758 48%, #715a9e) border-box;
+    linear-gradient(145deg, #a39c8c, #484740 48%, #7e786a) border-box;
   box-shadow:
     inset 0 1px 0 #ffffff12,
-    0 0 0 3px #a78bfa1c,
+    0 0 0 3px #ffffff14,
     0 26px 60px -40px #000;
 }
 
 .chat-composer__send {
-  background: linear-gradient(158deg, #ffffff, #dbc6f6);
+  background: linear-gradient(158deg, #ffffff, #e7e2d8);
   color: #16101f;
-  box-shadow: 0 6px 18px -10px #c9a8ffaa;
+  box-shadow: 0 6px 18px -10px #ffffff55;
 }
 
 .chat-composer__send:hover {
-  background: linear-gradient(158deg, #ffffff, #efe0ff);
-  box-shadow: 0 8px 22px -10px #d9c2ffcc;
+  background: linear-gradient(158deg, #ffffff, #f7f3ea);
+  box-shadow: 0 8px 22px -10px #ffffff77;
 }
 
 @media (prefers-reduced-motion: reduce) {
