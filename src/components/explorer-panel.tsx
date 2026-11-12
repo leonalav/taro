@@ -137,7 +137,7 @@ export function ExplorerPanel({root,folderName,maximized,onToggleMaximize,onClos
   const revealInTree=(path:string)=>{navigate("");const segments=path.split("/");for(let i=1;i<=segments.length;i++){const prefix=segments.slice(0,i).join("/");setExpanded(previous=>new Set(previous).add(prefix));if(!dirs[prefix])void loadDirectory(prefix).catch(e=>setError(String(e)));}};
   const onPanelKeyDown=(event:React.KeyboardEvent)=>{if((event.ctrlKey||event.metaKey)&&event.key.toLowerCase()==="f"){event.preventDefault();setSearchOpen(true);}if(event.altKey&&event.key==="ArrowLeft"){event.preventDefault();step(-1);}if(event.altKey&&event.key==="ArrowRight"){event.preventDefault();step(1);}};
 
-  return <aside onKeyDown={onPanelKeyDown} className="flex min-w-0 flex-1 flex-col bg-[#0b0b0b]">
+  return <aside aria-label="Explorer" onKeyDown={onPanelKeyDown} className="flex min-w-0 flex-1 flex-col bg-[#0b0b0b]">
     <div className="flex h-10 shrink-0 items-stretch border-b border-border">
       <div className="flex shrink-0 items-center gap-0.5 px-2" role="group" aria-label="Panel view">
         <IconButton label="Show explorer" onClick={()=>navigate("")} pressed={view==="explorer"}><Folder/></IconButton>

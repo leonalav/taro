@@ -326,7 +326,7 @@ export function DocsPanel({
     activeComment ? !(end < activeComment.startLine || start > activeComment.endLine) : false;
 
   return (
-    <aside data-docs-panel="true" className="relative flex min-w-0 flex-1 flex-col bg-[#0c0c0e]">
+    <aside aria-label="Document editor" data-docs-panel="true" className="relative flex min-w-0 flex-1 flex-col bg-[#0c0c0e]">
       {/* Header */}
       <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-card/70 px-3">
         <div className="flex shrink-0 items-center gap-1.5 whitespace-nowrap">

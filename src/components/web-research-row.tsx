@@ -28,14 +28,14 @@ export function WebResearchRow({activity}:{activity:ToolActivity}){
  const Icon=running?LoaderCircle:web.kind==='web-search'?Search:FileText;
  if(initialOpen.current===undefined)initialOpen.current=running||failed||(web.kind==='web-search'&&success&&web.sources.length===0);
  const destination=web.kind==='web-fetch'?safeWebUrl(web.finalUrl):undefined;
- return <details open={initialOpen.current} data-web-research={web.kind} className="group/web min-w-0 overflow-hidden rounded-lg border border-border bg-card/60 my-1.5">
-  <summary className="flex min-w-0 cursor-pointer list-none items-center gap-2 px-3 py-2.5 text-[13px] hover:bg-white/[0.025] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-taro [&::-webkit-details-marker]:hidden">
+ return <details open={initialOpen.current} data-web-research={web.kind} className="group/web my-1.5 min-w-0 overflow-hidden rounded-lg border border-[#24242b] bg-[#0e0e12]">
+  <summary className="flex min-w-0 cursor-pointer list-none items-center gap-2 px-3 py-2.5 font-mono text-[11px] hover:bg-white/[0.025] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#dcc6ff] [&::-webkit-details-marker]:hidden">
    <Icon aria-hidden="true" className={cn('size-3.5 shrink-0 text-muted-foreground',running&&'animate-spin motion-reduce:animate-none')} strokeWidth={1.75}/>
    <span className={cn('min-w-0 flex-1 truncate',failed?'text-destructive':'text-foreground/85')} title={webLabel(web,activity.status)}>{webLabel(web,activity.status)}</span>
    <span className="shrink-0 text-[10px] text-muted-foreground">{running?'Running':failed?'Failed':stopped?'Stopped':'Completed'}</span>
    <ChevronDown aria-hidden="true" className="size-3 shrink-0 text-muted-foreground group-open/web:rotate-180"/>
   </summary>
-  <div className="min-w-0 border-t border-border px-3 py-2">
+  <div className="min-w-0 border-t border-[#1f1f25] px-3 py-2">
    {web.kind==='web-search'?<>
     <p className="mb-1 break-words text-[11px] leading-5 text-muted-foreground">{web.query} <span aria-hidden="true">·</span> DuckDuckGo</p>
     <div className="scrollbar-thin max-h-80 min-w-0 overflow-y-auto overflow-x-hidden">

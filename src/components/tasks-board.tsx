@@ -54,7 +54,7 @@ export function TasksBoard({workspaceRoot,workspaceId,settings,onClose}:TasksBoa
   };
   const q=query.toLowerCase().trim();
   const filtered=tasks.filter(t=>(priorityFilter==='all'||t.priority===priorityFilter)&&(!q||[t.title,t.description,t.details,...t.tags].some(value=>value.toLowerCase().includes(q))));
-  return <aside className='@container flex w-[400px] min-w-0 max-w-[calc(100%-320px)] shrink-0 flex-col bg-[#070707]'>
+  return <aside aria-label='Tasks' className='@container flex w-[400px] min-w-0 max-w-[calc(100%-320px)] shrink-0 flex-col bg-[#070707]'>
     <header className='flex min-h-14 shrink-0 items-center gap-2 border-b border-border px-4'>
       {task&&<Button variant='ghost' size='icon-sm' aria-label='Back to task board' onClick={()=>setSelected(null)}><ArrowLeft/></Button>}
       <h2 className='min-w-0 flex-1 truncate text-sm font-medium'>{task?task.title:'Tasks'}</h2>

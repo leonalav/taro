@@ -61,6 +61,7 @@ import ThoughtLine from "@/components/thought-line";
 import { ThoughtArtifact } from "@/components/thought-artifact";
 import { FoundationRow, FoundationStatusIcon, foundationStateLabels } from "@/components/foundation-row";
 import { aggregateActivityState, normalizeActivityState } from "@/lib/foundation-events";
+import "./artifact-sheet.css";
 
 interface MessageItemProps {
   message: ChatMessage;
@@ -142,17 +143,18 @@ export function MessageItem({
       return <ToolResultRow message={message} />;
     case "plan":
       return <PlanArtifact message={message} agentLabel={agentLabel(message.agentId)} onOpen={onOpenDoc ? ()=>onOpenDoc(message.id) : undefined} />;
-    case "user":
+    case "user": {
+      const messageText=message.segments.filter(segment=>segment.type==="text").map(segment=>segment.text??"").join(" ").trim();
       return (
         <div className="animate-pop group/message flex items-start gap-3">
-          <Avatar initials={currentUser.initials} size="md" tone="sunset" className="mt-0.5" />
+          <span aria-hidden="true" className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-md border border-[#2b2b33] bg-[#141419] font-mono text-[10px] font-medium tracking-tight text-[#d8d2e2]">{currentUser.initials}</span>
           <div className="min-w-0 flex-1">
             {editing ? <div className="w-full rounded-2xl border border-taro/50 bg-card p-3 shadow-[0_16px_36px_-20px_rgba(0,0,0,0.8)]">
               <textarea autoFocus aria-label="Edit message text" value={draft} onChange={event=>setDraft(event.target.value)} onKeyDown={event=>{if(event.key==="Escape")setEditing(false);if(event.key==="Enter"&&(event.ctrlKey||event.metaKey)){event.preventDefault();sendEdit();}}} rows={Math.max(2,Math.min(8,draft.split("\n").length))} className="max-h-48 min-h-16 w-full resize-y bg-transparent text-[15px] leading-7 text-foreground outline-none placeholder:text-muted-foreground" placeholder="Edit your message" />
               {message.segments.some(segment=>segment.type==="chip"&&segment.chip) && <div className="mt-2 flex flex-wrap gap-1.5">{message.segments.filter(segment=>segment.type==="chip"&&segment.chip).map((segment,index)=><MentionChip key={`${segment.chip!.id}-${index}`} chip={segment.chip!}/>)}</div>}
               {message.segments.some(segment=>segment.type==="attachment"&&segment.attachment&&keptAttachments.includes(segment.attachment.id)) && <div className="mt-2 flex flex-wrap gap-2">{message.segments.filter(segment=>segment.type==="attachment"&&segment.attachment&&keptAttachments.includes(segment.attachment.id)).map(segment=><div key={segment.attachment!.id} className="relative overflow-hidden rounded-lg border border-border bg-background">{segment.attachment!.mime.startsWith("image/")&&segment.attachment!.dataUrl?<img src={segment.attachment!.dataUrl} alt={segment.attachment!.name} className="size-20 object-cover"/>:<span className="block max-w-32 truncate px-2 py-3 text-xs">{segment.attachment!.name}</span>}<button type="button" aria-label={`Remove ${segment.attachment!.name}`} onClick={()=>setKeptAttachments(ids=>ids.filter(id=>id!==segment.attachment!.id))} className="absolute right-1 top-1 rounded-full bg-black/75 p-1 text-white"><X className="size-3"/></button></div>)}</div>}
               <div className="mt-3 flex items-center justify-end gap-2"><span className="mr-auto text-[11px] text-muted-foreground">Ctrl/⌘ Enter to send</span><Button size="sm" variant="secondary" onClick={()=>setEditing(false)}>Cancel</Button><Button size="sm" aria-label="Send edited message" onClick={sendEdit} disabled={!editedSegments(message.segments,draft,keptAttachments).length}>Send</Button></div>
-            </div> : <div role={onEditMessage?"button":undefined} tabIndex={onEditMessage?0:undefined} aria-label={onEditMessage?"Edit message":undefined} aria-disabled={busy||undefined} onClick={event=>{if((event.target as HTMLElement).closest("a,button"))return;beginEdit();}} onKeyDown={event=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();beginEdit();}}} className={cn("inline-block max-w-full rounded-[22px] border border-amber-300/25 bg-amber-500/10 px-3.5 py-2.5 text-[15px] leading-7 font-medium text-foreground",onEditMessage&&!busy&&"cursor-text transition-colors hover:border-amber-300/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-taro/60")}>
+            </div> : <div role={onEditMessage?"button":undefined} tabIndex={onEditMessage?0:undefined} aria-label={onEditMessage?`Edit message: ${messageText.slice(0,180)}`:undefined} title={onEditMessage?"Edit message":undefined} aria-disabled={busy||undefined} onClick={event=>{if((event.target as HTMLElement).closest("a,button"))return;beginEdit();}} onKeyDown={event=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();beginEdit();}}} className={cn("artifact-message inline-block max-w-full px-4 py-3 font-mono text-[13px] leading-[1.85] font-normal",onEditMessage&&!busy&&"cursor-text transition-colors hover:border-[#b9a9cd] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#5b4478] focus-visible:ring-offset-2 focus-visible:ring-offset-black")}>
               {message.segments.some(s=>s.type==="chip" || (s.type==="text" && s.text)) && <p className="whitespace-pre-wrap break-words">{message.segments.map((segment, i) =>
                 segment.type === "attachment" ? null :
                 segment.type === "chip" && segment.chip ? (
@@ -161,12 +163,13 @@ export function MessageItem({
                   <span key={i}>{segment.text}</span>
                 )
               )}</p>}
-              {message.segments.some(s=>s.type==="attachment") && <div className={cn("flex flex-wrap gap-2",message.segments.some(s=>s.type==="chip" || (s.type==="text" && s.text)) && "mt-2")}>{message.segments.filter(s=>s.type==="attachment"&&s.attachment).map(s=>{const file=s.attachment!;return <a key={file.id} href={file.dataUrl} download={file.name} title={file.name} className="block overflow-hidden rounded-xl border border-border bg-background/70">{file.mime.startsWith("image/") && file.dataUrl?<img src={file.dataUrl} alt={file.name} className="size-28 object-cover"/>:<div className="flex h-28 w-36 flex-col items-center justify-center gap-2 p-2"><FileText className="size-6 text-muted-foreground"/><span className="w-full truncate text-center text-xs font-normal">{file.name}</span></div>}</a>})}</div>}
+              {message.segments.some(s=>s.type==="attachment") && <div className={cn("flex flex-wrap gap-2",message.segments.some(s=>s.type==="chip" || (s.type==="text" && s.text)) && "mt-2")}>{message.segments.filter(s=>s.type==="attachment"&&s.attachment).map(s=>{const file=s.attachment!;return <a key={file.id} href={file.dataUrl} download={file.name} title={file.name} className="block overflow-hidden rounded-lg border border-[#3a3a44] bg-[#141419]">{file.mime.startsWith("image/") && file.dataUrl?<img src={file.dataUrl} alt={file.name} className="size-28 object-cover"/>:<div className="flex h-28 w-36 flex-col items-center justify-center gap-2 p-2"><FileText className="size-6 text-[#a8a3b3]"/><span className="w-full truncate text-center font-mono text-[10px] font-normal text-[#d6d1e0]">{file.name}</span></div>}</a>})}</div>}
             </div>}
-            {!editing&&<MessageActions onRetry={onRetry?()=>onRetry(message.id):undefined} onRevert={() => onRevert(message.id)} busy={busy} retryEnabled={retryEnabled} revertEnabled={revertEnabled} />}
+            {!editing&&<div className="mt-1"><MessageActions onRetry={onRetry?()=>onRetry(message.id):undefined} onRevert={() => onRevert(message.id)} busy={busy} retryEnabled={retryEnabled} revertEnabled={revertEnabled} /></div>}
           </div>
         </div>
       );
+    }
 
     case "agent":
       if(!message.text&&!message.trace?.length)return null;
@@ -174,28 +177,17 @@ export function MessageItem({
         <div className="animate-pop group/message flex items-start gap-3">
           <Avatar initials={message.agentId === "planner" ? "PL" : agentLabel(message.agentId).slice(0, 2).toUpperCase()} size="md" tone="taro" className="mt-0.5" />
           {message.text === "" && message.trace?.includes("Generating response") ? (
-            <div className="min-w-0 flex-1 pt-1"><ThoughtLine working={false} glyph="dot" doneLabel="Interrupted" showTimer={false} fontSize={13} color="var(--muted-foreground)" reduceMotion={reduceMotion} steps={["The previous response was interrupted"]}/></div>
+            <div className="min-w-0 flex-1 pt-1"><ThoughtLine working={false} glyph="dot" doneLabel="Interrupted" showTimer={false} fontSize={12} color="var(--artifact-muted, #a8a3b3)" reduceMotion={reduceMotion} steps={["The previous response was interrupted"]}/></div>
           ) : (
-          <div className="min-w-0 flex-1 flex flex-col gap-2">
-            {message.trace && <ThoughtLine working={false} glyph="dot" elapsed={(message.durationMs??0)/1000} steps={message.trace} fontSize={13} color="var(--muted-foreground)" reduceMotion={reduceMotion} />}
-            <div data-agent-reply="true" className="min-w-0 text-[15px] leading-7 text-foreground/90">
+          <div className="min-w-0 flex-1 flex flex-col gap-2.5">
+            {message.trace && <ThoughtLine working={false} glyph="dot" elapsed={(message.durationMs??0)/1000} steps={message.trace} fontSize={12} color="var(--artifact-muted, #a8a3b3)" reduceMotion={reduceMotion} />}
+            <span className="flex min-w-0 items-center gap-2 artifact-meta"><span className="artifact-dot" aria-hidden="true" />{agentLabel(message.agentId)}</span>
+            <div data-agent-reply="true" className="agent-reply min-w-0">
               <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]} components={{
-                p: ({children}) => <p className="mb-3 last:mb-0">{children}</p>,
-                strong: ({children}) => <strong className="font-semibold text-foreground">{children}</strong>,
-                em: ({children}) => <em className="italic">{children}</em>,
-                ul: ({children}) => <ul className="my-3 list-disc space-y-1 pl-5">{children}</ul>,
-                ol: ({children}) => <ol className="my-3 list-decimal space-y-1 pl-5">{children}</ol>,
-                blockquote: ({children}) => <blockquote className="my-3 border-l-2 border-taro/50 pl-3 text-muted-foreground">{children}</blockquote>,
-                h1: ({children}) => <h1 className="mt-4 mb-2 text-xl font-semibold">{children}</h1>,
-                h2: ({children}) => <h2 className="mt-4 mb-2 text-lg font-semibold">{children}</h2>,
-                h3: ({children}) => <h3 className="mt-3 mb-1 font-semibold">{children}</h3>,
-                a: ({children,href}) => <a href={href} target="_blank" rel="noopener noreferrer" className="text-taro underline underline-offset-2">{children}</a>,
-                code: ({children}) => <code className="rounded bg-accent px-1 py-0.5 font-mono text-[0.85em]">{children}</code>,
-                pre: ({children}) => <pre className="my-3 overflow-x-auto rounded-lg bg-accent p-3 text-sm">{children}</pre>,
+                a: ({children,href}) => <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>,
               }}>{message.text}</ReactMarkdown>
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">{agentLabel(message.agentId)}</span>
+            <div className="flex items-center justify-end gap-3 border-t border-white/[0.06] pt-1.5">
               <MessageActions copied={copied} onCopy={() => void copyText(message.text)} onRetry={onRetry?()=>onRetry(message.id):undefined} onRevert={() => onRevert(message.id)} busy={busy} retryEnabled={retryEnabled} revertEnabled={revertEnabled} />
             </div>
           </div>
@@ -224,13 +216,13 @@ export function MessageItem({
 
     case "event":
       return (
-        <div className="animate-pop flex items-center gap-3 text-[13px] text-muted-foreground">
-          <span className="h-px flex-1 bg-border" />
+        <div className="animate-pop flex items-center gap-3 font-mono text-[10.5px] tracking-wide text-[#918b9e]">
+          <span className="h-px flex-1 bg-[#1f1f25]" aria-hidden="true" />
           <span className="flex items-center gap-1.5">
-            <CircleCheck className="size-3.5 text-success" strokeWidth={2} />
+            <CircleCheck className="size-3.5 text-[#7ee2a8]" strokeWidth={2} aria-hidden="true" />
             {message.text}
           </span>
-          <span className="h-px flex-1 bg-border" />
+          <span className="h-px flex-1 bg-[#1f1f25]" aria-hidden="true" />
         </div>
       );
 
@@ -297,18 +289,18 @@ function PermissionCard({
   const initials = agentName.split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase()).join("") || "AI";
 
   return (
-    <div data-permission-card="true" className="animate-pop overflow-hidden rounded-2xl border border-border bg-card">
+    <div data-permission-card="true" className="animate-pop artifact-surface overflow-hidden">
       <div className="flex items-start gap-3 p-4">
         <Avatar initials={initials} size="md" tone="taro" className="mt-0.5" />
         <div className="min-w-0 flex-1">
-          <p data-permission-title="true" className="text-[15px] leading-6 text-foreground">
+          <p data-permission-title="true" className="font-mono text-[13px] leading-6 text-[#e9e7ee]">
             Allow <span className="font-semibold">{agentName}</span> to use{" "}
             <span className="font-semibold">{mcp}</span>{" "}
-            <span className="text-muted-foreground">:</span>{" "}
-            <code className="rounded bg-accent px-1.5 py-0.5 font-mono text-[12.5px] text-foreground/90">{tool}</code>
-            <span className="text-muted-foreground">?</span>
+            <span className="text-[#918b9e]">:</span>{" "}
+            <code className="rounded border border-[#2b2b33] bg-[#15151a] px-1.5 py-0.5 font-mono text-[11.5px] text-[#e6dcf8]">{tool}</code>
+            <span className="text-[#918b9e]">?</span>
           </p>
-          <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+          <p className="mt-1 flex items-center gap-1.5 font-mono text-[10.5px] leading-5 text-[#a8a3b3]">
             <ShieldCheck className="size-3.5 shrink-0 text-taro/80" />
             {mcp === "workspace tool" ? "This action needs your approval before it runs." : "This agent is asking for permission before calling an external tool."}
           </p>
@@ -316,7 +308,7 @@ function PermissionCard({
       </div>
 
       {decision ? (
-        <div className="flex items-center gap-2.5 border-t border-border bg-white/[0.02] px-4 py-3">
+        <div className="flex items-center gap-2.5 border-t border-[#1f1f25] bg-white/[0.02] px-4 py-3">
           {decision.allowed ? (
             <span className="flex size-5 items-center justify-center rounded-full bg-success/15">
               <Check className="size-3 text-success" strokeWidth={3} />
@@ -326,17 +318,17 @@ function PermissionCard({
               <X className="size-3 text-destructive" strokeWidth={3} />
             </span>
           )}
-          <span className="text-[13px] text-foreground">{decision.label}</span>
+          <span className="font-mono text-[12px] text-[#e9e7ee]">{decision.label}</span>
           {!live && mcp!=="workspace tool" && <button
             type="button"
             onClick={() => onDecide(null)}
-            className="ml-auto text-xs text-muted-foreground transition-colors hover:text-foreground"
+            className="ml-auto font-mono text-[10.5px] text-[#a8a3b3] transition-colors hover:text-[#f7f5fb]"
           >
             Change decision
           </button>}
         </div>
       ) : (
-        <div className="flex flex-col gap-1.5 border-t border-border p-3">
+        <div className="flex flex-col gap-1.5 border-t border-[#1f1f25] p-3">
           <PermissionGroup
             tone="allow"
             primary={mcp==="workspace tool"?"Allow once":"Allow tool"}
@@ -387,10 +379,10 @@ function PermissionGroup({
           type="button"
           onClick={() => onChoose(defaultChoice)}
           className={cn(
-            "flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg text-xs font-medium transition-colors",
+            "flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg font-mono text-[11px] font-medium transition-colors",
             isAllow
-              ? "bg-primary text-primary-foreground hover:bg-white/90"
-              : "border border-border bg-secondary text-secondary-foreground hover:bg-accent"
+              ? "bg-[#ededed] text-[#0a0a0a] hover:bg-white"
+              : "border border-[#2b2b33] bg-[#141419] text-[#e9e7ee] hover:bg-[#1c1c22]"
           )}
         >
           {isAllow ? <Check className="size-3.5" strokeWidth={2.5} /> : <X className="size-3.5" strokeWidth={2.5} />}
@@ -404,8 +396,8 @@ function PermissionGroup({
           className={cn(
             "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors",
             isAllow
-              ? "bg-primary text-primary-foreground hover:bg-white/90"
-              : "border border-border bg-secondary text-secondary-foreground hover:bg-accent"
+              ? "bg-[#ededed] text-[#0a0a0a] hover:bg-white"
+              : "border border-[#2b2b33] bg-[#141419] text-[#e9e7ee] hover:bg-[#1c1c22]"
           )}
         >
           <ChevronRight className={cn("size-3.5 transition-transform duration-200", expanded && "rotate-90")} />
@@ -413,7 +405,7 @@ function PermissionGroup({
       </div>
 
       {expanded && (
-        <div className="animate-pop mt-1 rounded-xl border border-border bg-background p-1">
+        <div className="animate-pop mt-1 rounded-xl border border-[#1f1f25] bg-[#08080b] p-1">
           {options.map((option) => (
             <button
               key={option.label}
@@ -466,20 +458,20 @@ function MessageActions({
   revertEnabled?: boolean;
 }) {
   return (
-    <div className="flex items-center gap-1 opacity-0 transition-opacity group-hover/message:opacity-100 group-focus-within/message:opacity-100">
+    <div role="group" aria-label="Message actions" className="flex shrink-0 items-center gap-0.5">
       {onCopy && (
         <button
           type="button"
           aria-label={copied ? "Copied response" : "Copy response"}
           title={copied ? "Copied" : "Copy response"}
           onClick={onCopy}
-          className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          className="artifact-action"
         >
-          {copied ? <Check className="size-3.5 text-success" /> : <Copy className="size-3.5" />}
+          {copied ? <Check className="size-3.5 text-[#7ee2a8]" aria-hidden="true" /> : <Copy aria-hidden="true" />}
         </button>
       )}
-      {onRetry&&<button type="button" aria-label="Retry message" title="Retry from this message" disabled={busy||!retryEnabled} onClick={onRetry} className="flex h-6 items-center gap-1 rounded-md px-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"><RotateCcw className="size-3.5"/>Retry</button>}
-      <button type="button" aria-label="Revert to edit message" title="Remove agent output and edit the user message" disabled={busy||!revertEnabled} onClick={onRevert} className="flex h-6 items-center gap-1 rounded-md px-1.5 text-[11px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"><Undo2 className="size-3.5"/>Revert</button>
+      {onRetry&&<button type="button" aria-label="Retry message" title="Retry from this message" disabled={busy||!retryEnabled} onClick={onRetry} className="artifact-action"><RotateCcw aria-hidden="true"/>Retry</button>}
+      <button type="button" aria-label="Revert to edit message" title="Remove agent output and edit the user message" disabled={busy||!revertEnabled} onClick={onRevert} className="artifact-action"><Undo2 aria-hidden="true"/>Revert</button>
     </div>
   );
 }
@@ -501,18 +493,18 @@ const activityIcons: Record<ActivityKind, LucideIcon> = {
 
 function SubagentCard({message}:{message:Extract<ChatMessage,{role:"subagent"}>}) {
   const running=message.status==="running";
-  return <div data-subagent-artifact={message.childId} className="animate-pop rounded-2xl border border-border bg-card/80 p-4">
+  return <div data-subagent-artifact={message.childId} className="animate-pop artifact-surface p-4">
     <div className="flex items-start gap-3">
       <Avatar initials={message.subagentType.slice(0,2).toUpperCase()} size="md" tone="taro"/>
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2"><GitFork className="size-3.5 text-taro"/><span className="text-sm font-semibold text-foreground">Deploy subagent</span><span className="text-xs text-taro">{message.subagentType}</span><span className={cn("ml-auto inline-flex items-center gap-1 text-[11px]",running?"text-taro":message.status==="failed"?"text-destructive":message.status==="stopped"?"text-muted-foreground":"text-success")}>{running?<LoaderCircle className="size-3 animate-spin"/>:message.status==="failed"?<CircleX className="size-3"/>:<CircleCheck className="size-3"/>}{running?"Running":message.status==="failed"?"Failed":message.status==="stopped"?"Stopped":"Completed"}</span></div>
-        <p className="mt-1 text-[13px] leading-5 text-foreground/85">{message.description}</p>
-        <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] text-muted-foreground"><span className="rounded-md border border-border px-1.5 py-0.5 font-mono">{message.childId}</span>{message.runInBackground&&<span className="rounded-md border border-border px-1.5 py-0.5">Background</span>}{message.isolation==="worktree"&&<span className="rounded-md border border-border px-1.5 py-0.5">Worktree</span>}{message.model&&<span className="rounded-md border border-border px-1.5 py-0.5">{message.model} model</span>}</div>
+        <div className="flex flex-wrap items-center gap-2"><GitFork className="size-3.5 text-[#c9a8ff]"/><span className="font-mono text-[12px] font-semibold tracking-tight text-[#f7f5fb]">Deploy subagent</span><span className="artifact-label text-[#c9a8ff]">{message.subagentType}</span><span className={cn("ml-auto inline-flex items-center gap-1 font-mono text-[10px] tracking-wide",running?"text-[#c9a8ff]":message.status==="failed"?"text-[#ff8f9a]":message.status==="stopped"?"text-[#918b9e]":"text-[#7ee2a8]")}>{running?<LoaderCircle className="size-3 animate-spin"/>:message.status==="failed"?<CircleX className="size-3"/>:<CircleCheck className="size-3"/>}{running?"Running":message.status==="failed"?"Failed":message.status==="stopped"?"Stopped":"Completed"}</span></div>
+        <p className="mt-1.5 font-mono text-[11.5px] leading-6 text-[#d6d1e0]">{message.description}</p>
+        <div className="mt-2.5 flex flex-wrap gap-1.5 font-mono text-[9.5px] tracking-wide text-[#a8a3b3]"><span className="rounded border border-[#2b2b33] bg-[#15151a] px-1.5 py-0.5">{message.childId}</span>{message.runInBackground&&<span className="rounded border border-[#2b2b33] px-1.5 py-0.5">Background</span>}{message.isolation==="worktree"&&<span className="rounded border border-[#2b2b33] px-1.5 py-0.5">Worktree</span>}{message.model&&<span className="rounded border border-[#2b2b33] px-1.5 py-0.5">{message.model} model</span>}</div>
       </div>
     </div>
-    <details className="mt-3 text-xs"><summary className="cursor-pointer text-muted-foreground hover:text-foreground">View task brief</summary><p className="mt-2 rounded-lg bg-background px-3 py-2 leading-5 text-foreground/75">{message.prompt}</p></details>
+    <details className="mt-3 font-mono text-[11px]"><summary className="cursor-pointer rounded text-[#a8a3b3] hover:text-[#f7f5fb] focus-visible:outline-2 focus-visible:outline-[#dcc6ff]">View task brief</summary><p className="mt-2 rounded-lg border border-[#1f1f25] bg-[#08080b] px-3 py-2 leading-6 text-[#c9c4d4]">{message.prompt}</p></details>
     {message.activities.length>0&&<div className="mt-3"><ActivityGroup summary={`${message.activities.length} tool calls by ${message.subagentType}`} activities={message.activities}/></div>}
-    {message.result&&<div className="mt-3 border-t border-border pt-3"><p className="text-[11px] font-medium text-muted-foreground">Result</p><p className="mt-1 text-xs leading-5 text-foreground/85">{message.result}</p></div>}
+    {message.result&&<div className="mt-3 border-t border-[#1f1f25] pt-3"><p className="artifact-label">Result</p><p className="mt-1.5 font-mono text-[11px] leading-6 text-[#d6d1e0]">{message.result}</p></div>}
   </div>;
 }
 
@@ -544,8 +536,8 @@ function ActivityGroup({
   const elapsed = startedAt !== undefined && isRunning ? Date.now() - startedAt : undefined;
 
   return (
-    <div className="group/activity min-w-0 animate-pop overflow-hidden rounded-xl border border-border bg-card/80">
-      <button type="button" aria-expanded={open} aria-controls={bodyId} onClick={()=>{userToggled.current=true;setOpen(v=>!v);}} className="flex w-full cursor-pointer items-center gap-2 px-3 py-2.5 text-left text-[13px] text-muted-foreground transition-colors hover:bg-white/[0.025] focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-taro">
+    <div className="artifact-sheet artifact-sheet--compact group/activity min-w-0 animate-pop">
+      <button type="button" aria-expanded={open} aria-controls={bodyId} onClick={()=>{userToggled.current=true;setOpen(v=>!v);}} className="artifact-row min-h-[38px] cursor-pointer px-3 py-2.5 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#dcc6ff]">
         <FoundationStatusIcon state={group.state} reduceMotion={reduceMotion}/>
         <span className="min-w-0 flex-1 truncate text-foreground/80">{summary}</span>
         {isFoundation&&activities.length>0&&<span className="text-[10px] text-muted-foreground">{foundationStateLabels[group.state]}</span>}
@@ -555,24 +547,24 @@ function ActivityGroup({
         <ChevronDown className={cn("size-3.5 shrink-0",open&&"rotate-180")} />
       </button>
 
-      <div id={bodyId} hidden={!open} className="min-w-0 border-t border-border px-3 py-1.5">
+      <div id={bodyId} hidden={!open} className="min-w-0 border-t border-[#1f1f25] px-3 py-1.5 font-mono text-[11px]">
         {gallery&&<FoundationGallery activities={gallery}/>}
         {activities.map((activity) => {
           if(activity.web)return <WebResearchRow key={activity.id} activity={activity}/>;
           if(activity.foundation)return <FoundationRow key={activity.id} operation={activity.foundation} onOpenDocument={activity.foundation.kind==="design-plan"?onOpenDocument:undefined}/>;
           const Icon = activityIcons[activity.kind];
           return (
-            <div key={activity.id} className="flex items-start gap-2.5 py-1.5 text-xs">
+            <div key={activity.id} className="flex items-start gap-2.5 py-1.5 text-[11px]">
               <div className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
                 <FoundationStatusIcon state={normalizeActivityState(activity.status)} reduceMotion={reduceMotion}/>
               </div>
               <ActivityIcon activity={activity} Icon={Icon} />
               <div className="min-w-0 flex-1">
-                <p className={cn("leading-relaxed", activity.status === "failed" ? "text-destructive" : "text-foreground/80")}>
+                <p className={cn("leading-relaxed", activity.status === "failed" ? "text-[#ff8f9a]" : "text-[#d6d1e0]")}>
                   {activity.label}
                   <span className={cn("ml-1.5",activity.status==="failed"?"text-destructive/70":activity.status==="done"||activity.status==="succeeded"?"text-success/80":"text-muted-foreground")}>{activity.status==="done"?"Done":foundationStateLabels[normalizeActivityState(activity.status)]}</span>
                 </p>
-                {activity.detail && <p className="mt-0.5 text-[11px] leading-relaxed text-muted-foreground">{activity.detail}</p>}
+                {activity.detail && <p className="mt-0.5 text-[10.5px] leading-relaxed text-[#918b9e]">{activity.detail}</p>}
                 {activity.output && <details className="mt-1.5"><summary className="cursor-pointer text-[11px] text-taro">View result</summary><pre className="mt-1 max-h-48 overflow-auto rounded bg-background p-2 font-mono text-[11px] whitespace-pre-wrap break-words [overflow-wrap:anywhere]">{activity.kind==="terminal"?terminalLogText(activity.output):activity.output}</pre></details>}
                 {activity.imageDataUrl && <img src={activity.imageDataUrl} alt={activity.label} className="mt-2 max-h-48 rounded border border-border object-contain"/>}
                 {activity.errorTrace && (
@@ -627,7 +619,7 @@ function InlineEdit({ edit }: { edit: NonNullable<ToolActivity["edit"]> }) {
   const { showCodeByDefault } = useSettings().appearance;
   const [open, setOpen] = React.useState(showCodeByDefault);
   return (
-    <div data-inline-edit={edit.file} className="mt-1.5 overflow-hidden rounded-md border border-border bg-card">
+    <div data-inline-edit={edit.file} className="mt-1.5 overflow-hidden rounded-md border border-[#24242b] bg-[#0b0b0b]">
       <button
         type="button"
         aria-expanded={open}
@@ -641,7 +633,7 @@ function InlineEdit({ edit }: { edit: NonNullable<ToolActivity["edit"]> }) {
         <span className="font-mono text-[10px] text-destructive/80">−{edit.removed}</span>
         <ChevronDown className={cn("size-3 text-muted-foreground transition-transform", open && "rotate-180")} />
       </button>
-      {open && <DiffLines diff={edit.diff} className="border-t border-border max-h-28 text-[11px]" />}
+      {open && <DiffLines diff={edit.diff} className="max-h-28 border-t border-[#1f1f25] text-[11px]" />}
     </div>
   );
 }
@@ -687,50 +679,50 @@ function TokensCard({
   return (
     <div data-tokens-card="true">
       <DocumentArtifact kind="Design Tokens" agentLabel={agentLabel} header={<>
-          <span className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground">
-            DESIGN TOKENS · UPDATED
-          </span>
-          <Badge variant="success" className="ml-auto">
-            AA pass
+          <span>DESIGN TOKENS · UPDATED</span>
+          <Badge variant="success" className="ml-auto border-[#2f6b45] bg-[#12291c] font-mono text-[9.5px] tracking-[0.08em] text-[#7ee2a8]">
+            AA PASS
           </Badge>
       </>} preview={<div className="grid grid-cols-5 gap-2">
           {swatches.map((token) => (
             <div key={token.name} className="min-w-0">
               <div
-                className="h-11 rounded-lg ring-1 ring-inset ring-white/10"
+                className="h-11 rounded-md border border-white/15"
                 style={{ backgroundColor: token.hex }}
               />
-              <p className="mt-1.5 truncate text-xs text-foreground/90">{token.name}</p>
-              <p className="truncate font-mono text-[10px] text-muted-foreground">{token.hex}</p>
+              <p className="mt-2 truncate font-mono text-[10.5px] text-[#e2deea]">{token.name}</p>
+              <p className="truncate font-mono text-[10px] text-[#918b9e]">{token.hex}</p>
             </div>
           ))}
         </div>} footer={<>
-          <span className="min-w-0 truncate text-foreground/85">
+          <span className="min-w-0 flex-1 truncate font-mono text-[10.5px] text-[#c3bccd]">
             Contrast fixed: ember CTA{" "}
-            <span className="font-mono text-xs text-muted-foreground">
+            <span className="text-[#918b9e]">
               {contrastFrom} → {contrastTo}
             </span>
           </span>
-          <div className="ml-auto flex shrink-0 items-center gap-1">
+          <div className="flex shrink-0 items-center gap-0.5">
             {onOpen && (
               <button
                 type="button"
                 onClick={onOpen}
-                className="rounded-md px-2 py-1 font-medium text-taro transition-colors hover:bg-taro/10"
+                className="artifact-action"
+                data-tone="accent"
               >
                 Open
               </button>
             )}
             <button
               type="button"
+              aria-expanded={showDiff}
               onClick={() => setShowDiff((s) => !s)}
-              className="rounded-md px-2 py-1 font-medium text-foreground transition-opacity hover:opacity-70"
+              className="artifact-action"
             >
               View diff
             </button>
           </div>
         </>} expanded={showDiff && (
-          <div className="animate-pop mt-3 rounded-lg border border-border bg-[#060606] px-3 py-2 font-mono text-[11px] leading-5">
+          <div className="animate-pop border-t border-[#1f1f25] bg-[#060608] px-3.5 py-2.5 font-mono text-[11px] leading-5">
             <p className="text-destructive/70">- --ember: #ff7a1a;</p>
             <p className="text-success/80">+ --ember: #ff4d00;</p>
             <p className="text-success/80">+ --ember-ink: #431407;</p>
@@ -760,12 +752,12 @@ function ToolCard({
   React.useEffect(() => setOpen(showCodeByDefault), [showCodeByDefault]);
 
   return (
-    <div className="animate-pop overflow-hidden rounded-xl border border-border bg-card">
+    <div className="artifact-sheet artifact-sheet--compact animate-pop">
       <button
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[13px] transition-colors hover:bg-white/[0.02]"
+        className="artifact-row px-3 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#dcc6ff]"
       >
         <FileCode className="size-3.5 text-muted-foreground/60" strokeWidth={1.75} />
         <span className="text-muted-foreground">{action}</span>
@@ -782,7 +774,7 @@ function ToolCard({
           <path d="m6 9 6 6 6-6" />
         </svg>
       </button>
-      {open && <DiffLines diff={diff} className="border-t border-border" />}
+      {open && <DiffLines diff={diff} className="border-t border-[#1f1f25]" />}
     </div>
   );
 }
@@ -811,7 +803,7 @@ function QuestionsCard({
 
   if (declined || !q) {
     return (
-      <div className="animate-pop flex items-center gap-2.5 rounded-xl border border-border bg-card px-3 py-2.5 text-[13px] text-muted-foreground">
+      <div className="animate-pop artifact-surface flex items-center gap-2.5 px-3 py-2.5 font-mono text-[11.5px] text-[#a8a3b3]">
         <MessageSquarePlus className="size-3.5 shrink-0 text-taro/70" />
         Questions closed — the agent will proceed with sensible defaults.
       </div>
@@ -822,15 +814,15 @@ function QuestionsCard({
   const done = index === total - 1 && answered;
 
   return (
-    <div data-questions-card="true" className="animate-pop rounded-2xl border border-border bg-card p-4">
+    <div data-questions-card="true" className="animate-pop artifact-surface p-4">
       <div className="flex items-center gap-2">
         <MessageSquarePlus className="size-3.5 text-taro" />
-        <span className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">Questions</span>
-        <span data-question-progress="true" className="ml-auto text-[11px] text-muted-foreground tabular-nums">
+        <span className="artifact-label">Questions</span>
+        <span data-question-progress="true" className="ml-auto font-mono text-[10px] text-[#918b9e] tabular-nums">
           Question {index + 1} of {total}
         </span>
       </div>
-      <p className="mt-2 text-[14px] leading-6 text-foreground">{q.prompt}</p>
+      <p className="mt-2.5 font-mono text-[12.5px] leading-6 text-[#e9e7ee]">{q.prompt}</p>
 
       <div className="mt-3 flex flex-col gap-1.5">
         {q.options.map((opt, i) => {
@@ -849,11 +841,11 @@ function QuestionsCard({
               className={cn(
                 "flex items-center gap-2.5 rounded-lg border px-2.5 py-2 text-left text-[13px] transition-colors",
                 chosen
-                  ? "border-taro/50 bg-taro/10 text-foreground"
-                  : "border-border text-foreground/85 hover:border-[#3a3a3a] hover:bg-white/[0.03]"
+                  ? "border-[#6b5486] bg-[#a78bfa19] text-[#f7f5fb]"
+                  : "border-[#24242b] text-[#ded9e7] hover:border-[#3a3a44] hover:bg-white/[0.03]"
               )}
             >
-              <span className={cn("flex size-5 shrink-0 items-center justify-center rounded-md font-mono text-[10px]", chosen ? "bg-taro text-white" : "bg-accent text-muted-foreground")}>
+              <span className={cn("flex size-5 shrink-0 items-center justify-center rounded-md border font-mono text-[10px]", chosen ? "border-[#8a68b1] bg-[#a78bfa] text-[#1a1026]" : "border-[#2b2b33] bg-[#15151a] text-[#a8a3b3]")}>
                 {letter}
               </span>
               <span className="min-w-0 flex-1">{opt}</span>
@@ -870,22 +862,22 @@ function QuestionsCard({
             onAnswer?.(message.id, q.id, null, "skip");
             if (index < total - 1) setIndex((n) => n + 1);
           }}
-          className="h-7 rounded-md px-2 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          className="artifact-action"
         >
           Skip
         </button>
         <button
           type="button"
           onClick={() => { setDeclined(true); onAnswer?.(message.id, q.id, null, "decline"); }}
-          className="h-7 rounded-md px-2 text-xs text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+          className="artifact-action"
         >
           Decline to answer
         </button>
-        <span className="ml-auto text-[11px] text-muted-foreground/70">
+        <span className="ml-auto font-mono text-[10px] text-[#918b9e]">
           {answered ? "Answer recorded" : "Pick one option"} · {agentName}
         </span>
       </div>
-      {done && <p className="mt-2 text-[11px] text-success">All questions answered.</p>}
+      {done && <p className="mt-2 font-mono text-[10px] text-[#7ee2a8]">All questions answered.</p>}
     </div>
   );
 }
@@ -968,7 +960,7 @@ function SkeletalCard({
   return (
     <div
       data-skeletal-card={message.status}
-      className="animate-pop overflow-hidden rounded-2xl border border-border bg-card"
+      className="animate-pop artifact-surface overflow-hidden"
     >
       <div className="flex items-center gap-2 px-3.5 pt-3">
         {loading ? (
@@ -976,10 +968,10 @@ function SkeletalCard({
         ) : (
           <LayoutGrid className="size-3.5 text-taro" />
         )}
-        <span className="text-[11px] font-medium tracking-[0.08em] text-muted-foreground uppercase">
+        <span className="artifact-label">
           {loading ? "Proposing skeletal design…" : "Proposed skeletal design"}
         </span>
-        <span className="ml-auto text-[11px] text-muted-foreground">{agentName}</span>
+        <span className="ml-auto font-mono text-[10px] text-[#918b9e]">{agentName}</span>
       </div>
 
       <div className="p-3.5">
@@ -993,8 +985,8 @@ function SkeletalCard({
           </div>
         ) : (
           <>
-            <p className="mt-3 text-[14px] font-medium text-foreground">{message.title}</p>
-            <p className="mt-0.5 text-[11px] text-muted-foreground">
+            <p className="mt-3 font-mono text-[12.5px] font-medium text-[#f7f5fb]">{message.title}</p>
+            <p className="mt-1 font-mono text-[10px] leading-5 text-[#918b9e]">
               Skeletal wireframe · {message.layers?.filter((layer) => layer.kind !== "background").length ?? 8} blocks · {message.width ?? 520}×{message.height ?? 330} · tokens carried over
               {message.annotations?.length ? ` · ${message.annotations.filter(annotation => !annotation.resolved).length} open annotations` : ""}
             </p>

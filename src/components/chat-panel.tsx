@@ -125,14 +125,10 @@ export function ChatPanel({
       className={cn("relative flex min-w-0 flex-col", width === undefined ? "flex-1" : "shrink-0")}
       style={width === undefined ? undefined : { width, minWidth: 320, maxWidth: "calc(100% - 360px)" }}
     >
-      {/* Ambient glow */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 top-0 h-80 bg-[radial-gradient(50%_60%_at_50%_0%,rgba(139,92,246,0.12),transparent_70%)]"
-      />
+      <h1 className="sr-only">{thread.name}</h1>
 
       {/* Header */}
-      <header className={cn("relative z-30 flex h-14 shrink-0 items-center gap-2", compact ? "px-4" : "px-5")}>
+      <header className={cn("relative z-30 flex h-14 shrink-0 items-center gap-2 border-b border-[#161619]", compact ? "px-4" : "px-5")}>
         <div className="flex min-w-0 flex-1 items-center gap-1">
           {renaming?<input autoFocus aria-label="Rename chat" value={draftName} onChange={event=>setDraftName(event.target.value)} onKeyDown={event=>{if(event.key==="Enter")commitName();if(event.key==="Escape")setRenaming(false);}} onBlur={commitName} className="h-8 w-60 rounded-lg border border-taro/50 bg-card px-2.5 text-[13px] text-foreground outline-none"/>:<DropdownMenu
             value={thread.id}
@@ -140,7 +136,7 @@ export function ChatPanel({
             options={threads.map((t) => ({ value: t.id, label: t.name }))}
             triggerClassName={cn("justify-between text-foreground", compact ? "w-40" : "w-60")}
             contentClassName="w-72"
-            ariaLabel={`Chats in ${folderName}`}
+            ariaLabel={`${thread.name} — chats in ${folderName}`}
           />}
           {thread.id!=="brand"&&<Button variant="ghost" size="icon-sm" aria-label="Rename chat" title="Rename chat" onClick={()=>{setDraftName(thread.name);setRenaming(true);}}><Pencil className="size-3.5"/></Button>}
         </div>
@@ -245,12 +241,12 @@ export function ChatPanel({
 function EmptyState({ onPick }: { onPick: (segments: Segment[]) => void }) {
   return (
     <div className="animate-pop flex flex-col items-center gap-5 pt-16 text-center">
-      <div className="flex size-12 items-center justify-center rounded-2xl bg-taro/10 ring-1 ring-inset ring-taro/25">
-        <TaroMark className="size-6 text-taro" />
+      <div className="flex size-11 items-center justify-center rounded-xl border border-[#3a2d4d] bg-gradient-to-b from-[#241a33] to-[#141018]">
+        <TaroMark className="size-5 text-[#c9a8ff]" />
       </div>
-      <div className="space-y-1.5">
-        <h2 className="text-2xl font-semibold tracking-tight">What should we design today?</h2>
-        <p className="text-sm text-muted-foreground">
+      <div className="space-y-2">
+        <h2 className="text-xl font-semibold tracking-tight text-[#f7f5fb]">What should we design today?</h2>
+        <p className="font-mono text-[11px] leading-6 text-[#918b9e]">
           Ask an agent to plan, write, or review. Tasks stay in sync automatically.
         </p>
       </div>
@@ -260,7 +256,7 @@ function EmptyState({ onPick }: { onPick: (segments: Segment[]) => void }) {
             key={prompt}
             type="button"
             onClick={() => onPick([{ type: "text", text: prompt }])}
-            className="rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-[#333] hover:text-foreground"
+            className="rounded-md border border-[#24242b] bg-[#0b0b0b] px-3 py-1.5 font-mono text-[10.5px] text-[#a8a3b3] transition-colors hover:border-[#4c4059] hover:text-[#f7f5fb]"
           >
             {prompt}
           </button>

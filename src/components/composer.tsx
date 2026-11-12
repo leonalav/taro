@@ -512,7 +512,7 @@ export function Composer({
             document.execCommand("insertText", false, e.clipboardData.getData("text/plain"));
           }}
           className={cn(
-            "scrollbar-thin max-h-40 min-h-[56px] w-full overflow-y-auto px-4 pt-3.5 text-[15px] leading-7 text-foreground outline-none empty:before:text-muted-foreground/70 empty:before:content-[attr(data-placeholder)]",
+            "scrollbar-thin max-h-40 min-h-[56px] w-full overflow-y-auto px-4 pt-3.5 text-[15px] leading-7 text-foreground outline-none empty:before:text-muted-foreground empty:before:content-[attr(data-placeholder)]",
             disabled && "opacity-60"
           )}
         />
@@ -575,7 +575,7 @@ export function Composer({
 
           <div className="ml-auto flex items-center gap-2">
             {!compact && (
-              <span className="hidden items-center gap-1.5 text-[11px] text-muted-foreground/60 md:inline-flex">
+              <span className="hidden items-center gap-1.5 text-[11px] text-muted-foreground md:inline-flex">
                 <Kbd>⏎</Kbd> send
               </span>
             )}
@@ -638,7 +638,7 @@ function MenuPanel({
         {items.length===0&&<p className='px-3 py-4 text-xs text-muted-foreground'>No enabled workspace skills found. Open a workspace and import or enable skills in Settings → Plugins.</p>}
         {groups.map((group) => (
           <div key={group.title}>
-            <p className="px-2.5 py-1.5 text-[11px] text-muted-foreground/70">{group.title}</p>
+            <p className="px-2.5 py-1.5 text-[11px] text-muted-foreground">{group.title}</p>
             {group.items.map((item) => {
               flatIndex += 1;
               const index = flatIndex;

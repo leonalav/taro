@@ -23,6 +23,18 @@ describe("Nike reference and live tool artifacts",()=>{
   const html=render({id:"group",role:"activity-group",summary:"2 tool calls",activities:[{id:"read",kind:"file-read",label:"Read a.txt",status:"done",output:"line ".repeat(100)},{id:"image",kind:"file-read",label:"Read a.png",status:"done",imageDataUrl:"data:image/png;base64,AAAA"}]});
   expect(html).toContain("View result");expect(html).toContain("data:image/png;base64,AAAA");
  });
+ it("renders agent prose inside the inline artifact sheet typography",()=>{
+  const html=render({id:"reply",role:"agent",agentId:"planner",text:"Most tools optimize for capture, not thinking."});
+  expect(html).toContain('agent-reply');
+  expect(html).toContain('data-agent-reply');
+ });
+ it("keeps plan documents on the shared artifact sheet",()=>{
+  const plan=seedThreads[0].messages.find(message=>message.role==="plan")!;
+  const html=render(plan);
+  expect(html).toContain('data-document-artifact');
+  expect(html).toContain('artifact-sheet');
+  expect(html).toContain(plan.kind);
+ });
  it("does not offer to change an already applied live permission",()=>{
   const html=render({id:"permission",role:"permission",agentId:"planner",mcp:"GitHub",tool:"get_content",live:true,decision:{label:"Allowed once",allowed:true,target:"tool",duration:"once"}});
   expect(html).toContain("Allowed once");

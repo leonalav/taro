@@ -16,6 +16,12 @@ Memory is shared across chats using a normalized workspace path. Worktree operat
 
 Component rules cover action/navigation semantics, primary/secondary/quiet/danger variants, hover/active/focus/disabled/loading states, labeled fields and connected errors, minimum targets, focus visibility, responsive card padding and media/empty-state treatment. Templates are starting structures with explicitly illustrative content. They do not invent factual pricing, provide finished photography or implement application backends. Replace the sample copy, connect actual actions and source suitable media before release.
 
+## Inline artifact surfaces
+
+Chat artifacts use a second, deliberately quiet language: the monospaced editorial sheet in `artifact-sheet.css`. Sheets sit on the same #0b0b0b surface, #1f1f25 rules and 14–16 px radii as the Explorer panel, so a generated document never looks like it belongs to a different product. A sheet has a tracked uppercase kind line, three quiet rule pills, an optional serif document title, an outlined preview, and a footer action row carrying the agent name plus Copy/Open/View diff controls. Faint hexagon nodes echo the supplied reference without painting over content.
+
+Agent prose uses `.agent-reply`: Geist Mono at 13.5 px, numbered ordered lists, arrow-prefixed unordered lists, a quoted-callout blockquote and restrained inline code. User messages are raised #1c1c22 paper bubbles rather than colored chat bubbles. Tool rows, activity groups, permission requests, questions, subagent cards, token sheets and skeletal proposals reuse the same surface and metadata scale. Every legacy affordance (copy, retry, revert, open document, retry/diff, permission decisions, question answers, skeleton accept/edit) keeps its role, accessible name and callback; only the visual shell changed. Actions stay visible instead of appearing on hover, and remain at least 24 px tall with a visible focus ring. `docs/previews/inline-artifacts.png` captures the plan sheets and compact tool rows; an axe-core audit (WCAG 2.0/2.1/2.2 A and AA plus best-practice rules) reports zero violations on the welcome, chat and artifact surfaces.
+
 ## Generation and review loop
 
 Root and child model contexts carry the same workflow:
