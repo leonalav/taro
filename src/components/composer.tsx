@@ -466,7 +466,7 @@ export function Composer({
   /* ---- render ---------------------------------------------------- */
 
   return (
-    <div className="relative">
+    <div className="chat-composer relative">
       {menuOpen && (
         <MenuPanel
           kind={token!.kind}
@@ -478,7 +478,7 @@ export function Composer({
         />
       )}
 
-      <div className="rounded-2xl border border-input bg-card/90 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.8)] backdrop-blur transition-[border-color,box-shadow] focus-within:border-taro/40 focus-within:ring-4 focus-within:ring-taro/10" onDragOver={e=>{if(e.dataTransfer.types.includes("Files"))e.preventDefault();}} onDrop={e=>{if(!e.dataTransfer.files.length)return;e.preventDefault();if(!disabled)void addFiles(e.dataTransfer.files).catch(err=>setAttachmentError(String(err)));}}>
+      <div className="chat-composer__box rounded-2xl border border-input bg-card/90 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.8)] backdrop-blur transition-[border-color,box-shadow] focus-within:border-taro/40 focus-within:ring-4 focus-within:ring-taro/10" onDragOver={e=>{if(e.dataTransfer.types.includes("Files"))e.preventDefault();}} onDrop={e=>{if(!e.dataTransfer.files.length)return;e.preventDefault();if(!disabled)void addFiles(e.dataTransfer.files).catch(err=>setAttachmentError(String(err)));}}>
         <input ref={fileRef} type="file" multiple className="hidden" onChange={e=>{if(e.target.files) void addFiles(e.target.files).catch(err=>setAttachmentError(String(err)));e.target.value="";}} />
         {attachments.length>0 && <div className="flex gap-2 overflow-x-auto px-3 pt-3">{attachments.map(file=><div key={file.id} className="group relative shrink-0 overflow-hidden rounded-xl border border-border bg-background/70">{file.dataUrl?<img src={file.dataUrl} alt={file.name} className="size-28 object-cover"/>:<div className="flex h-28 w-36 flex-col items-center justify-center gap-2"><FileText className="size-6 text-muted-foreground"/><span className="w-32 truncate text-center text-xs">{file.name}</span></div>}<button type="button" aria-label={`Remove ${file.name}`} className="absolute right-1 top-1 rounded-full bg-black/70 p-1 text-white" onClick={()=>setAttachments(current=>{const rest=current.filter(f=>f.id!==file.id);attachmentDrafts.current.set(conversationId,rest);return rest;})}><X className="size-3"/></button></div>)}</div>}
         {attachmentError && <p role="alert" className="px-4 pt-2 text-xs text-red-400">{attachmentError}</p>}
@@ -584,7 +584,7 @@ export function Composer({
               onClick={disabled ? onStop : handleSend}
               aria-label={disabled ? "Stop response" : "Send message"}
               className={cn(
-                "flex size-8 items-center justify-center rounded-full bg-foreground text-background transition-[transform,opacity] duration-150 hover:scale-105 active:scale-95"
+                "chat-composer__send flex size-8 items-center justify-center rounded-full bg-foreground text-background transition-[transform,opacity] duration-150 hover:scale-105 active:scale-95"
               )}
             >
               {disabled ? <Square className="size-3.5 fill-current" /> : <ArrowUp className="size-4" strokeWidth={2.25} />}

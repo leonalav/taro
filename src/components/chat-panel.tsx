@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { Composer } from "@/components/composer";
 import { MessageItem } from "@/components/chat-message";
+import "@/components/chat-motion.css";
 import {EditHistoryWarning,shouldWarnOnEdit} from "@/components/edit-history-warning";
 import { TaroMark } from "@/components/taro-mark";
 import {
@@ -179,24 +180,25 @@ export function ChatPanel({
             <EmptyState onPick={onSend} />
           ) : (
             thread.messages.map((message) => (
-              <MessageItem
-                key={message.id}
-                message={message}
-                agentLabel={id=>settings.agents.find(agent=>agent.id===id)?.name??agentName(id)}
-                onRevert={requestRevert}
-                onRetry={onRetry}
-                editRequestToken={revertEdit?.messageId===message.id?revertEdit.token:undefined}
-                revertEnabled={revertToEdit(thread.messages,message.id)!==null}
-                retryEnabled={retryFromMessage(thread.messages,message.id)!==null}
-                onEditMessage={requestEdit}
-                busy={thinking}
-                onDecide={onDecide}
-                onOpenDoc={onOpenDoc}
-                docForMessage={docForMessage}
-                onAnswerQuestion={onAnswerQuestion}
-                onAcceptSkeletal={onAcceptSkeletal}
-                onEditSkeletal={onEditSkeletal}
-              />
+              <div className="chat-message-item" key={message.id}>
+                <MessageItem
+                  message={message}
+                  agentLabel={id=>settings.agents.find(agent=>agent.id===id)?.name??agentName(id)}
+                  onRevert={requestRevert}
+                  onRetry={onRetry}
+                  editRequestToken={revertEdit?.messageId===message.id?revertEdit.token:undefined}
+                  revertEnabled={revertToEdit(thread.messages,message.id)!==null}
+                  retryEnabled={retryFromMessage(thread.messages,message.id)!==null}
+                  onEditMessage={requestEdit}
+                  busy={thinking}
+                  onDecide={onDecide}
+                  onOpenDoc={onOpenDoc}
+                  docForMessage={docForMessage}
+                  onAnswerQuestion={onAnswerQuestion}
+                  onAcceptSkeletal={onAcceptSkeletal}
+                  onEditSkeletal={onEditSkeletal}
+                />
+              </div>
             ))
           )}
         </div>

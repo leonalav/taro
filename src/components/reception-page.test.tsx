@@ -33,6 +33,9 @@ describe("reception entry actions",()=>{
     expect(host.textContent).toContain("Local workspace");
     expect(host.textContent).toContain("1 project");
     expect([...host.querySelectorAll("h2")].map(heading=>heading.textContent)).toEqual(expect.arrayContaining(["Recent","Start something new","Templates"]));
+    expect(host.querySelector("h1")?.textContent).toBe("Welcome to Taro");
+    expect(host.querySelector(".reception-hero-art")?.getAttribute("aria-hidden")).toBe("true");
+    expect(host.querySelector(".reception-hero-glow")?.getAttribute("aria-hidden")).toBe("true");
   });
   it("keeps an empty project history honest and surfaces action errors",async()=>{
     await mount({recent:[],onOpenProject:async()=>{throw Error("Folder is unavailable");}});

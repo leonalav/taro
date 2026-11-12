@@ -1,9 +1,9 @@
 import * as React from "react";
-import "@fontsource/merriweather/700.css";
 import {ArrowRight,ArrowUpRight,BookOpen,Clock3,Command,Folder,FolderOpen,Grid2X2,Layers,Play,Plus,Search,Settings,Sparkles,Zap} from "lucide-react";
 import {GitHubMark} from "@/components/github-mark";
 import {TaroMark} from "@/components/taro-mark";
 import {cn} from "@/utils/cn";
+import {trackSpotlight,useCursorGlow,useEntranceChoreography} from "@/lib/premium-motion";
 import "./reception-page.css";
 
 export interface ReceptionRecent {id:string;name:string;updated:string;thumbnail?:string}
@@ -33,9 +33,30 @@ function RailButton({label,onClick,accent,children}:{label:string;onClick:()=>vo
   return <button type="button" aria-label={label} title={label} onClick={onClick} className={cn("reception-rail-button",accent&&"reception-rail-button--accent")}>{children}</button>;
 }
 
-export function ReceptionPage({recent,composer,error:externalError,onOpenRecent,onViewAll,onNewProject,onOpenProject,onTemplates,onImportGithub,onSearch,onCommands,onSettings,onDocs,onWhatsNew,onPrompt}:ReceptionPageProps){
+export function ReceptionPage({recent,composer,reduceMotion,error:externalError,onOpenRecent,onViewAll,onNewProject,onOpenProject,onTemplates,onImportGithub,onSearch,onCommands,onSettings,onDocs,onWhatsNew,onPrompt}:ReceptionPageProps){
   const page=React.useRef<HTMLElement>(null);
   const [error,setError]=React.useState("");
+  useEntranceChoreography(page,!reduceMotion,timeline=>{
+    timeline
+      .from(".reception-rail-brand",{opacity:0,scale:.8,duration:.55})
+      .from(".reception-rail-button",{opacity:0,x:-10,stagger:.035,duration:.45},"-=0.35")
+      .from(".reception-crumb",{opacity:0,y:-6,duration:.5},"-=0.45")
+      .from(".reception-search",{opacity:0,y:-6,duration:.5},"<")
+      .from(".reception-eyebrow",{opacity:0,y:8,duration:.5},"<")
+      .from(".reception-hero h1",{opacity:0,y:26,filter:"blur(12px)",duration:.95},"-=0.45")
+      .from(".reception-status-item",{opacity:0,y:6,stagger:.06,duration:.5},"-=0.75")
+      .from(".reception-subtitle",{opacity:0,y:14,duration:.6},"-=0.6")
+      .from(".reception-composer",{opacity:0,y:20,scale:.99,duration:.85},"-=0.5")
+      .from(".reception-suggestions button",{opacity:0,y:8,stagger:.04,duration:.45},"-=0.55")
+      .from(".reception-recents",{opacity:0,x:18,duration:.75},"-=0.95")
+      .from(".reception-recent",{opacity:0,y:8,stagger:.05,duration:.4},"-=0.55")
+      .from(".reception-lower",{opacity:0,y:16,duration:.7},"-=0.6")
+      .from(".reception-start-tile",{opacity:0,y:10,stagger:.04,duration:.45},"-=0.5")
+      .from(".reception-quick",{opacity:0,x:14,duration:.65},"-=0.65")
+      .from(".reception-quick-list>button",{opacity:0,y:6,stagger:.04,duration:.35},"-=0.45")
+      .from(".reception-footer",{opacity:0,duration:.5},"-=0.25");
+  });
+  useCursorGlow(page,".reception-hero-glow",!reduceMotion);
   const run=(action:Action)=>{setError("");void Promise.resolve().then(action).catch(e=>setError(e instanceof Error?e.message:String(e)));};
   const actions=[
     {name:"Open a project…",icon:Folder,keys:["Ctrl","O"],action:onOpenProject},
@@ -74,6 +95,8 @@ export function ReceptionPage({recent,composer,error:externalError,onOpenRecent,
 
         <div className="reception-grid">
           <section className="reception-panel reception-hero" aria-labelledby="reception-title">
+            <div className="reception-hero-art" aria-hidden="true"/>
+            <div className="reception-hero-glow" aria-hidden="true"/>
             <div className="reception-hero-head">
               <p className="reception-eyebrow"><Layers aria-hidden="true"/>New session</p>
               <div className="reception-status">
@@ -82,13 +105,13 @@ export function ReceptionPage({recent,composer,error:externalError,onOpenRecent,
                 <span className="reception-status-item">Design-first</span>
               </div>
             </div>
-            <h1 id="reception-title">Welcome to <span>Taro</span></h1>
+            <h1 id="reception-title">Welcome to <em>Taro</em></h1>
             <p className="reception-subtitle">Design-first coding agent for turning ideas into production-ready products.</p>
             <div className="reception-composer">{composer}</div>
             <div className="reception-suggestions" aria-label="Ideas for your next project">{suggestions.map(text=><button key={text} type="button" onClick={()=>onPrompt(text)}><ArrowUpRight aria-hidden="true"/>{text}</button>)}</div>
           </section>
 
-          <section className="reception-panel reception-recents" aria-labelledby="reception-recent-title">
+          <section className="reception-panel reception-recents" aria-labelledby="reception-recent-title" onPointerMove={trackSpotlight}>
             <div className="reception-panel-head">
               <h2 id="reception-recent-title"><Clock3 aria-hidden="true"/>Recent</h2>
               <button type="button" className="reception-text-action" onClick={()=>run(onViewAll)}>View all<ArrowRight aria-hidden="true"/></button>
@@ -102,19 +125,19 @@ export function ReceptionPage({recent,composer,error:externalError,onOpenRecent,
           </section>
 
           <div className="reception-lower">
-            <section className="reception-panel reception-start" aria-labelledby="reception-start-title">
+            <section className="reception-panel reception-start" aria-labelledby="reception-start-title" onPointerMove={trackSpotlight}>
               <div className="reception-panel-head">
                 <h2 id="reception-start-title">Start something new</h2>
               </div>
               <div className="reception-start-grid">
-                <button type="button" className="reception-start-tile reception-start-tile--primary" onClick={()=>run(onNewProject)}><Plus className="reception-tile-icon" aria-hidden="true"/><strong>New project</strong><span>Start from a blank canvas</span></button>
-                <button type="button" className="reception-start-tile" onClick={()=>run(onOpenProject)}><Folder className="reception-tile-icon" aria-hidden="true"/><strong>Open project</strong><span>Work on an existing project</span></button>
-                <button type="button" className="reception-start-tile" onClick={()=>run(onTemplates)}><Grid2X2 className="reception-tile-icon" aria-hidden="true"/><strong>Use a template</strong><span>Find a starting point for your idea</span></button>
-                <button type="button" className="reception-start-tile" onClick={()=>run(onImportGithub)}><GitHubMark className="reception-tile-icon"/><strong>Import from GitHub</strong><span>Bring an existing repo</span></button>
+                <button type="button" className="reception-start-tile reception-start-tile--primary" onPointerMove={trackSpotlight} onClick={()=>run(onNewProject)}><Plus className="reception-tile-icon" aria-hidden="true"/><strong>New project</strong><span>Start from a blank canvas</span></button>
+                <button type="button" className="reception-start-tile" onPointerMove={trackSpotlight} onClick={()=>run(onOpenProject)}><Folder className="reception-tile-icon" aria-hidden="true"/><strong>Open project</strong><span>Work on an existing project</span></button>
+                <button type="button" className="reception-start-tile" onPointerMove={trackSpotlight} onClick={()=>run(onTemplates)}><Grid2X2 className="reception-tile-icon" aria-hidden="true"/><strong>Use a template</strong><span>Find a starting point for your idea</span></button>
+                <button type="button" className="reception-start-tile" onPointerMove={trackSpotlight} onClick={()=>run(onImportGithub)}><GitHubMark className="reception-tile-icon"/><strong>Import from GitHub</strong><span>Bring an existing repo</span></button>
               </div>
             </section>
 
-            <section className="reception-panel reception-templates" aria-labelledby="reception-templates-title">
+            <section className="reception-panel reception-templates" aria-labelledby="reception-templates-title" onPointerMove={trackSpotlight}>
               <div className="reception-panel-head">
                 <h2 id="reception-templates-title">Templates</h2>
                 <button type="button" className="reception-text-action" onClick={()=>run(onTemplates)}>Explore<ArrowRight aria-hidden="true"/></button>
@@ -123,7 +146,7 @@ export function ReceptionPage({recent,composer,error:externalError,onOpenRecent,
             </section>
           </div>
 
-          <section className="reception-panel reception-quick" aria-labelledby="reception-quick-title">
+          <section className="reception-panel reception-quick" aria-labelledby="reception-quick-title" onPointerMove={trackSpotlight}>
             <div className="reception-panel-head">
               <h2 id="reception-quick-title"><Zap aria-hidden="true"/>Quick actions</h2>
             </div>
