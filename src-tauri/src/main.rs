@@ -121,7 +121,7 @@ async fn stream_chat(
         .entry(request.request_id.clone())
         .or_insert_with(CancellationToken::new)
         .clone();
-    let result = stream_chat_inner(&request, &on_event, &token).await;
+    let result = stream_chat_inner(&request, &on_event, &token, read_model_key).await;
     streams
         .0
         .lock()
@@ -133,10 +133,11 @@ async fn stream_chat_inner(
     request: &Request,
     on_event: &Channel<Event>,
     token: &CancellationToken,
+    load_key: impl FnOnce(&str) -> Result<Option<String>, String>,
 ) -> Result<Vec<ToolCall>, String> {
     let endpoint = resolve_endpoint(&request.endpoint)?;
     let body = build_body(endpoint.protocol, &request.model, &request.messages, request.tools.as_ref())?;
-    let secret = read_model_key(&request.credential_id)?;
+    let secret = load_key(&request.credential_id)?;
     let client = reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(20))
         .timeout(std::time::Duration::from_secs(300))
@@ -371,7 +372,7 @@ mod stream_tests {
             "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\n"
         );
         let (url, server) = model_server("200 OK", "text/event-stream", body);
-        let result = stream_chat_inner(&test_request(format!("{url}/v1/responses")), &Channel::new(|_| Ok(())), &CancellationToken::new()).await.unwrap();
+        let result = stream_chat_inner(&test_request(format!("{url}/v1/responses")), &Channel::new(|_| Ok(())), &CancellationToken::new(), |_| Ok(None)).await.unwrap();
         assert_eq!(result[0].id, "call_1");
         assert_eq!(result[0].name, "Read");
         assert_eq!(result[0].arguments, "{}");
@@ -389,7 +390,7 @@ mod stream_tests {
             "data: [DONE]\n\n"
         );
         let (url, server) = model_server("200 OK", "text/event-stream", body);
-        let result = stream_chat_inner(&test_request(format!("{url}/v1/")), &Channel::new(|_| Ok(())), &CancellationToken::new()).await.unwrap();
+        let result = stream_chat_inner(&test_request(format!("{url}/v1/")), &Channel::new(|_| Ok(())), &CancellationToken::new(), |_| Ok(None)).await.unwrap();
         assert_eq!(result[0].id, "call_a");
         let received = server.join().unwrap();
         assert!(received.starts_with("POST /v1/chat/completions HTTP/1.1"));
@@ -400,11 +401,12 @@ mod stream_tests {
     #[tokio::test(flavor = "current_thread")]
     async fn http_auth_errors_are_actionable_without_echoing_provider_secrets() {
         let (url, server) = model_server("401 Unauthorized", "application/json", "{\"error\":{\"message\":\"rejected sk-sensitive-value\"}}");
-        let error = stream_chat_inner(&test_request(format!("{url}/v1/")), &Channel::new(|_| Ok(())), &CancellationToken::new()).await.unwrap_err();
+        let error = stream_chat_inner(&test_request(format!("{url}/v1/")), &Channel::new(|_| Ok(())), &CancellationToken::new(), |_| Ok(Some("fixture-model-key".into()))).await.unwrap_err();
         assert!(error.contains("401"));
         assert!(error.contains("API key"));
         assert!(!error.contains("sk-sensitive"));
-        server.join().unwrap();
+        let received = server.join().unwrap();
+        assert!(received.to_ascii_lowercase().contains("authorization: bearer fixture-model-key"));
     }
     #[test]
     fn sse_lines_survive_arbitrary_chunks() {
