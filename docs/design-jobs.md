@@ -1,0 +1,15 @@
+# Design jobs
+
+A design job is a workspace task with a versioned record of its brief, approved plan, Designer intent, implementation preview, audit and QA verdict. Clear interface builds start the relay from chat or the existing task. Saving a layout also creates a job you can run from Tasks. The Designer, Code and Type & QA roles each need an enabled, configured model, and the parent needs workspace write authority.
+
+Explicit specialist requests enter the normal delegation approval flow. Visual requests that cannot start the relay load the project contract for the selected agent. When a request includes attachments, file mentions or skill chips, the model inspects those references before handing off work. For a direct build, include “without subagents” in the brief. To start a relay explicitly, ask the agent to use `DesignJob`.
+
+The Designer submits tokens, geometry, motion and accessibility decisions with an implementation plan. Taro writes a native Design Plan and requests approval. Code receives both the validated intent and the approved Markdown. Its handoff names files changed through workspace tools and a preview rendered from the edited HTML or a local development server. Taro measures 393, 768 and 1440 CSS pixel viewports and runs the visual audit. QA inspects the assigned revision and retrieves a screenshot from the assigned audit before it can submit a verdict. Remaining failures trigger one implementation revision pass. An unresolved failure leaves the job available to review and resume.
+
+Tasks link directly to saved review revisions and show captures before and after the QA revision pass. Browser comments produce workspace tasks with their original thread, selector, position and revision. A comment task checks for a newer revision before it starts and requires an audit and a resolved thread before the agent can complete it. Layout saves store the geometry and generated preview HTML in one revision. **Restore saved version** selects the earlier pair.
+
+New jobs default to an approved Git worktree retained for inspection and resumption. For a folder without Git, clear **Use a Git worktree** in Tasks or start the job with `worktree: false`. `TaskTakeover` stops an owned child and its process family, releases its retained worktree and returns its transcript and handoff. Use `EnterWorktree` with the returned `resume_path` to reopen that branch with approval. Native validation checks repository membership, branch identity and active ownership.
+
+The parent and children share a 128-request budget per runtime. Desktop design attempts also reserve requests in the native run ledger. Stopping the job cancels its agents and stops their owned processes. Saved plans, previews and worktree files stay available. Jobs that run directly in the workspace can leave file edits requiring review after interruption.
+
+The comparison view presents rendered evidence for review. Git merge and conflict resolution remain explicit operations. Layout restore applies to saved layout and preview source, while application file rollback is a separate operation.

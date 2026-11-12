@@ -1,5 +1,9 @@
 # Agent tool and artifact mapping
 
+## Public web research
+
+`WebSearch` and `WebFetch` provide built-in DuckDuckGo search and readable public-page content to root, planning and child agents. They work without a workspace or provider key. Search results use compact groupable source disclosures with actual counts, favicons, titles, addresses and persisted Read indicators. See [web research](web-research.md) for arguments, limitations and validation.
+
 ## Callable Phase 2 tools
 
 The desktop model loop now executes LSP, PowerShell, Agent, TaskOutput, TaskStop, Enter/ExitPlanMode, Enter/ExitWorktree, Skill, and ToolSearch. They feed the existing artifacts and approval system. ToolSearch exposes deferred schemas to later model requests; native modules perform actual process, language-server, plan, Git, and skill-file operations. See [Phase 2 tools](phase-two-tools.md) for configuration, inputs, lifecycle, and verification limits.

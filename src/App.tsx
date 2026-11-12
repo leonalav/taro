@@ -6,10 +6,16 @@ import { ArtifactsPage } from "@/components/artifacts-page";
 import { StatisticsPage } from "@/components/statistics-page";
 import { CommandPalette } from "@/components/command-palette";
 import { GitPanel } from "@/components/git-panel";
-import { SkeletalEditor, type CanvasLayer, type EditorMedia } from "@/components/skeletal-editor";
+import { saveLayoutRevision, undoLayoutRevision } from "@/lib/layout-revisions";
+import { reviewRepository } from "@/lib/review-persistence";
+import { activeRevision, type ReviewRevision } from "@/lib/review-store";
+import { createTask } from "@/lib/task-store";
+import { taskRepository } from "@/lib/task-persistence";
+import { SkeletalEditor, type DesignerPayload, type EditorMedia } from "@/components/skeletal-editor";
 import { useLibrary } from "@/lib/media-store";
 import { ExplorerPanel } from "@/components/explorer-panel";
-import { ReviewCanvas, EmptyReviewCanvas } from "@/components/review-canvas";
+import { ReviewCanvas } from "@/components/review-canvas";
+import { reviewScopeKey, type ReviewScope } from '@/lib/review-store';
 import { TasksBoard } from "@/components/tasks-board";
 import { TitleBar } from "@/components/title-bar";
 import {
@@ -22,7 +28,6 @@ import {
   type Segment,
   type PermissionChoice,
   type ToolActivity,
-  type SkeletalLayerData,
   type Thread,
 } from "@/data/mock";
 import type { Artifact } from "@/data/artifacts";
@@ -51,6 +56,7 @@ import { beginToolRound } from "@/lib/tool-transcript";
 import {historyBeforeMessage,retryFromMessage,revertToEdit} from "@/lib/chat-history";
 import {canApplyAiTitle,generateChatTitle} from "@/lib/chat-title";
 import { executeAgentTool, activityFromTool, toolKind, toolLabel, listMcpTools } from "@/lib/agent-tools";
+import {webActivity,webLabel,reconcileWebReads,toolResultText} from '@/lib/web-research';
 import { ProfessionalToolRuntime } from "@/lib/professional-runtime";
 import {runToolCallsInBatches} from "@/lib/tool-orchestration";
 import {boundedModelContext} from "@/lib/model-context";
@@ -156,6 +162,7 @@ export default function App() {
   const [comments, setComments] = React.useState<DocComment[]>([]);
   const [focusComment, setFocusComment] = React.useState<DocComment | null>(null);
   const [editingSkeletal, setEditingSkeletal] = React.useState<Extract<ChatMessage, { role: "skeletal" }> | null>(null);
+  const [linkedReviewScope, setLinkedReviewScope] = React.useState<ReviewScope>();
   const library = useLibrary();
   const [activeAgentId, setActiveAgentId] = React.useState('planner');
   const [thinking, setThinking] = React.useState(false);
@@ -165,7 +172,7 @@ export default function App() {
   const persistentPermissions = React.useRef<PermissionRule[]>([]);
   const sessionPermissions = React.useRef<PermissionRule[]>([]);
   const [permissionRevision,setPermissionRevision] = React.useState(0);
-  const pendingApprovals = React.useRef(new Map<string,{threadId:string;server?:string;tool?:string;resolve:(allowed:boolean)=>void}>());
+  const pendingApprovals = React.useRef(new Map<string,{threadId:string;server?:string;tool?:string;force?:boolean;resolve:(allowed:boolean)=>void}>());
   const [settings, setSettings] = React.useState<Settings>(()=>{try{return restoreSettings(JSON.parse(localStorage.getItem('taro-preferences-v1')||'null'));}catch{return restoreSettings(null);}});
   const [settingsSaveError,setSettingsSaveError]=React.useState('');
   const [preferenceRetry,setPreferenceRetry]=React.useState(0);
@@ -219,6 +226,26 @@ export default function App() {
   const activePermissionRules = React.useMemo(()=>[...persistentPermissions.current,...sessionPermissions.current],[permissionRevision]);
   const activeFolder = folders.find((f) => f.id === activeThread.folderId) ?? folders[0];
   const workspaceRoot = activeFolder.path || (activeFolder.id === "taro" ? settings.workspaceRoot : undefined);
+  React.useEffect(()=>{
+    const open=(event:Event)=>{
+      const scope=(event as CustomEvent<ReviewScope>).detail;
+      if(!scope||reviewScopeKey(scope)!==reviewScopeKey({workspace:workspaceRoot??'',sessionId:activeThread.id}))return;
+      setLinkedReviewScope(undefined);
+      setGalleryOpen(false);setArtifactsOpen(false);setStatisticsOpen(false);setReceptionOpen(false);setOpenDocId(null);setPanel('review');
+    };
+    window.addEventListener('taro:review-open',open);return()=>window.removeEventListener('taro:review-open',open);
+  },[workspaceRoot,activeThread.id]);
+  React.useEffect(()=>{
+    setLinkedReviewScope(undefined);
+    const open=(event:Event)=>{
+      const scope=(event as CustomEvent<ReviewScope>).detail;
+      if(!scope?.workspace||workspaceRuleKey(scope.workspace,'taro')!==workspaceRuleKey(workspaceRoot,'taro'))return;
+      setLinkedReviewScope(scope);
+      setPanel('review');
+    };
+    window.addEventListener('taro:review-work-item',open);
+    return()=>window.removeEventListener('taro:review-work-item',open);
+  },[workspaceRoot,activeThread.id]);
   const rulesKey=workspaceRuleKey(workspaceRoot,activeFolder.id);
   const workspaceRules=workspaceRuleSets[rulesKey]??settings.rules;
   const normalizeSkillPath=(path:string)=>path.replace(/^\\\\\?\\/,'').replace(/\\/g,'/').replace(/\/+$/,'').toLowerCase();
@@ -405,6 +432,7 @@ export default function App() {
     }
     setPermissionRevision(value => value + 1);
     for (const [id,pending] of pendingApprovals.current) {
+      if(pending.force)continue;
       if (pending.server!==rule.server || !pending.tool || (rule.target==="tool" && pending.tool!==rule.tool)) continue;
       pendingApprovals.current.delete(id);
       const decision:PermissionChoice={label:`${rule.allowed?"Always allow":"Always deny"} ${rule.target==="mcp"?"using this MCP":"tool"}${rule.duration==="session"?", this session":""}`,allowed:rule.allowed,target:rule.target,duration:rule.duration};
@@ -470,8 +498,8 @@ export default function App() {
       let reveal=createWordReveal(value=>show(responseId,value));
       run.stopLocal=()=>reveal.stop();
       const mentionedFiles=segments.filter(segment=>segment.type==="chip"&&segment.chip?.kind==="file").map(segment=>segment.chip!.label);
-      const messages:unknown[]=[{role:"system",content:`You are Taro, a coding agent. Use available tools to inspect and change the selected workspace. Never claim a tool ran unless you received its result. Workspace: ${workspaceRoot || "not selected"}. Use ListFiles to inspect directories, Glob to find paths, Grep to search contents, and Read to inspect files; do not use Bash for file listing or searching. File paths mentioned with @ are relative to this workspace: ${mentionedFiles.join(", ") || "none"}. Read relevant mentioned files before answering. If no workspace is selected, ask the user to open a folder in Explorer or choose one in Settings → Plugins before using coding tools.`},...context,{role:"user",content:modelContent(segments)}];
-      const updateActivity=(groupId:string,activity:ToolActivity)=>setThreads(prev=>prev.map(t=>t.id===threadId?{...t,messages:t.messages.map(m=>m.id===groupId&&m.role==="activity-group"?{...m,summary:`${m.activities.some(a=>a.id===activity.id)?m.activities.length:m.activities.length+1} tool call(s)`,activities:m.activities.some(a=>a.id===activity.id)?m.activities.map(a=>a.id===activity.id?activity:a):[...m.activities,activity]}:m)}:t));
+      const messages:unknown[]=[{role:"system",content:`You are Taro. Carry the user's request through using the selected role, the workspace contract, and the available tools. Use ListFiles, Glob, Grep and Read for workspace inspection. Resolve these mentioned paths relative to the workspace: ${JSON.stringify(mentionedFiles)}. If workspace access is required, ask the user to open a folder in Explorer. Report tool outcomes from evidence.`},...context,{role:"user",content:modelContent(segments)}];
+      const updateActivity=(groupId:string,activity:ToolActivity)=>setThreads(prev=>prev.map(t=>t.id===threadId?{...t,messages:reconcileWebReads(t.messages.map(m=>m.id===groupId&&m.role==="activity-group"?{...m,summary:`${m.activities.some(a=>a.id===activity.id)?m.activities.length:m.activities.length+1} tool call(s)`,activities:m.activities.some(a=>a.id===activity.id)?m.activities.map(a=>a.id===activity.id?activity:a):[...m.activities,activity]}:m))}:t));
       const configured=settings.plugins.filter(p=>p.enabled&&p.transport&&(p.command||p.url));
       const runtime=new ProfessionalToolRuntime({sessionId:threadId,workspaceRoot:workspaceRoot||"",agentId:agent.id,model:chosen,models:settings.models.customModels,plugins:configured,rules:compiledRules.text,agents:settings.agents,skills:workspaceSkills,
         native:async(call,input,owner,approved,requestId)=>{const result=await executeAgentTool(call,input,owner.workspaceRoot,approved,call.name==="MCP"?configured.find(plugin=>plugin.id===input.server):undefined,requestId,{sessionId:owner.sessionId,readOnly:owner.readOnly,planningAncestors:owner.ancestors});recordAiCodeChange({eventId:`${threadId}:${requestId}`,workspaceId:rulesKey,toolName:call.name,result});if(['Write','Edit','NotebookEdit'].includes(call.name)&&result.artifact.before!==result.artifact.after&&result.artifact.status!=='failed')recordActivity({id:requestId,workspace:rulesKey,kind:'code',timestamp:Date.now()});return result;},
@@ -489,7 +517,7 @@ export default function App() {
             const finish=(allowed:boolean)=>{owner.signal.removeEventListener("abort",cancel);pendingApprovals.current.delete(permissionId);resolve(allowed);};
             const cancel=()=>{setThreads(previous=>previous.map(thread=>thread.id===threadId?{...thread,messages:thread.messages.map(message=>message.id===permissionId&&message.role==="permission"?{...message,decision:{label:"Stopped",allowed:false,target:"tool",duration:"once"}}:message)}:thread));finish(false);};
             owner.signal.addEventListener("abort",cancel,{once:true});
-            pendingApprovals.current.set(permissionId,{threadId,server,tool:permissionTool,resolve:finish});
+            pendingApprovals.current.set(permissionId,{threadId,server,tool:permissionTool,force,resolve:finish});
             setThreads(previous=>previous.map(thread=>{
               if(thread.id!==threadId)return thread;
               const list=[...thread.messages];
@@ -519,23 +547,30 @@ export default function App() {
           if(failures.length){const failureGroupId=uid("activity");const firstResponseId=responseId;const group:ChatMessage={id:failureGroupId,role:"activity-group",summary:"MCP connection failed",activities:[],startedAt:Date.now()};setThreads(prev=>prev.map(t=>{if(t.id!==threadId)return t;const at=t.messages.findIndex(m=>m.id===firstResponseId);const list=[...t.messages];list.splice(at<0?list.length:at,0,group);return {...t,messages:list};}));for(const failure of failures)updateActivity(failureGroupId,{id:uid("mcp"),kind:"mcp",label:`Connect ${failure.plugin.name}`,status:"failed",errorTrace:failure.error});}
         }
         let rounds=0;
+        const kickoff=runtime.kickoff(text,{hasReferences:segments.some(segment=>segment.type==="attachment"||segment.type==="chip")});
         while(!run.stopRequested){
           if(++rounds>64)throw Error('The agent reached its 64-round tool limit. Review the retained outputs before continuing.');
           progress("Thinking…","Waiting for the model");
           run.requestId=uid("request");
           received="";
-          const calls=await streamModel({requestId:run.requestId,endpoint:chosen.endpoint,model:chosen.model||chosen.label,credentialId:chosen.id,messages:boundedModelContext([...messages,{role:"system",content:runtime.instructions()}]),tools:workspaceRoot?runtime.definitions():undefined},delta=>{if(run.stopRequested)return;if(!received)progress("Writing response…","Receiving model response");received+=delta;if(settings.models.streamResponses)reveal.push(delta);});
+          let calls:Awaited<ReturnType<typeof streamModel>>;
+          if(rounds===1&&kickoff)calls=[kickoff];
+          else{
+            await runtime.reserveModelRequest(run.requestId);
+            calls=await streamModel({requestId:run.requestId,endpoint:chosen.endpoint,model:chosen.model||chosen.label,credentialId:chosen.id,messages:boundedModelContext([...messages,{role:"system",content:runtime.instructions()}]),tools:runtime.definitions()},delta=>{if(run.stopRequested)return;if(!received)progress("Writing response…","Receiving model response");received+=delta;if(settings.models.streamResponses)reveal.push(delta);});
+          }
           if(!messageLogged&&(received.trim()||calls.length)){recordAiMessage({eventId:`${threadId}:${thoughtId}`,workspaceId:rulesKey});recordActivity({id:`${threadId}:${thoughtId}`,workspace:rulesKey,kind:'message',timestamp:Date.now()});messageLogged=true;}
           if(run.stopRequested || !calls.length) break;
           if(settings.models.streamResponses)await reveal.finish();else if(received)show(responseId,received);
           messages.push({role:"assistant",content:received||null,tool_calls:calls.map(c=>({id:c.id,type:"function",function:{name:c.name,arguments:c.arguments}}))});
-          const groupId=uid("activity");const roundResponseId=responseId;const group:ChatMessage={id:groupId,role:"activity-group",summary:"Using tools",activities:[],startedAt:Date.now()};setThreads(prev=>prev.map(t=>t.id===threadId?{...t,messages:beginToolRound(t.messages,roundResponseId,group)}:t));
+          const groupId=uid("activity");const roundResponseId=responseId;const group:ChatMessage={id:groupId,role:"activity-group",agentId:agent.id,summary:"Using tools",activities:[],startedAt:Date.now()};setThreads(prev=>prev.map(t=>t.id===threadId?{...t,messages:beginToolRound(t.messages,roundResponseId,group)}:t));
           progress("Using tools…",`Processing ${calls.length} tool call${calls.length===1?"":"s"}`);
           const outcomes=await runToolCallsInBatches(calls,async call=>{
             let input:Record<string,unknown>={};let error:unknown;let result:Awaited<ReturnType<typeof executeAgentTool>>|undefined;
             try{input=JSON.parse(call.arguments||"{}");if(!input||Array.isArray(input)||typeof input!=="object")throw Error("Tool arguments must be an object");}catch(e){error=e;}
             const started=Date.now();
-            updateActivity(groupId,{id:call.id,kind:toolKind(call.name),label:toolLabel(call.name,input),status:"running"});
+            const web=webActivity(call.name,input);
+            updateActivity(groupId,{id:call.id,kind:toolKind(call.name),...web,label:web?webLabel(web.web,'running'):toolLabel(call.name,input),status:"running"});
             if(!error&&!run.stopRequested)progress("Using tools…",toolLabel(call.name,input));
             if(!error && !run.stopRequested){const toolRequestId=uid("tool");run.toolRequestIds.add(toolRequestId);try{result=await runtime.execute(call,input,groupId,toolRequestId);}catch(e){error=e;}finally{run.toolRequestIds.delete(toolRequestId);}}
             if(run.stopRequested)error="Stopped";
@@ -546,7 +581,7 @@ export default function App() {
           },()=>run.stopRequested);
           const imageResults:{path:string;dataUrl:string}[]=[];
           for(const {call,result,error} of outcomes){
-            messages.push({role:"tool",tool_call_id:call.id,content:error?String(error):result?.text.slice(0,20000)||"Completed"});
+            messages.push({role:"tool",tool_call_id:call.id,content:error?String(error):toolResultText(call.name,result?.text||"Completed")});
             if(result?.artifact.kind==="image" && result.artifact.dataUrl)imageResults.push({path:String(result.artifact.path),dataUrl:result.artifact.dataUrl});
           }
           for(const image of imageResults)messages.push({role:"user",content:[{type:"text",text:`Image read from ${image.path}`},{type:"image_url",image_url:{url:image.dataUrl}}]});
@@ -611,7 +646,7 @@ export default function App() {
   /** Record a permission choice, then run (or skip) the requested MCP call. */
   const handlePermissionDecision = (messageId: string, choice: PermissionChoice | null) => {
     const pending=pendingApprovals.current.get(messageId);
-    if(pending){if(!choice)return;pendingApprovals.current.delete(messageId);setThreads(prev=>prev.map(t=>t.id===pending.threadId?{...t,messages:t.messages.map(m=>m.id===messageId&&m.role==="permission"?{...m,decision:choice}:m)}:t));if(pending.server&&pending.tool){const rule=permissionRuleFromChoice(choice,pending.server,pending.tool);if(rule)handleSetPermissionRule(rule);}pending.resolve(choice.allowed);return;}
+    if(pending){if(!choice)return;pendingApprovals.current.delete(messageId);setThreads(prev=>prev.map(t=>t.id===pending.threadId?{...t,messages:t.messages.map(m=>m.id===messageId&&m.role==="permission"?{...m,decision:choice}:m)}:t));if(!pending.force&&pending.server&&pending.tool){const rule=permissionRuleFromChoice(choice,pending.server,pending.tool);if(rule)handleSetPermissionRule(rule);}pending.resolve(choice.allowed);return;}
     const threadId = activeThread.id;
     const target = activeThread.messages.find((m) => m.id === messageId && m.role === "permission");
     if (!target || target.role !== "permission") return;
@@ -857,79 +892,61 @@ export default function App() {
     }
   };
 
-  const handleEditSkeletal = (message: Extract<ChatMessage, { role: "skeletal" }>) => {
-    setEditingSkeletal(message);
+  const layoutScope = { workspace: workspaceRoot ?? "", sessionId: activeThread.id };
+  const projectLayout = (message: Extract<ChatMessage, { role: "skeletal" }>, revision: ReviewRevision) => {
+    if (!revision.layout) return message;
+    return { ...message, ...revision.layout, layoutRevisionId: revision.id, status: "ready" as const };
   };
-
-  const handleSendSkeletalChanges = (payload: {
-    messageId?: string;
-    title: string;
-    variant: "hero" | "cards" | "dashboard";
-    layers: CanvasLayer[];
-    width: number;
-    height: number;
-    instruction: string;
-  }) => {
-    const layers: SkeletalLayerData[] = payload.layers.map((layer) => ({ ...layer }));
-    setEditingSkeletal(null);
-    const loadingId = payload.messageId ?? uid("skeletal");
-    const humanText = payload.instruction.trim()
-      ? `Update “${payload.title}”: ${payload.instruction.trim()}`
-      : `Apply the ${layers.length} layers from the skeletal editor to “${payload.title}”.`;
-
-    if (payload.messageId) {
-      setThreads((prev) => prev.map((thread) => ({
-        ...thread,
-        messages: thread.messages.map((message) =>
-          message.id === payload.messageId && message.role === "skeletal"
-            ? { ...message, title: payload.title, status: "loading", layers, width: payload.width, height: payload.height }
-            : message
-        ),
-      })));
-      pushMessages(activeThread.id, { id: uid("u"), role: "user", segments: [{ type: "text", text: humanText }] });
-    } else {
-      pushMessages(activeThread.id,
-        { id: uid("u"), role: "user", segments: [{ type: "text", text: humanText }] },
-        { id: loadingId, role: "skeletal", agentId: activeAgent.id, title: payload.title, variant: payload.variant, status: "loading", layers, width: payload.width, height: payload.height }
-      );
+  const handleEditSkeletal = async (message: Extract<ChatMessage, { role: "skeletal" }>) => {
+    if (!message.layoutPreviewId) {
+      setEditingSkeletal(message);
+      return;
     }
-
-    const changedLayers = layers.filter((layer) => layer.kind !== "background");
-    const diffLines = changedLayers.slice(0, 8).map((layer) => ({ kind: "add" as const, text: `${layer.kind} ${layer.name} · ${Math.round(layer.w)} × ${Math.round(layer.h)}` }));
-    pushMessages(activeThread.id, {
-      id: uid("activity"),
-      role: "activity-group",
-      summary: `Edited skeletal layout · ${layers.length} layers, ${payload.width} × ${payload.height}`,
-      activities: [{
-        id: uid("tool"),
-        kind: "file-edit",
-        label: `Edited ${payload.title}`,
-        edit: { file: "Plan", added: changedLayers.length, removed: 0, diff: diffLines },
-        status: "done",
-        durationMs: 320,
-      }],
-    });
-
-    setThinking(true);
-    window.setTimeout(() => {
-      setThreads((prev) => prev.map((thread) => ({
-        ...thread,
-        messages: thread.messages.map((message) =>
-          message.id === loadingId && message.role === "skeletal"
-            ? { ...message, status: "ready", title: payload.title, layers, width: payload.width, height: payload.height }
-            : message
-        ),
-      })));
-      pushMessages(activeThread.id, {
-        id: uid("a"), role: "agent", agentId: activeAgent.id,
-        text: `Updated “${payload.title}” with ${changedLayers.length} layout blocks and queued the requested changes.`,
-        durationMs: 810,
-        trace: ["Read the edited canvas layers.", "Applied the layout and typography settings.", "Rebuilt the skeletal preview."],
-      });
-      setThinking(false);
-    }, 900);
+    await reviewRepository.load(layoutScope);
+    const preview = reviewRepository.snapshot(layoutScope).state.previews.find(item => item.id === message.layoutPreviewId);
+    setEditingSkeletal(preview ? projectLayout(message, activeRevision(preview)) : message);
   };
 
+  const handleSendSkeletalChanges = async (payload: DesignerPayload) => {
+    const previewId = editingSkeletal?.layoutPreviewId ?? uid("layout-preview");
+    const messageId = payload.messageId ?? uid("skeletal");
+    const layout = { title: payload.title, layers: payload.layers, annotations: payload.annotations, width: payload.width, height: payload.height };
+    try {
+      const revisionId = await saveLayoutRevision(reviewRepository, layoutScope, previewId, layout, editingSkeletal?.layoutRevisionId);
+      const next = { id: messageId, role: "skeletal" as const, agentId: activeAgent.id, variant: payload.variant, status: "ready" as const, ...layout, layoutPreviewId: previewId, layoutRevisionId: revisionId };
+      setThreads(previous => previous.map(thread => {
+        if (thread.id !== activeThread.id) return thread;
+        const found = thread.messages.some(message => message.id === messageId);
+        return { ...thread, messages: found ? thread.messages.map(message => message.id === messageId ? next : message) : [...thread.messages, next] };
+      }));
+      setEditingSkeletal(null);
+      if (workspaceRoot) {
+        const task = createTask(payload.title);
+        const brief = payload.instruction.trim() || `Implement the saved layout for ${payload.title}.`;
+        await taskRepository.add(rulesKey, {
+          ...task, description: brief, tags: ["Design"],
+          designJob: { version: 0, scope: layoutScope, brief, phase: "design", isolate: true, layout: { previewId, revisionId } },
+        });
+        pushMessages(activeThread.id, { id: uid("event"), role: "event", text: "Layout and preview saved. Run its design job from Tasks." });
+      }
+    } catch (error) {
+      pushMessages(activeThread.id, { id: uid("event"), role: "event", text: `Layout handoff needs attention: ${String(error)}` });
+    }
+  };
+
+  const restoreSavedLayout = async () => {
+    if (!editingSkeletal?.layoutPreviewId || !editingSkeletal.layoutRevisionId) return;
+    try {
+      const revision = await undoLayoutRevision(reviewRepository, layoutScope, editingSkeletal.layoutPreviewId, editingSkeletal.layoutRevisionId);
+      const restored = projectLayout(editingSkeletal, revision);
+      setEditingSkeletal(restored);
+      setThreads(previous => previous.map(thread => thread.id === activeThread.id
+        ? { ...thread, messages: thread.messages.map(message => message.id === restored.id ? restored : message) }
+        : thread));
+    } catch (error) {
+      pushMessages(activeThread.id, { id: uid("event"), role: "event", text: String(error) });
+    }
+  };
   const handleAcceptSkeletal = (messageId: string) => {
     setThreads((prev) =>
       prev.map((thread) => ({
@@ -1123,7 +1140,7 @@ export default function App() {
             {panel === "explorer" && (
               <ExplorerPanel key={activeFolder.id} root={workspaceRoot} folderName={activeFolder.name} onChooseFolder={handleChooseExplorerFolder} maximized={maximized} onToggleMaximize={() => setMaximized((m) => !m)} onClose={closePanel} />
             )}
-            {panel === "review" && (activeThread.id === "brand" ? <ReviewCanvas /> : <EmptyReviewCanvas />)}
+            {panel === "review" && <ReviewCanvas key={`${workspaceRoot??''}:${linkedReviewScope?.sessionId??activeThread.id}`} workspaceRoot={linkedReviewScope?.workspace??workspaceRoot} sessionId={linkedReviewScope?.sessionId??activeThread.id}/>}
             {panel === "tasks" && <TasksBoard workspaceId={rulesKey} workspaceRoot={workspaceRoot} settings={workspaceSettings} onClose={closePanel} />}
             {panel === "git" && <GitPanel workspaceRoot={workspaceRoot} sourceControl={settings.sourceControl} onClose={closePanel} onOpenTasks={()=>setPanel('tasks')} />}
             {panel === "docs" && openDocId && (
@@ -1182,6 +1199,7 @@ export default function App() {
           variant={editingSkeletal?.variant ?? "hero"}
           messageId={editingSkeletal?.id}
           initialLayers={editingSkeletal?.layers}
+          initialAnnotations={editingSkeletal?.annotations}
           initialWidth={editingSkeletal?.width}
           initialHeight={editingSkeletal?.height}
           backgrounds={[
@@ -1190,6 +1208,8 @@ export default function App() {
             ...library.uploads.map((item) => ({ ...item, libraryOrigin: "uploaded" as const })),
           ] satisfies EditorMedia[]}
           onClose={() => setEditingSkeletal(null)}
+          key={editingSkeletal?.layoutRevisionId ?? editingSkeletal?.id}
+          onRestore={editingSkeletal?.layoutRevisionId ? restoreSavedLayout : undefined}
           onSend={handleSendSkeletalChanges}
         />
 

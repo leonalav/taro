@@ -9,6 +9,7 @@ mod workspace_explorer;
 mod terminals;
 mod workspace_watch;
 mod source_control;
+mod review_browser;
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Mutex};
@@ -120,7 +121,7 @@ async fn stream_chat(
         .entry(request.request_id.clone())
         .or_insert_with(CancellationToken::new)
         .clone();
-    let result = stream_chat_inner(&request, &on_event, &token).await;
+    let result = stream_chat_inner(&request, &on_event, &token, read_model_key).await;
     streams
         .0
         .lock()
@@ -132,10 +133,11 @@ async fn stream_chat_inner(
     request: &Request,
     on_event: &Channel<Event>,
     token: &CancellationToken,
+    load_key: impl FnOnce(&str) -> Result<Option<String>, String>,
 ) -> Result<Vec<ToolCall>, String> {
     let endpoint = resolve_endpoint(&request.endpoint)?;
     let body = build_body(endpoint.protocol, &request.model, &request.messages, request.tools.as_ref())?;
-    let secret = read_model_key(&request.credential_id)?;
+    let secret = load_key(&request.credential_id)?;
     let client = reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(20))
         .timeout(std::time::Duration::from_secs(300))
@@ -203,11 +205,13 @@ fn main() {
             Ok(())
         })
         .manage(Streams::default())
+        .manage(review_browser::ReviewBrowser::default())
         .manage(workspace_watch::WorkspaceWatches::default())
         .manage(terminals::TerminalManager::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
         .invoke_handler(tauri::generate_handler![
+            review_browser::review_browser,
             taro::skill_imports::discover_installed_skills,
             taro::skill_imports::import_installed_skill,
             source_control::ipc::sc_status,
@@ -261,12 +265,14 @@ fn main() {
             delete_model_key,
             has_model_key,
             execute_agent_tool,
+            open_web_link,
             list_mcp_tools
         ])
         .build(tauri::generate_context!())
         .expect("error while building Taro desktop app")
         .run(|app, event| {
             if matches!(event, tauri::RunEvent::Exit) {
+                app.state::<review_browser::ReviewBrowser>().close_all();
                 app.state::<terminals::TerminalManager>().close_all();
             }
         });
@@ -288,6 +294,24 @@ async fn execute_agent_tool(
     let result = tokio::select! {_=token.cancelled()=>Err("Tool execution stopped".into()),result=agent_tools::execute(request)=>result};
     streams.0.lock().map_err(|e| e.to_string())?.remove(&id);
     result
+}
+
+#[tauri::command]
+fn open_web_link(url: String) -> Result<(), String> {
+    let url = taro::web_transport::validate_url(&url)?;
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        use std::os::windows::process::CommandExt;
+        let mut command = std::process::Command::new("explorer.exe");
+        command.creation_flags(0x08000000);
+        command
+    };
+    #[cfg(target_os = "macos")]
+    let mut command = std::process::Command::new("open");
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    let mut command = std::process::Command::new("xdg-open");
+    command.arg(url.as_str()).spawn().map_err(|e|format!("Cannot open default browser: {e}"))?;
+    Ok(())
 }
 
 #[tauri::command]
@@ -348,7 +372,7 @@ mod stream_tests {
             "data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\n"
         );
         let (url, server) = model_server("200 OK", "text/event-stream", body);
-        let result = stream_chat_inner(&test_request(format!("{url}/v1/responses")), &Channel::new(|_| Ok(())), &CancellationToken::new()).await.unwrap();
+        let result = stream_chat_inner(&test_request(format!("{url}/v1/responses")), &Channel::new(|_| Ok(())), &CancellationToken::new(), |_| Ok(None)).await.unwrap();
         assert_eq!(result[0].id, "call_1");
         assert_eq!(result[0].name, "Read");
         assert_eq!(result[0].arguments, "{}");
@@ -366,7 +390,7 @@ mod stream_tests {
             "data: [DONE]\n\n"
         );
         let (url, server) = model_server("200 OK", "text/event-stream", body);
-        let result = stream_chat_inner(&test_request(format!("{url}/v1/")), &Channel::new(|_| Ok(())), &CancellationToken::new()).await.unwrap();
+        let result = stream_chat_inner(&test_request(format!("{url}/v1/")), &Channel::new(|_| Ok(())), &CancellationToken::new(), |_| Ok(None)).await.unwrap();
         assert_eq!(result[0].id, "call_a");
         let received = server.join().unwrap();
         assert!(received.starts_with("POST /v1/chat/completions HTTP/1.1"));
@@ -377,11 +401,12 @@ mod stream_tests {
     #[tokio::test(flavor = "current_thread")]
     async fn http_auth_errors_are_actionable_without_echoing_provider_secrets() {
         let (url, server) = model_server("401 Unauthorized", "application/json", "{\"error\":{\"message\":\"rejected sk-sensitive-value\"}}");
-        let error = stream_chat_inner(&test_request(format!("{url}/v1/")), &Channel::new(|_| Ok(())), &CancellationToken::new()).await.unwrap_err();
+        let error = stream_chat_inner(&test_request(format!("{url}/v1/")), &Channel::new(|_| Ok(())), &CancellationToken::new(), |_| Ok(Some("fixture-model-key".into()))).await.unwrap_err();
         assert!(error.contains("401"));
         assert!(error.contains("API key"));
         assert!(!error.contains("sk-sensitive"));
-        server.join().unwrap();
+        let received = server.join().unwrap();
+        assert!(received.to_ascii_lowercase().contains("authorization: bearer fixture-model-key"));
     }
     #[test]
     fn sse_lines_survive_arbitrary_chunks() {

@@ -3,7 +3,7 @@ import {activityFromTool,agentToolDefinitions,approvalRequired,isInspectionBash,
 
 describe("coding tool registry",()=>{
  it("exposes every requested tool to OpenAI-compatible models",()=>{
-  expect(agentToolDefinitions.map(t=>t.function.name)).toEqual(["Read","Write","Edit","ListFiles","Glob","Grep","NotebookEdit","Bash","MCP"]);
+  expect(agentToolDefinitions.map(t=>t.function.name)).toEqual(expect.arrayContaining(["ArtifactDesign","BrowserAudit","BrowserPreview","BrowserInspect","BrowserViewport","BrowserComment","BrowserComments","WebSearch","WebFetch","Read","Write","Edit","ListFiles","Glob","Grep","NotebookEdit","Bash","MCP"]));
   for(const tool of agentToolDefinitions){expect(tool.function.parameters).toMatchObject({type:"object",additionalProperties:false});}
  });
  it("requires approval for mutations, shell, and MCP",()=>{

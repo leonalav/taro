@@ -70,7 +70,21 @@ fn text_result(text: String, artifact: Value) -> ToolOutput {
     ToolOutput { text, artifact }
 }
 
+#[cfg(test)]
+mod web_dispatch_tests {
+    use super::*;
+    #[tokio::test]
+    async fn web_dispatch_without_workspace_still_validates_url() {
+        let result=execute(ToolRequest{name:"WebFetch".into(),input:json!({"url":"http://127.0.0.1"}),workspace_root:String::new(),approved:false,mcp_config:None,request_id:None,session_id:None,read_only:true,planning_ancestors:vec![]}).await;
+        let error=result.unwrap_err();assert!(error.contains("Private")||error.contains("public"),"{error}");assert!(!error.contains("Workspace"));
+    }
+}
+
 pub async fn execute(request: ToolRequest) -> Result<ToolOutput, String> {
+    if matches!(request.name.as_str(), "WebSearch" | "WebFetch") {
+        let result = taro::web_tools::execute(&request.name, &request.input).await?;
+        return Ok(ToolOutput { text: result["text"].as_str().unwrap_or_default().to_string(), artifact: result["artifact"].clone() });
+    }
     let original_root = root(&request.workspace_root)?;
     let input = &request.input;
     let name = request.name.as_str();
@@ -189,6 +203,9 @@ pub async fn execute(request: ToolRequest) -> Result<ToolOutput, String> {
                 .and_then(Value::as_u64)
                 .unwrap_or(200)
                 .min(2000) as usize;
+            if input.get("raw").and_then(Value::as_bool) == Some(true) {
+                return Ok(text_result(body.clone(), json!({"kind":"read","path":p,"content":body})));
+            }
             let selected = body
                 .lines()
                 .enumerate()

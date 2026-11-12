@@ -1,0 +1,743 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<html>
+
+<head>
+  <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=3.0, user-scalable=1;">
+  <meta name="referrer" content="origin">
+  <meta name="HandheldFriendly" content="true" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>Rust programming language at DuckDuckGo</title>
+  <link title="DuckDuckGo (Lite)" type="application/opensearchdescription+xml" rel="search" href="//duckduckgo.com/opensearch_lite_v2.xml">
+  <link href="//duckduckgo.com/favicon.ico" rel="shortcut icon" />
+  <link rel="icon" href="//duckduckgo.com/favicon.ico" type="image/x-icon" />
+  <link id="icon60" rel="apple-touch-icon" href="//duckduckgo.com/assets/icons/meta/DDG-iOS-icon_60x60.png?v=2"/>
+  <link id="icon76" rel="apple-touch-icon" sizes="76x76" href="//duckduckgo.com/assets/icons/meta/DDG-iOS-icon_76x76.png?v=2"/>
+  <link id="icon120" rel="apple-touch-icon" sizes="120x120" href="//duckduckgo.com/assets/icons/meta/DDG-iOS-icon_120x120.png?v=2"/>
+  <link id="icon152" rel="apple-touch-icon" sizes="152x152" href="//duckduckgo.com/assets/icons/meta/DDG-iOS-icon_152x152.png?v=2"/>
+  <link rel="image_src" href="//duckduckgo.com/assets/icons/meta/DDG-icon_256x256.png">
+  <link rel="stylesheet" media="handheld, all" href="//duckduckgo.com/dist/lr.54c8db90cecb71c0a540.css" type="text/css"/>
+</head>
+
+<body>
+  <p class='extra'>&nbsp;</p>
+  <div class="header">
+    DuckDuckGo
+  </div>
+  <p class='extra'>&nbsp;</p>
+
+  <form action="/lite/" method="post">
+      <input class='query' type="text" size="40" name="q" value="Rust programming language">
+      <input class='submit' type="submit" value="Search">
+
+
+
+
+
+      <div class="filters">
+        <select class="submit" name="kl">
+
+            <option value="" >All Regions</option>
+
+            <option value="ar-es" >Argentina</option>
+
+            <option value="au-en" >Australia</option>
+
+            <option value="at-de" >Austria</option>
+
+            <option value="be-fr" >Belgium (fr)</option>
+
+            <option value="be-nl" >Belgium (nl)</option>
+
+            <option value="br-pt" >Brazil</option>
+
+            <option value="bg-bg" >Bulgaria</option>
+
+            <option value="ca-en" >Canada (en)</option>
+
+            <option value="ca-fr" >Canada (fr)</option>
+
+            <option value="ct-ca" >Catalonia</option>
+
+            <option value="cl-es" >Chile</option>
+
+            <option value="cn-zh" >China</option>
+
+            <option value="co-es" >Colombia</option>
+
+            <option value="hr-hr" >Croatia</option>
+
+            <option value="cz-cs" >Czech Republic</option>
+
+            <option value="dk-da" >Denmark</option>
+
+            <option value="ee-et" >Estonia</option>
+
+            <option value="fi-fi" >Finland</option>
+
+            <option value="fr-fr" >France</option>
+
+            <option value="de-de" >Germany</option>
+
+            <option value="gr-el" >Greece</option>
+
+            <option value="hk-tzh" >Hong Kong</option>
+
+            <option value="hu-hu" >Hungary</option>
+
+            <option value="is-is" >Iceland</option>
+
+            <option value="in-en" >India (en)</option>
+
+            <option value="id-en" >Indonesia (en)</option>
+
+            <option value="ie-en" >Ireland</option>
+
+            <option value="il-en" >Israel (en)</option>
+
+            <option value="it-it" >Italy</option>
+
+            <option value="jp-jp" >Japan</option>
+
+            <option value="kr-kr" >Korea</option>
+
+            <option value="lv-lv" >Latvia</option>
+
+            <option value="lt-lt" >Lithuania</option>
+
+            <option value="my-en" >Malaysia (en)</option>
+
+            <option value="mx-es" >Mexico</option>
+
+            <option value="nl-nl" >Netherlands</option>
+
+            <option value="nz-en" >New Zealand</option>
+
+            <option value="no-no" >Norway</option>
+
+            <option value="pk-en" >Pakistan (en)</option>
+
+            <option value="pe-es" >Peru</option>
+
+            <option value="ph-en" >Philippines (en)</option>
+
+            <option value="pl-pl" >Poland</option>
+
+            <option value="pt-pt" >Portugal</option>
+
+            <option value="ro-ro" >Romania</option>
+
+            <option value="ru-ru" >Russia</option>
+
+            <option value="xa-ar" >Saudi Arabia</option>
+
+            <option value="sg-en" >Singapore</option>
+
+            <option value="sk-sk" >Slovakia</option>
+
+            <option value="sl-sl" >Slovenia</option>
+
+            <option value="za-en" >South Africa</option>
+
+            <option value="es-ca" >Spain (ca)</option>
+
+            <option value="es-es" >Spain (es)</option>
+
+            <option value="se-sv" >Sweden</option>
+
+            <option value="ch-de" >Switzerland (de)</option>
+
+            <option value="ch-fr" >Switzerland (fr)</option>
+
+            <option value="tw-tzh" >Taiwan</option>
+
+            <option value="th-en" >Thailand (en)</option>
+
+            <option value="tr-tr" >Turkey</option>
+
+            <option value="us-en" >US (English)</option>
+
+            <option value="us-es" >US (Spanish)</option>
+
+            <option value="ua-uk" >Ukraine</option>
+
+            <option value="uk-en" >United Kingdom</option>
+
+            <option value="vn-en" >Vietnam (en)</option>
+
+        </select>
+
+        <select class="submit" name="df">
+
+            <option value="" selected>Any Time</option>
+
+            <option value="d" >Past Day</option>
+
+            <option value="w" >Past Week</option>
+
+            <option value="m" >Past Month</option>
+
+            <option value="y" >Past Year</option>
+
+        </select>
+      </div>
+  </form>
+
+
+    <p class="extra">&nbsp;</p>
+    <table border="0">
+      <tr>
+        <td>
+
+        </td>
+        <td>
+
+            <!-- Next Page Button Sub-template -->
+<form class="next_form" action="/lite/" method="post">
+    <input type="submit" class='navbutton' value="Next Page &gt;">
+    <input type="hidden" name="q" value="Rust programming language">
+    <input type="hidden" name="s" value="10">
+    <input type="hidden" name="nextParams" value="">
+    <input type="hidden" name="v" value="l">
+    <input type="hidden" name="o" value="json">
+    <input type="hidden" name="dc" value="11">
+    <input type="hidden" name="api" value="d.js">
+    <input type="hidden" name="vqd" value="4-223760486309427387056125251207736456555">
+    &nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+      <input name="kl" value="wt-wt" type="hidden">
+
+
+
+
+</form>
+
+        </td>
+      </tr>
+    </table>
+
+
+
+
+  <p class='extra'>&nbsp;</p>
+
+  <table border="0">
+
+      <!-- If zero click results are present -->
+
+        <tr>
+          <td>Zero-click info: <a rel="nofollow" href="https://en.wikipedia.org/wiki/Rust_(programming_language)">Rust (programming language)</a></td>
+        </tr>
+
+        <tr>
+          <td>
+            Rust is a general-purpose programming language that emphasizes performance, type safety, concurrency, and memory safety. Rust supports multiple programming paradigms. It was influenced by ideas from functional programming, including immutability, higher-order functions, algebraic data types, and pattern matching. Rust also provides structs, enums, traits, and methods as alternatives to traditional object-oriented programming, without relying on classes or inheritance.
+
+                <a rel="nofollow" href="https://en.wikipedia.org/wiki/Rust_(programming_language)">More at <q>Wikipedia</q></a>
+
+          </td>
+        </tr>
+
+        <tr>
+          <td>&nbsp;</td>
+        </tr>
+
+
+  </table>
+
+  <table border="0">
+
+
+      <!-- Web results are present -->
+
+
+            <tr>
+
+                <td valign="top">
+
+                    1.&nbsp;
+
+                </td>
+                <td>
+                  <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Frust%2Dlang.org%2F&amp;rut=10dd828e276f9788b330e279bef3d187e572429d1a42ac3c2d4d7f0822c2cb62" class='result-link'>Rust Programming Language</a>
+                </td>
+
+            </tr>
+
+
+
+                <!-- Only show abstract separately if there's a click URL (not EOF) -->
+                <tr>
+                  <td>&nbsp;&nbsp;&nbsp;</td>
+                  <td class='result-snippet'>
+                    <b>Rust</b> is blazingly fast and memory-efficient: with no runtime or garbage collector, it can power performance-critical services, run on embedded devices, and easily integrate with other <b>languages</b>.
+                  </td>
+                </tr>
+
+
+
+
+              <tr>
+                <td>&nbsp;&nbsp;&nbsp;</td>
+                <td>
+                  <span class='link-text'>rust-lang.org</span>
+
+                </td>
+              </tr>
+
+
+            <tr>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+            </tr>
+
+
+
+
+            <tr>
+
+                <td valign="top">
+
+                    2.&nbsp;
+
+                </td>
+                <td>
+                  <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fdoc.rust%2Dlang.org%2Fstable%2Fbook%2F&amp;rut=f5b542752dfc75c610ca00b77b643ee1d876b16734a411958af2c5051115763e" class='result-link'>The Rust Programming Language</a>
+                </td>
+
+            </tr>
+
+
+
+                <!-- Only show abstract separately if there's a click URL (not EOF) -->
+                <tr>
+                  <td>&nbsp;&nbsp;&nbsp;</td>
+                  <td class='result-snippet'>
+                    The <b>Rust</b> <b>Programming</b> <b>Language</b> by Steve Klabnik, Carol Nichols, and Chris Krycho, with contributions from the <b>Rust</b> Community This version of the text assumes you&#x27;re using <b>Rust</b> 1.97.0 (released 2026-07-09) or later with edition = &quot;2024&quot; in the Cargo.toml file of all projects to configure them to use <b>Rust</b> 2024 Edition idioms.
+                  </td>
+                </tr>
+
+
+
+
+              <tr>
+                <td>&nbsp;&nbsp;&nbsp;</td>
+                <td>
+                  <span class='link-text'>doc.rust-lang.org/stable/book/</span>
+
+                </td>
+              </tr>
+
+
+            <tr>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+            </tr>
+
+
+
+
+            <tr>
+
+                <td valign="top">
+
+                    3.&nbsp;
+
+                </td>
+                <td>
+                  <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Frust%2Dlang.org%2Flearn%2Fget%2Dstarted%2F&amp;rut=cdad8413214cdcf995a410e6960d7e683c3e4368e8fa506829fe5a6b420ff0a9" class='result-link'>Getting started - Rust Programming Language</a>
+                </td>
+
+            </tr>
+
+
+
+                <!-- Only show abstract separately if there's a click URL (not EOF) -->
+                <tr>
+                  <td>&nbsp;&nbsp;&nbsp;</td>
+                  <td class='result-snippet'>
+                    Quickly set up a <b>Rust</b> development environment and write a small app! You can try <b>Rust</b> online in the <b>Rust</b> Playground without installing anything on your computer. The primary way that folks install <b>Rust</b> is through a tool called Rustup, which is a <b>Rust</b> installer and version management tool.
+                  </td>
+                </tr>
+
+
+
+
+              <tr>
+                <td>&nbsp;&nbsp;&nbsp;</td>
+                <td>
+                  <span class='link-text'>rust-lang.org/learn/get-started/</span>
+
+                </td>
+              </tr>
+
+
+            <tr>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+            </tr>
+
+
+
+
+            <tr>
+
+                <td valign="top">
+
+                    4.&nbsp;
+
+                </td>
+                <td>
+                  <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.w3schools.com%2Frust%2F&amp;rut=437dfe72175f2ad13953b252fdfa500d6f1822e7a50f37d439c58edeee9ccbef" class='result-link'>Rust Tutorial - W3Schools</a>
+                </td>
+
+            </tr>
+
+
+
+                <!-- Only show abstract separately if there's a click URL (not EOF) -->
+                <tr>
+                  <td>&nbsp;&nbsp;&nbsp;</td>
+                  <td class='result-snippet'>
+                    <b>Rust</b> is a popular <b>programming</b> <b>language</b> used to build everything from web servers to game engines. <b>Rust</b> is known for being very fast, and is similar to C and C++ in <b>language</b>.
+                  </td>
+                </tr>
+
+
+
+
+              <tr>
+                <td>&nbsp;&nbsp;&nbsp;</td>
+                <td>
+                  <span class='link-text'>www.w3schools.com/rust/</span>
+
+                </td>
+              </tr>
+
+
+            <tr>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+            </tr>
+
+
+
+
+            <tr>
+
+                <td valign="top">
+
+                    5.&nbsp;
+
+                </td>
+                <td>
+                  <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fen.wikipedia.org%2Fwiki%2FRust_(programming_language)&amp;rut=fa5be819ef0d5b3ed5ff877db3f3d41b442c4f076c7810385d0c02c075c94d0b" class='result-link'>Rust (programming language) - Wikipedia</a>
+                </td>
+
+            </tr>
+
+
+
+                <!-- Only show abstract separately if there's a click URL (not EOF) -->
+                <tr>
+                  <td>&nbsp;&nbsp;&nbsp;</td>
+                  <td class='result-snippet'>
+                    <b>Rust</b> (<b>programming</b> <b>language</b>) ... <b>Rust</b> is a general-purpose <b>programming</b> <b>language</b> that emphasizes performance, type safety, concurrency, and memory safety. <b>Rust</b> supports multiple <b>programming</b> paradigms. It was influenced by ideas from functional <b>programming</b>, including immutability, higher-order functions, algebraic data types, and pattern matching.
+                  </td>
+                </tr>
+
+
+
+
+              <tr>
+                <td>&nbsp;&nbsp;&nbsp;</td>
+                <td>
+                  <span class='link-text'>en.wikipedia.org/wiki/Rust_(programming_language)</span>
+
+                </td>
+              </tr>
+
+
+            <tr>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+            </tr>
+
+
+
+
+            <tr>
+
+                <td valign="top">
+
+                    6.&nbsp;
+
+                </td>
+                <td>
+                  <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.geeksforgeeks.org%2Frust%2Fintroduction%2Dto%2Drust%2Dprogramming%2Dlanguage%2F&amp;rut=7fd054924f6ecdf0b72d4e57c25eeabf29658cbcb28905c214d062281acf911e" class='result-link'>Introduction to Rust Programming Language - GeeksforGeeks</a>
+                </td>
+
+            </tr>
+
+
+
+                <!-- Only show abstract separately if there's a click URL (not EOF) -->
+                <tr>
+                  <td>&nbsp;&nbsp;&nbsp;</td>
+                  <td class='result-snippet'>
+                    <b>Rust</b> is a blazing fast and memory-efficient static compiled <b>language</b> with a rich type system and ownership model. It can be used to power performance-critical services while guaranteeing memory-safety and thread-safety, empowering developers to debug at compile-time.
+                  </td>
+                </tr>
+
+
+
+
+              <tr>
+                <td>&nbsp;&nbsp;&nbsp;</td>
+                <td>
+                  <span class='link-text'>www.geeksforgeeks.org/rust/introduction-to-rust-programming-language/</span>
+
+                </td>
+              </tr>
+
+
+            <tr>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+            </tr>
+
+
+
+
+            <tr>
+
+                <td valign="top">
+
+                    7.&nbsp;
+
+                </td>
+                <td>
+                  <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fdoc.rust%2Dlang.org%2Fbook%2Fch00%2D00%2Dintroduction.html&amp;rut=9d037cfd20081b21ec17e6a1871bff4cc094e2a6a6d595b1661881d582755dde" class='result-link'>Introduction - The Rust Programming Language</a>
+                </td>
+
+            </tr>
+
+
+
+                <!-- Only show abstract separately if there's a click URL (not EOF) -->
+                <tr>
+                  <td>&nbsp;&nbsp;&nbsp;</td>
+                  <td class='result-snippet'>
+                    The <b>Rust</b> <b>programming</b> <b>language</b> helps you write faster, more reliable software. High-level ergonomics and low-level control are often at odds in <b>programming</b> <b>language</b> design; <b>Rust</b> challenges that conflict.
+                  </td>
+                </tr>
+
+
+
+
+              <tr>
+                <td>&nbsp;&nbsp;&nbsp;</td>
+                <td>
+                  <span class='link-text'>doc.rust-lang.org/book/ch00-00-introduction.html</span>
+
+                </td>
+              </tr>
+
+
+            <tr>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+            </tr>
+
+
+
+
+            <tr>
+
+                <td valign="top">
+
+                    8.&nbsp;
+
+                </td>
+                <td>
+                  <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.geeksforgeeks.org%2Frust%2Frust%2Dbasics%2F&amp;rut=f0d4854698dedfaf4419060587c3ed9497d1d17cc850446d646cab5ac336b307" class='result-link'>Rust Basics - GeeksforGeeks</a>
+                </td>
+
+            </tr>
+
+
+
+                <!-- Only show abstract separately if there's a click URL (not EOF) -->
+                <tr>
+                  <td>&nbsp;&nbsp;&nbsp;</td>
+                  <td class='result-snippet'>
+                    <b>Rust</b> <b>language</b> is intended for a highly concurrent and highly safe system. <b>Rust</b> <b>language</b> has an emphasis on safety, control of memory layout, and concurrency.
+                  </td>
+                </tr>
+
+
+
+
+              <tr>
+                <td>&nbsp;&nbsp;&nbsp;</td>
+                <td>
+                  <span class='link-text'>www.geeksforgeeks.org/rust/rust-basics/</span>
+
+                </td>
+              </tr>
+
+
+            <tr>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+            </tr>
+
+
+
+
+            <tr>
+
+                <td valign="top">
+
+                    9.&nbsp;
+
+                </td>
+                <td>
+                  <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.w3schools.com%2Frust%2Frust_intro.php&amp;rut=51e34c08e32e44def41f0df536e923e09a3f239ef5bff7f62bdb4604efef01cb" class='result-link'>Introduction to Rust - W3Schools</a>
+                </td>
+
+            </tr>
+
+
+
+                <!-- Only show abstract separately if there's a click URL (not EOF) -->
+                <tr>
+                  <td>&nbsp;&nbsp;&nbsp;</td>
+                  <td class='result-snippet'>
+                    What is <b>Rust</b>? <b>Rust</b> is a modern <b>programming</b> <b>language</b>. It is designed for performance, reliability, and safety - especially safe handling of memory.
+                  </td>
+                </tr>
+
+
+
+
+              <tr>
+                <td>&nbsp;&nbsp;&nbsp;</td>
+                <td>
+                  <span class='link-text'>www.w3schools.com/rust/rust_intro.php</span>
+
+                </td>
+              </tr>
+
+
+            <tr>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+            </tr>
+
+
+
+
+            <tr>
+
+                <td valign="top">
+
+                    10.&nbsp;
+
+                </td>
+                <td>
+                  <a rel="nofollow" href="//duckduckgo.com/l/?uddg=https%3A%2F%2Fwww.scs.stanford.edu%2F~zyedidia%2Fdocs%2Frust%2Frust_book.pdf&amp;rut=09612327089f011c13d9e1fce44f32ba441b0862f22160b5f6a67a727b8b8d78" class='result-link'><span class="result__type">PDF</span> The Rust Programming Language - Stanford University</a>
+                </td>
+
+            </tr>
+
+
+
+                <!-- Only show abstract separately if there's a click URL (not EOF) -->
+                <tr>
+                  <td>&nbsp;&nbsp;&nbsp;</td>
+                  <td class='result-snippet'>
+                    <b>Rust</b> is an ahead-of-time compiled <b>language</b>, meaning you can compile a program and give the executable to someone else, and they can run it even without having <b>Rust</b> installed.
+                  </td>
+                </tr>
+
+
+
+
+              <tr>
+                <td>&nbsp;&nbsp;&nbsp;</td>
+                <td>
+                  <span class='link-text'>www.scs.stanford.edu/~zyedidia/docs/rust/rust_book.pdf</span>
+
+                </td>
+              </tr>
+
+
+            <tr>
+              <td>&nbsp;</td>
+              <td>&nbsp;</td>
+            </tr>
+
+
+
+
+
+
+
+      <tr>
+        <td colspan=2>
+
+
+            <!-- Next Page Button Sub-template -->
+<form class="next_form" action="/lite/" method="post">
+    <input type="submit" class='navbutton' value="Next Page &gt;">
+    <input type="hidden" name="q" value="Rust programming language">
+    <input type="hidden" name="s" value="10">
+    <input type="hidden" name="nextParams" value="">
+    <input type="hidden" name="v" value="l">
+    <input type="hidden" name="o" value="json">
+    <input type="hidden" name="dc" value="11">
+    <input type="hidden" name="api" value="d.js">
+    <input type="hidden" name="vqd" value="4-223760486309427387056125251207736456555">
+    &nbsp;&nbsp;&nbsp;&nbsp;
+
+
+
+      <input name="kl" value="wt-wt" type="hidden">
+
+
+
+
+</form>
+
+
+        </td>
+      </tr>
+
+  </table>
+
+  <p class='extra'>&nbsp;</p>
+
+  <form action="/lite/" method="post">
+      <input class='query' type="text" size="40" name="q" value="Rust programming language" >
+      <input class='submit' type="submit" value="Search">
+
+
+
+
+
+        <input name="kl" value="wt-wt" type="hidden">
+
+  </form>
+
+  <p class='extra'>&nbsp;</p>
+
+
+    <img src="//duckduckgo.com/t/sl_l"/>
+
+  <div id='end-spacer'>&nbsp;</div>
+
+</body>
+</html>

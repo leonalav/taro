@@ -17,6 +17,53 @@ function setup(){
 }
 
 describe("callable professional tool runtime",()=>{
+  it("starts a clear interface build with the actual relay and exposes collaboration tools without search",()=>{
+    const {options}=setup();
+    const agents=["Designer","Code","Type & QA"].map(role=>({id:role,name:role,role,model:"model",enabled:true,autonomy:"auto" as const,canWriteCode:true}));
+    const runtime=new ProfessionalToolRuntime({...options,agents});
+    expect(runtime.definitions().map(tool=>tool.function.name)).toEqual(expect.arrayContaining(["Agent","TaskOutput","EnterPlanMode","DesignJob","ArtifactDesign"]));
+    const brief="Build a responsive landing page for the studio using the project design tokens.";
+    expect(runtime.kickoff("Do not ask the QA agent to inspect a.ts.")).toBeUndefined();
+    expect(runtime.kickoff("Build the dashboard we discussed.")).toBeUndefined();
+    expect(runtime.kickoff("Build a dashboard and ask me before delegating.")).toBeUndefined();
+    expect(runtime.kickoff(brief,{hasReferences:true})).toBeUndefined();
+    expect(runtime.instructions()).toContain("Inspect the supplied references");
+    const kickoff=runtime.kickoff(brief);
+    expect(kickoff?.name).toBe("DesignJob");
+    expect(JSON.parse(kickoff!.arguments)).toMatchObject({action:"start",brief});
+    expect(runtime.kickoff(brief)).toBeUndefined();
+  });
+  it("keeps questions and explicit opt-outs out of the relay, and loads tokens when the team is unavailable",()=>{
+    const {options}=setup();
+    const runtime=new ProfessionalToolRuntime(options);
+    expect(runtime.kickoff("How would you build a landing page?")).toBeUndefined();
+    expect(runtime.kickoff("Build a dashboard, but don't use subagents.")).toMatchObject({name:"ArtifactDesign"});
+    const next=new ProfessionalToolRuntime({...options,sessionId:"workflow-fallback"});
+    expect(next.kickoff("Implement a responsive dashboard.")).toMatchObject({name:"ArtifactDesign"});
+  });
+  it("turns an explicit delegation request into a real configured child run",async()=>{
+    const {options,emitted}=setup();
+    const runtime=new ProfessionalToolRuntime({...options,agents:[{id:"qa",name:"Theo",role:"Type & QA",model:"model",enabled:true,autonomy:"auto",canWriteCode:false}]});
+    const kickoff=runtime.kickoff("Ask the QA agent to inspect the existing layout.");
+    expect(kickoff?.name).toBe("Agent");
+    await runtime.execute(kickoff!,JSON.parse(kickoff!.arguments));
+    expect(emitted).toContainEqual(expect.objectContaining({role:"subagent",subagentType:"Type & QA"}));
+  });
+  it('makes public web reads available without a workspace or mutation approval',async()=>{
+    const {options,native,approve}=setup();const runtime=new ProfessionalToolRuntime({...options,workspaceRoot:''});
+    expect(runtime.definitions().map(t=>t.function.name)).toEqual(expect.arrayContaining(['WebSearch','WebFetch']));
+    await runtime.execute(call('WebSearch'),{query:'css'});await runtime.execute(call('WebFetch'),{url:'https://example.com'});
+    expect(native.mock.calls.map(([tool])=>tool.name)).toEqual(['WebSearch','WebFetch']);expect(approve).not.toHaveBeenCalled();
+  });
+  it('allows Explore children to search and read and publishes typed source status',async()=>{
+    const {runtime,native,stream,update}=setup();
+    native.mockImplementation(async(tool,_input,owner)=>tool.name==='Agent'?{text:'Authorized',artifact:{kind:'agent-authorization',workspaceRoot:owner.workspaceRoot}}:tool.name==='WebSearch'?{text:'Results',artifact:{kind:'web-search',query:'css',sources:[{url:'https://example.com/a',title:'A'}]}}:{text:'Page',artifact:{kind:'web-fetch',requestedUrl:'https://example.com/a',finalUrl:'https://example.com/a',title:'A',content:'text'}});
+    stream.mockResolvedValueOnce([{id:'s',name:'WebSearch',arguments:'{"query":"css"}'},{id:'f',name:'WebFetch',arguments:'{"url":"https://example.com/a"}'}]).mockImplementationOnce(async(_request,delta)=>{delta('Read source.');return [];});
+    await runtime.execute(call('Agent'),{description:'Research',prompt:'Search and read',subagent_type:'Explore'});
+    const activities=update.mock.calls.map(([,p])=>p.activities).filter(Boolean).at(-1)!;
+    expect(activities[0].web.sources[0].read).toBe(true);
+    expect(native.mock.calls.find(([tool])=>tool.name==='WebFetch')?.[2].readOnly).toBe(true);
+  });
   it("loads schemas through ToolSearch without executing tools",async()=>{
     const {runtime,native}=setup();
     await runtime.execute(call("ToolSearch"),{query:"select:PowerShell,LSP"});

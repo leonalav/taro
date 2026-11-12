@@ -9,6 +9,9 @@ import {MessageItem} from '@/components/chat-message';
 import {TASK_STATUSES,type PermissionChoice,type Priority,type TaskStatus} from '@/data/mock';
 import type {Settings} from '@/data/settings';
 import {taskRepository} from '@/lib/task-persistence';
+import {reviewRepository} from '@/lib/review-persistence';
+import {selectPreview} from '@/lib/review-store';
+import type {DesignJob} from '@/lib/design-job';
 import {createTask,completeTask,type WorkspaceTask} from '@/lib/task-store';
 import {createTaskExecutor} from '@/lib/task-runtime';
 import {executeAgentTool} from '@/lib/agent-tools';
@@ -60,7 +63,7 @@ export function TasksBoard({workspaceRoot,workspaceId,settings,onClose}:TasksBoa
     </header>
     {(error||snapshot.error)&&<div role='alert' className='mx-4 mt-3 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm text-destructive'><p>{error||snapshot.error}</p>{snapshot.error&&<Button size='sm' variant='secondary' className='mt-2' onClick={()=>action(snapshot.loaded?taskRepository.retrySave(workspaceId):taskRepository.load(workspaceId))}>{snapshot.loaded?'Retry saving retained outputs':'Retry loading tasks'}</Button>}</div>}
     {!snapshot.loaded&&!snapshot.error&&<p role='status' className='p-5 text-sm text-muted-foreground'>Loading saved tasks…</p>}
-    {task?<TaskDetail key={task.id} task={task} settings={settings} onRun={()=>run(task)} onStop={()=>action(executor.stop(workspaceId,task.id))} onSave={update=>action(saveTask(task,update))} onOpenDoc={openDocument} onDecide={(messageId,choice)=>action(executor.decide(workspaceId,task.id,messageId,choice))}/>:<>
+    {task?<TaskDetail key={task.id} task={task} settings={settings} onRun={()=>run(task)} onStop={()=>action(executor.stop(workspaceId,task.id))} onSave={update=>action(saveTask(task,update))} onOpenDoc={openDocument} onDecide={(messageId,choice)=>action(executor.decide(workspaceId,task.id,messageId,choice))} onReview={()=>action(openTaskReview(task))}/>:<>
       {creating&&<form className='space-y-3 border-b border-border p-4' onSubmit={e=>{e.preventDefault();action(create());}}>
         <Input autoFocus value={title} onChange={e=>setTitle(e.target.value)} aria-label='Task title' placeholder='What needs to be done?' required/>
         <textarea className={area} aria-label='Task description' value={description} onChange={e=>setDescription(e.target.value)} placeholder='Describe the result, constraints, and how to verify it.'/>
@@ -78,18 +81,67 @@ export function TasksBoard({workspaceRoot,workspaceId,settings,onClose}:TasksBoa
     </Dialog>
   </aside>;
 }
-function TaskDetail({task,settings,onRun,onStop,onSave,onOpenDoc,onDecide}:{task:WorkspaceTask;settings:Settings;onRun:()=>void;onStop:()=>void;onSave:(update:(task:WorkspaceTask)=>WorkspaceTask)=>void;onOpenDoc:(id:string)=>void;onDecide:(id:string,choice:PermissionChoice|null)=>void}){
+async function openTaskReview(task:WorkspaceTask){
+  const scope=task.reviewItem?.scope??task.designJob?.scope;
+  const link=task.reviewItem??task.designJob?.code??task.designJob?.layout;
+  if(!scope||!link)return;
+  await reviewRepository.change(scope,state=>selectPreview(state,link.previewId,link.revisionId));
+  window.dispatchEvent(new CustomEvent('taro:review-work-item',{detail:scope}));
+}
+
+function DesignComparison({job}:{job:DesignJob}){
+  const before=job.previousPreviews?.at(-1),after=job.code;
+  const [captures,setCaptures]=React.useState<{before?:string;after?:string;error?:string}>({});
+  React.useEffect(()=>{
+    let active=true;
+    void reviewRepository.load(job.scope).then(()=>{
+      if(!active)return;
+      const snapshot=reviewRepository.snapshot(job.scope);
+      if(snapshot.error){setCaptures({error:snapshot.error});return;}
+      const capture=(link:typeof before)=>snapshot.state.previews.find(preview=>preview.id===link?.previewId)?.revisions.find(revision=>revision.id===link?.revisionId)?.capture;
+      setCaptures({before:capture(before),after:capture(after)});
+    });
+    return()=>{active=false;};
+  },[job.scope,before,after]);
+  if(!before||!after)return null;
+  return <details className='mt-2'>
+    <summary className='cursor-pointer'>Compare saved revisions</summary>
+    {captures.error&&<p role='alert'>{captures.error}</p>}
+    <div className='mt-2 grid gap-2 sm:grid-cols-2'>
+      {[{label:'Before QA feedback',source:captures.before},{label:'After revision',source:captures.after}].map(({label,source})=><figure key={label} className='min-w-0'>
+        <figcaption className='mb-1 text-muted-foreground'>{label}</figcaption>
+        {source?<img src={source} alt={label} loading='lazy' className='w-full rounded-md'/>:<p>Screenshot unavailable</p>}
+      </figure>)}
+    </div>
+  </details>;
+}
+
+function TaskDetail({task,settings,onRun,onStop,onSave,onOpenDoc,onDecide,onReview}:{task:WorkspaceTask;settings:Settings;onRun:()=>void;onStop:()=>void;onSave:(update:(task:WorkspaceTask)=>WorkspaceTask)=>void;onOpenDoc:(id:string)=>void;onDecide:(id:string,choice:PermissionChoice|null)=>void;onReview:()=>void}){
   const [editing,setEditing]=React.useState(false),[draft,setDraft]=React.useState(task.description),[completion,setCompletion]=React.useState(false),[done,setDone]=React.useState(''),[product,setProduct]=React.useState('');
   const busy=task.status==='In Progress';
+  const job=task.designJob;
+  const link=task.reviewItem??job?.code??job?.layout;
   return <div className='scrollbar-thin min-h-0 flex-1 overflow-y-auto p-4'>
-    <div className='flex flex-wrap items-center gap-2'><Badge variant={priorityVariant[task.priority]??'medium'}>{task.priority}</Badge>{task.tags.map(tag=><Badge key={tag}>{tag}</Badge>)}<div className='ml-auto flex flex-wrap gap-1.5'>{busy?<Button size='sm' variant='secondary' onClick={onStop}><Square/>Stop task</Button>:<><Button size='sm' variant='ghost' onClick={()=>setEditing(v=>!v)}>Edit task</Button>{task.status==='Failed'&&<Button size='sm' variant='secondary' onClick={()=>onSave(t=>({...t,status:'To Do',error:undefined}))}>Return to To Do</Button>}<Button size='sm' onClick={onRun}><Play/>{task.attempts?'Run again':'Run task'}</Button></>}</div></div>
-    {editing?<form className='mt-4 space-y-2' onSubmit={e=>{e.preventDefault();onSave(t=>({...t,description:draft,details:draft}));setEditing(false);}}><textarea className={area} aria-label='Edit task description' value={draft} onChange={e=>setDraft(e.target.value)}/><Button size='sm' type='submit' disabled={!draft.trim()}>Save task</Button></form>:<p className='mt-4 whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground'>{task.description}</p>}
+    <div className='flex flex-wrap items-center gap-2'><Badge variant={priorityVariant[task.priority]??'medium'}>{task.priority}</Badge>{task.tags.map(tag=><Badge key={tag}>{tag}</Badge>)}<div className='ml-auto flex flex-wrap gap-1.5'>{busy?<Button size='sm' variant='secondary' onClick={onStop}><Square/>Stop task</Button>:<>{(!job||!job.intent&&job.phase!=='verified')&&<Button size='sm' variant='ghost' onClick={()=>setEditing(v=>!v)}>Edit task</Button>}{task.status==='Failed'&&<Button size='sm' variant='secondary' onClick={()=>onSave(t=>({...t,status:'To Do',error:undefined}))}>Return to To Do</Button>}{job?.phase!=='verified'&&<Button size='sm' onClick={onRun}><Play/>{task.attempts?'Run again':'Run task'}</Button>}</>}</div></div>
+    {editing?<form className='mt-4 space-y-2' onSubmit={e=>{e.preventDefault();onSave(t=>({...t,description:draft,details:draft,designJob:t.designJob&&!t.designJob.intent?{...t.designJob,brief:draft}:t.designJob}));setEditing(false);}}><textarea className={area} aria-label='Edit task description' value={draft} onChange={e=>setDraft(e.target.value)}/><Button size='sm' type='submit' disabled={!draft.trim()}>Save task</Button></form>:<p className='mt-4 whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground'>{task.description}</p>}
     {task.error&&<p role='alert' className='mt-4 whitespace-pre-wrap break-words rounded-lg border border-destructive/40 p-3 text-sm text-destructive'>{task.error}</p>}
+    {(job||link)&&<section className='mt-4 space-y-2 rounded-lg border border-border p-3 text-xs'>
+      {job&&<p>Design job · {job.phase} · version {job.version}</p>}
+      {job&&!busy&&!job.worktree&&job.phase!=='verified'&&<label className='flex items-center gap-2'>
+        <input type='checkbox' checked={job.isolate===true} onChange={event=>{const isolate=event.target.checked;onSave(current=>current.designJob?{...current,designJob:{...current.designJob,isolate}}:current);}}/>
+        Use a Git worktree
+      </label>}
+      {job?.worktree&&<p className='break-all'>Worktree {job.worktree}</p>}
+      {job?.verdict&&<ul className='list-disc space-y-1 pl-4'>{job.verdict.findings.map((finding,index)=><li key={index}>{finding}</li>)}</ul>}
+      {job?.previousPreviews?.length?<DesignComparison job={job}/>:null}
+      {task.reviewItem&&<p className='break-all'>{task.reviewItem.resolved?'Resolved':'Open'} · {task.reviewItem.anchor.selector??`${Math.round(task.reviewItem.anchor.x)}, ${Math.round(task.reviewItem.anchor.y)}`}</p>}
+      {link&&<Button size='sm' variant='secondary' onClick={onReview}>Open linked revision</Button>}
+    </section>}
     <div className='mt-5 space-y-5 border-y border-border py-5'>
       <section><h3 className='text-sm font-medium'>{task.status==='Done'?'What was done':'What this means'}</h3><ol className='mt-2 list-decimal space-y-1 pl-5 text-sm leading-6 text-muted-foreground'>{(task.status==='Done'?[task.whatWasDone||'']:task.details.split(/\n+/)).filter(Boolean).map((text,i)=><li key={i} className='whitespace-pre-wrap break-words'>{text.replace(/^\d+[.)]\s*/,'')}</li>)}</ol></section>
       <section><h3 className='text-sm font-medium'>{task.status==='Done'?'The final product':'Planned solution'}</h3>{task.status==='Done'?<p className='mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground'>{task.finalProduct}</p>:<ol className='mt-2 list-decimal space-y-1 pl-5 text-sm leading-6 text-muted-foreground'>{task.solution.map((step,i)=><li key={i}>{step.replace(/^\d+[.)]\s*/,'')}</li>)}</ol>}</section>
       {task.status==='Done'&&<details><summary className='cursor-pointer text-xs text-muted-foreground'>Original plan</summary><ol className='mt-2 list-decimal pl-5 text-sm text-muted-foreground'>{task.solution.map((step,i)=><li key={i}>{step}</li>)}</ol></details>}
-      {!busy&&task.status!=='Done'&&<Button size='sm' variant='ghost' onClick={()=>setCompletion(v=>!v)}>Record completed work</Button>}
+      {!busy&&!job&&task.status!=='Done'&&<Button size='sm' variant='ghost' onClick={()=>setCompletion(v=>!v)}>Record completed work</Button>}
       {completion&&<form className='space-y-2' onSubmit={e=>{e.preventDefault();onSave(t=>completeTask(t,done,product));setCompletion(false);}}><textarea className={area} aria-label='What was done' placeholder='Describe what was actually done.' value={done} onChange={e=>setDone(e.target.value)}/><textarea className={area} aria-label='The final product' placeholder='Describe the final product and verification.' value={product} onChange={e=>setProduct(e.target.value)}/><Button type='submit' size='sm' disabled={!done.trim()||!product.trim()}>Mark Done</Button></form>}
     </div>
     <h3 className='mt-5 text-sm font-medium'>Execution and artifacts</h3>

@@ -1,4 +1,5 @@
 import type { ChatMessage } from "@/data/mock";
+import {webLabel} from './web-research';
 
 export type ThoughtMessage = {
   id: string;
@@ -31,9 +32,10 @@ export function settleThought(message: ThoughtMessage, status: Exclude<ThoughtMe
 /** A persisted run cannot still be running after the app restarts. */
 export function recoverThoughts(messages: ChatMessage[]): ChatMessage[] {
   return messages.map(message=>{
+    if(message.role==='activity-group')return {...message,activities:message.activities.map(a=>a.web&&['running','queued'].includes(a.status)?{...a,status:'interrupted' as const,label:webLabel(a.web,'interrupted')}:a)};
     if(message.role==="thought"&&message.status==="working")return settleThought(message,"interrupted",message.updatedAt);
     if(message.role==="agent"&&!message.text&&message.trace?.includes("Generating response"))return {id:message.id,role:"thought",agentId:message.agentId,status:"interrupted",label:"Thinking…",startedAt:0,updatedAt:message.durationMs??0,durationMs:message.durationMs??0,steps:["The previous response was interrupted"]};
-    if(message.role==="subagent"&&message.status==="running")return {...message,status:"failed",result:"Child agent interrupted when the application closed. Start a new Agent run to continue."};
+    if(message.role==="subagent"&&message.status==="running")return {...message,status:"failed",activities:message.activities.map(a=>a.web&&['running','queued'].includes(a.status)?{...a,status:'interrupted' as const,label:webLabel(a.web,'interrupted')}:a),result:"Child agent interrupted when the application closed. Start a new Agent run to continue."};
     return message;
   });
 }
