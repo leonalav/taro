@@ -33,6 +33,44 @@ const thought=()=>io.view!.thread.messages.find(message=>message.role==="thought
 const send=async()=>{await act(async()=>{root.render(<App/>);});await act(async()=>{io.view!.onSend([{type:"text",text:"Inspect a.ts"}]);});};
 
 describe("agentic ThoughtLine lifecycle",()=>{
+  it("routes a chat delegation through permission and gives the parent the real child result",async()=>{
+    const data=await io.load();
+    const agents=[
+      {id:"planner",name:"Kai",role:"Orchestrator agent",model:"test",enabled:true,autonomy:"auto",canWriteCode:true},
+      {id:"qa",name:"Theo",role:"Type & QA",model:"test",enabled:true,autonomy:"ask",canWriteCode:false},
+    ];
+    io.load.mockResolvedValue({...data,preferences:{...defaultSettings,models:data.models,agents}});
+    io.execute.mockResolvedValue({text:"Authorized",artifact:{kind:"agent-authorization",workspaceRoot:"A:/taro"}});
+    io.stream.mockImplementationOnce(async(_request,delta)=>{delta("Child found the relevant selector.");return [];})
+      .mockImplementationOnce(async(_request,delta)=>{delta("The QA finding is available.");return [];});
+    await act(async()=>{root.render(<App/>);});
+    await act(async()=>io.view!.onSend([{type:"text",text:"Ask the QA agent to inspect a.ts."}]));
+    const permission=io.view!.thread.messages.find(message=>message.role==="permission")!;
+    expect(permission).toMatchObject({tool:expect.stringContaining("Type & QA handoff"),onceOnly:true});
+    expect(io.stream).not.toHaveBeenCalled();
+    await act(async()=>io.view!.onDecide(permission.id,{label:"Allow once",allowed:true,target:"tool",duration:"once"}));
+    expect(io.view!.thread.messages).toContainEqual(expect.objectContaining({role:"subagent",subagentType:"Type & QA",status:"completed"}));
+    expect(JSON.stringify(io.stream.mock.calls.at(-1)?.[0].messages)).toContain("Child found the relevant selector.");
+  });
+  it('stops a stalled web request and retains a stopped source row',async()=>{
+    io.stream.mockResolvedValueOnce([{id:'web-stop',name:'WebSearch',arguments:'{"query":"css"}'}]);
+    io.execute.mockImplementationOnce(()=>new Promise(()=>{}));
+    await send();
+    expect(io.view!.thread.messages.filter(m=>m.role==='activity-group').flatMap(m=>m.activities).find(a=>a.id==='web-stop')).toMatchObject({status:'running',web:{kind:'web-search'}});
+    await act(async()=>io.view!.onStop());
+    expect(io.view!.thread.messages.filter(m=>m.role==='activity-group').flatMap(m=>m.activities).find(a=>a.id==='web-stop')).toMatchObject({status:'stopped',label:'Web search stopped'});
+    expect(io.view!.thinking).toBe(false);
+  });
+  it('offers and executes web tools without a workspace and persists read source rows',async()=>{
+    const data=await io.load();io.load.mockResolvedValue({...data,workspaceRoot:'',folders:[{id:'taro',name:'taro',path:''}]});
+    io.stream.mockResolvedValueOnce([{id:'search',name:'WebSearch',arguments:'{"query":"css"}'}]).mockResolvedValueOnce([{id:'fetch',name:'WebFetch',arguments:'{"url":"https://example.com/a"}'}]).mockImplementationOnce(async(_request,delta)=>{delta('Read the page.');return [];});
+    io.execute.mockImplementation(async(tool)=>tool.name==='WebSearch'?{text:'Source A',artifact:{kind:'web-search',query:'css',sources:[{url:'https://example.com/a',title:'A'}]}}:{text:'Page A',artifact:{kind:'web-fetch',requestedUrl:'https://example.com/a',finalUrl:'https://example.com/a',title:'A',content:'Readable page'}});
+    await send();
+    expect(io.stream.mock.calls[0][0].tools.map((t:{function:{name:string}})=>t.function.name)).toEqual(expect.arrayContaining(['WebSearch','WebFetch']));
+    expect(io.execute.mock.calls.map(([tool])=>tool.name)).toEqual(['WebSearch','WebFetch']);
+    expect(io.view!.thread.messages.filter(m=>m.role==='activity-group').flatMap(m=>m.activities).find(a=>a.web?.kind==='web-search')?.web).toMatchObject({sources:[{read:true}]});
+    expect(io.view!.thread.messages.some(m=>m.role==='permission')).toBe(false);
+  });
   it('shares discovered skills with the slash menu and the first agent request without a Settings toggle',async()=>{
     vi.mocked(invoke).mockImplementation(async(command)=>command==='discover_installed_skills'?[{name:'review',description:'Review workspace changes',path:'A:/taro/.taro/skills/review/SKILL.md',source:'Taro workspace'}]:[]);
     io.stream.mockResolvedValue([]);

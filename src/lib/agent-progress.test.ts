@@ -4,6 +4,10 @@ import { beginToolRound } from "./tool-transcript";
 import type { ChatMessage } from "@/data/mock";
 
 describe("observable generation progress",()=>{
+  it('settles persisted running web rows after restart',()=>{
+    const result=recoverThoughts([{id:'g',role:'activity-group',summary:'Using tools',activities:[{id:'s',kind:'web-search',label:'Searching the web…',status:'running',web:{kind:'web-search',query:'css',provider:'DuckDuckGo',sources:[]}}]}]);
+    expect((result[0] as Extract<ChatMessage,{role:'activity-group'}>).activities[0].status).toBe('interrupted');
+  });
   it("keeps one run clock across tool rounds and freezes it on stop",()=>{
     const started=startThought("run","planner",1000);
     const waiting=advanceThought(started,"Waiting for approval…","Waiting for Edit permission",2200);

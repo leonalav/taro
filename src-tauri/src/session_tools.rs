@@ -198,6 +198,8 @@ fn guard_session(
     if matches!(
         name,
         "Read"
+            | "WebSearch"
+            | "WebFetch"
             | "ListFiles"
             | "Glob"
             | "Grep"
@@ -287,6 +289,14 @@ pub async fn execute(
         .lock()
         .map_err(|_| "Session registry is unavailable")?;
     guard_session(root, registry.get(&key), name, input)?;
+    if name == "EnterWorktree" && approved {
+        if let Some(path) = input.get("resume_path").and_then(Value::as_str) {
+            let path = fs::canonicalize(path).map_err(|e| format!("Retained worktree is unavailable: {e}"))?;
+            if registry.values().any(|entry| entry.worktree.as_ref().is_some_and(|worktree| worktree.path == path)) {
+                return Err("The retained worktree is still assigned to another active scope.".into());
+            }
+        }
+    }
     let session = registry.entry(key.clone()).or_default();
     match name {
         "EnterPlanMode" => {
@@ -735,6 +745,27 @@ fn enter_worktree(
         .trim()
         .to_owned();
     let common_dir = git_path(root, "--git-common-dir")?;
+    if let Some(value) = input.get("resume_path") {
+        let requested = value.as_str().ok_or("resume_path must be an absolute worktree path")?;
+        if !Path::new(requested).is_absolute() {
+            return Err("resume_path must be an absolute worktree path".into());
+        }
+        let path = fs::canonicalize(requested).map_err(|e| format!("Retained worktree is unavailable: {e}"))?;
+        let id = path.file_name().and_then(|name| name.to_str()).ok_or("Invalid retained worktree name")?;
+        let branch = format!("taro/{id}");
+        let worktree = Worktree { path, branch, original_head, common_dir };
+        validate_worktree(root, &worktree)?;
+        let active_branch = git(&worktree.path, &["symbolic-ref", "--quiet", "--short", "HEAD"])?;
+        if active_branch.trim() != worktree.branch {
+            return Err("The retained worktree is no longer on its Taro branch.".into());
+        }
+        let output = result(
+            format!("Reopened retained worktree at {}.", worktree.path.display()),
+            json!({"kind":"worktree","action":"resume","worktreePath":worktree.path,"worktreeBranch":worktree.branch,"originalRoot":root,"originalHead":worktree.original_head,"active":true}),
+        );
+        session.worktree = Some(worktree);
+        return Ok(output);
+    }
     let name = input
         .get("name")
         .and_then(Value::as_str)
@@ -1188,6 +1219,8 @@ mod tests {
             fs::canonicalize(&path).unwrap()
         );
         assert_eq!(effective_root(&root, "another-chat").unwrap(), root);
+        let resume = json!({"resume_path":path});
+        assert!(execute("EnterWorktree", &resume, &root, "takeover", true).await.is_err());
         assert!(execute("EnterWorktree", &json!({}), &root, "keep", true)
             .await
             .is_err());
@@ -1202,6 +1235,14 @@ mod tests {
         .unwrap();
         assert!(path.exists());
         assert_eq!(effective_root(&root, "keep").unwrap(), root);
+        fs::write(path.join("tracked.txt"), "retained edit").unwrap();
+        assert!(execute("EnterWorktree", &resume, &root, "takeover", false).await.is_err());
+        let resumed = execute("EnterWorktree", &resume, &root, "takeover", true).await.unwrap();
+        assert_eq!(resumed.artifact["action"], "resume");
+        assert_eq!(effective_root(&root, "takeover").unwrap(), path);
+        assert_eq!(fs::read_to_string(path.join("tracked.txt")).unwrap(), "retained edit");
+        execute("ExitWorktree", &json!({"action":"keep"}), &root, "takeover", false).await.unwrap();
+        fs::write(path.join("tracked.txt"), "original").unwrap();
         git(
             &root,
             &["show-ref", "--verify", &format!("refs/heads/{branch}")],

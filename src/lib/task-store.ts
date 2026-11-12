@@ -1,6 +1,16 @@
 import type {ChatMessage,Task} from '@/data/mock';
 
 export interface WorkspaceTask extends Task {
+  designJob?: import('./design-job').DesignJob;
+  reviewItem?: {
+    scope: import('./review-store').ReviewScope;
+    previewId: string;
+    revisionId: string;
+    workingRevisionId?: string;
+    threadId: string;
+    anchor: import('./review-store').ReviewAnchor;
+    resolved: boolean;
+  };
   messages:ChatMessage[];
   createdAt:number;
   updatedAt:number;
@@ -18,7 +28,7 @@ export function createTask(title:string,id:string=crypto.randomUUID()):Workspace
   const timestamp=Date.now();
   return {id,title:title.trim(),description:title.trim(),priority:'Medium',severity:'Medium',details:title.trim(),solution:['Inspect the relevant workspace files and confirm the requested result.','Implement the change and verify its behavior.'],tags:[],status:'To Do',messages:[],createdAt:timestamp,updatedAt:timestamp,attempts:0};
 }
-export function restoreTasks(raw:string|null):WorkspaceTask[]{
+export function restoreTasks(raw:string|null,recover=true):WorkspaceTask[]{
   if(raw===null)return [];
   const parsed:unknown=JSON.parse(raw);
   if(!Array.isArray(parsed))throw Error('Invalid task board data; the saved data was preserved.');
@@ -35,8 +45,8 @@ export function restoreTasks(raw:string|null):WorkspaceTask[]{
       if(message.role==='user'&&!Array.isArray(message.segments))throw Error('Invalid saved task prompt; the saved data was preserved.');
       if(message.role==='agent'&&typeof message.text!=='string')throw Error('Invalid saved response; the saved data was preserved.');
     }
-    const messages=task.messages.map(message=>message.role==='permission'&&message.live&&!message.decision?{...message,decision:{label:'Interrupted',allowed:false,target:'tool' as const,duration:'once' as const}}:message.role==='subagent'&&message.status==='running'?{...message,status:'stopped' as const,result:message.result||'Interrupted when the application closed.'}:message.role==='activity-group'?{...message,activities:message.activities.map(activity=>activity.status==='running'?{...activity,status:'failed' as const,errorTrace:'Interrupted when the application closed. Check the workspace before retrying.'}:activity)}:message);
-    if(task.status==='In Progress')return {...task,messages,status:'Failed',error:'Execution was interrupted. Outputs and artifacts are preserved. Review the workspace before retrying.'};
+    const messages=!recover?task.messages:task.messages.map(message=>message.role==='permission'&&message.live&&!message.decision?{...message,decision:{label:'Interrupted',allowed:false,target:'tool' as const,duration:'once' as const}}:message.role==='subagent'&&message.status==='running'?{...message,status:'stopped' as const,result:message.result||'Interrupted when the application closed.'}:message.role==='activity-group'?{...message,activities:message.activities.map(activity=>activity.status==='running'?{...activity,status:'failed' as const,errorTrace:'Interrupted when the application closed. Check the workspace before retrying.'}:activity)}:message);
+    if(recover&&task.status==='In Progress')return {...task,messages,status:'Failed',error:'Execution was interrupted. Outputs and artifacts are preserved. Review the workspace before retrying.'};
     return {...task,messages,status:(task.status as string)==='Backlog'?'To Do':task.status};
   }).map((task,index,tasks)=>{if(tasks.findIndex(other=>other.id===task.id)!==index)throw Error('Duplicate saved task identity; the saved data was preserved.');return task;});
 }
@@ -50,7 +60,7 @@ export function createTaskRepository(storage:TaskStorage){
   const publish=(workspace:string,value:TaskSnapshot)=>{snapshots.set(workspace,value);listeners.forEach(listener=>listener());};
   const load=(workspace:string):Promise<void>=>{
     const previous=loads.get(workspace);if(previous)return previous;
-    const promise=(async()=>{try{const tasks=restoreTasks(await storage.read(workspace));publish(workspace,{tasks,loaded:true});}catch(error){publish(workspace,{tasks:[],loaded:false,error:`Could not read saved tasks: ${String(error)}`});loads.delete(workspace);}})();
+    const promise=(async()=>{try{const tasks=restoreTasks(await storage.read(workspace),!snapshot(workspace).loaded);publish(workspace,{tasks,loaded:true});}catch(error){publish(workspace,{tasks:[],loaded:false,error:`Could not read saved tasks: ${String(error)}`});loads.delete(workspace);}})();
     loads.set(workspace,promise);return promise;
   };
   const change=(workspace:string,update:(tasks:WorkspaceTask[])=>WorkspaceTask[])=>{
@@ -63,7 +73,7 @@ export function createTaskRepository(storage:TaskStorage){
     });
     queues.set(workspace,promise);return promise;
   };
-  return {snapshot,load,retrySave:(workspace:string)=>change(workspace,tasks=>tasks),subscribe:(listener:()=>void)=>{listeners.add(listener);return()=>{listeners.delete(listener);};},
+  return {snapshot,load,change,retrySave:(workspace:string)=>change(workspace,tasks=>tasks),subscribe:(listener:()=>void)=>{listeners.add(listener);return()=>{listeners.delete(listener);};},
     add:(workspace:string,task:WorkspaceTask)=>change(workspace,tasks=>{if(tasks.some(t=>t.id===task.id))throw Error('Task ID already exists.');return [task,...tasks];}),
     mutate:(workspace:string,id:string,update:(task:WorkspaceTask)=>WorkspaceTask)=>change(workspace,tasks=>{if(!tasks.some(t=>t.id===id))throw Error('Task was not found in this workspace.');return tasks.map(task=>task.id===id?{...update(task),updatedAt:Date.now()}:task);}),
     flush:(workspace:string)=>queues.get(workspace)??Promise.resolve(),

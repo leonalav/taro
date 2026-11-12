@@ -81,6 +81,20 @@ export interface SkeletalLayerData {
   mediaId?: string;
   mediaUrl?: string;
   mediaPoster?: string;
+  locked?: boolean;
+  lineReverse?: boolean;
+}
+
+/** Visual feedback is stored separately from layout geometry. Coordinates use artboard pixels. */
+export interface LayoutAnnotation {
+  id: string;
+  kind: "pen" | "arrow" | "highlight" | "note";
+  points: { x: number; y: number }[];
+  color: string;
+  width: number;
+  text?: string;
+  layerId?: string;
+  resolved: boolean;
 }
 
 /** A permission grant for an MCP tool call. */
@@ -116,10 +130,11 @@ export interface Segment {
   attachment?: { id: string; name: string; mime: string; size: number; dataUrl?: string; text?: string };
 }
 
-export type ActivityKind = "file-read" | "file-list" | "file-edit" | "terminal" | "search" | "skill" | "mcp" | "plugin" | "browser" | "foundation";
-export type ActivityStatus = "done" | import("./foundation").FoundationState;
+export type ActivityKind = "file-read" | "file-list" | "file-edit" | "terminal" | "search" | "skill" | "mcp" | "plugin" | "browser" | "foundation" | "web-search" | "web-fetch";
+export type ActivityStatus = "done" | "stopped" | import("./foundation").FoundationState;
 
 export interface ToolActivity {
+  web?: import("@/lib/web-research").WebActivity;
   foundation?: import("./foundation").Operation;
   id: string;
   kind: ActivityKind;
@@ -166,7 +181,7 @@ export type ChatMessage =
       onceOnly?: boolean;
       decision?: PermissionChoice;
     }
-  | { id: string; role: "activity-group"; summary: string; activities: ToolActivity[]; startedAt?: number; foundationGallery?: ToolActivity[] }
+  | { id: string; role: "activity-group"; agentId?: string; summary: string; activities: ToolActivity[]; startedAt?: number; foundationGallery?: ToolActivity[] }
   | {
       id: string;
       role: "subagent";
@@ -217,6 +232,9 @@ export type ChatMessage =
       frames?: number;
       accepted?: boolean;
       layers?: SkeletalLayerData[];
+      annotations?: LayoutAnnotation[];
+      layoutPreviewId?: string;
+      layoutRevisionId?: string;
       width?: number;
       height?: number;
     };

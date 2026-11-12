@@ -4,6 +4,25 @@ import {createTaskExecutor} from './task-runtime';
 import {defaultSettings} from '@/data/settings';
 
 describe('task-owned execution',()=>{
+  it('starts the Designer on the same board task when the task is an interface build',async()=>{
+    const workspace='path:a:/test';
+    let saved:string|null=null;
+    const repository=createTaskRepository({read:async()=>saved,write:async(_key,value)=>{saved=value;}});
+    await repository.add(workspace,createTask('Build a responsive dashboard','design'));
+    const stream=vi.fn(async()=>[]);
+    const native=vi.fn(async()=>({text:'Authorized',artifact:{kind:'agent-authorization',workspaceRoot:'A:/test'}}));
+    const executor=createTaskExecutor(repository,{stream,native,stop:async()=>{},listMcp:async()=>({tools:[]})});
+    const agents=['Orchestrator','Designer','Code','Type & QA'].map(role=>({id:role,name:role,role,model:'m',enabled:true,autonomy:'auto' as const,canWriteCode:true}));
+    const settings={...defaultSettings,agents,models:{...defaultSettings.models,customModels:[{id:'m',label:'m',endpoint:'http://localhost/v1'}],defaultModel:'m'}};
+    vi.stubGlobal('localStorage',{getItem:()=>null});
+    try{await executor.start(workspace,'design','A:/test',settings);}
+    finally{vi.unstubAllGlobals();}
+    const [task]=repository.snapshot(workspace).tasks;
+    expect(repository.snapshot(workspace).tasks).toHaveLength(1);
+    expect(task.designJob).toMatchObject({phase:'interrupted',brief:expect.stringContaining('Build a responsive dashboard')});
+    expect(task.error).toContain('structured handoff');
+    expect(task.messages).toContainEqual(expect.objectContaining({role:'subagent',subagentType:'Designer'}));
+  });
   it('stops a stalled model and preserves its partial text',async()=>{
     const repository=createTaskRepository({read:async()=>null,write:async()=>{}});await repository.load('root');await repository.add('root',createTask('Stop','stop'));
     let started=false;

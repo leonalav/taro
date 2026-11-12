@@ -9,6 +9,7 @@ mod workspace_explorer;
 mod terminals;
 mod workspace_watch;
 mod source_control;
+mod review_browser;
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Mutex};
@@ -203,11 +204,13 @@ fn main() {
             Ok(())
         })
         .manage(Streams::default())
+        .manage(review_browser::ReviewBrowser::default())
         .manage(workspace_watch::WorkspaceWatches::default())
         .manage(terminals::TerminalManager::default())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
         .invoke_handler(tauri::generate_handler![
+            review_browser::review_browser,
             taro::skill_imports::discover_installed_skills,
             taro::skill_imports::import_installed_skill,
             source_control::ipc::sc_status,
@@ -261,12 +264,14 @@ fn main() {
             delete_model_key,
             has_model_key,
             execute_agent_tool,
+            open_web_link,
             list_mcp_tools
         ])
         .build(tauri::generate_context!())
         .expect("error while building Taro desktop app")
         .run(|app, event| {
             if matches!(event, tauri::RunEvent::Exit) {
+                app.state::<review_browser::ReviewBrowser>().close_all();
                 app.state::<terminals::TerminalManager>().close_all();
             }
         });
@@ -288,6 +293,24 @@ async fn execute_agent_tool(
     let result = tokio::select! {_=token.cancelled()=>Err("Tool execution stopped".into()),result=agent_tools::execute(request)=>result};
     streams.0.lock().map_err(|e| e.to_string())?.remove(&id);
     result
+}
+
+#[tauri::command]
+fn open_web_link(url: String) -> Result<(), String> {
+    let url = taro::web_transport::validate_url(&url)?;
+    #[cfg(target_os = "windows")]
+    let mut command = {
+        use std::os::windows::process::CommandExt;
+        let mut command = std::process::Command::new("explorer.exe");
+        command.creation_flags(0x08000000);
+        command
+    };
+    #[cfg(target_os = "macos")]
+    let mut command = std::process::Command::new("open");
+    #[cfg(not(any(target_os = "windows", target_os = "macos")))]
+    let mut command = std::process::Command::new("xdg-open");
+    command.arg(url.as_str()).spawn().map_err(|e|format!("Cannot open default browser: {e}"))?;
+    Ok(())
 }
 
 #[tauri::command]

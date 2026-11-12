@@ -1,6 +1,6 @@
 # Web research tools and source artifact
 
-Status: proposed; awaiting user approval. Date: 2026-11-10.
+Status: approved by the user on 2026-11-10. Date: 2026-11-10.
 
 Builder check: an independent reviewer found no important unanswered questions. Interactive static mockup: `.verification-2026-11-10/web-research/content/search-artifact.html`.
 
@@ -16,6 +16,8 @@ Success means an agent can search, read a selected public page, use its returned
 2. Configurable search service with native page fetching: considered; adds provider setup and possible costs. Deferred.
 
 DuckDuckGo's non-JavaScript search is the source of ranked results. Its Instant Answer endpoint is not a substitute for general web search. No automatic switch to a different search engine.
+
+Implementation decision: use DuckDuckGo's Lite HTML endpoint. Native smoke testing observed a bot challenge from the main HTML endpoint and successful organic results from Lite; both use the selected DuckDuckGo engine and HTML approach.
 
 ## Tools and integration
 

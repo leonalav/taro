@@ -1,4 +1,5 @@
 import {terminalLogText} from "@/lib/terminal-output";
+import {WebResearchRow} from './web-research-row';
 import * as React from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -48,6 +49,7 @@ import {
 } from "@/data/mock";
 import { cn } from "@/utils/cn";
 import { findColors } from "@/lib/color";
+import { annotationSvg } from "@/lib/layout-designer";
 import { MentionChip } from "@/components/mention-chip";
 import { useSettings } from "@/components/settings/settings-context";
 import { editedSegments } from "@/lib/chat-history";
@@ -488,6 +490,8 @@ const activityIcons: Record<ActivityKind, LucideIcon> = {
   "file-edit": FileCode,
   terminal: Terminal,
   search: FileSearch,
+  'web-search': FileSearch,
+  'web-fetch': FileText,
   skill: Brain,
   mcp: GitBranch,
   plugin: Plug,
@@ -554,6 +558,7 @@ function ActivityGroup({
       <div id={bodyId} hidden={!open} className="min-w-0 border-t border-border px-3 py-1.5">
         {gallery&&<FoundationGallery activities={gallery}/>}
         {activities.map((activity) => {
+          if(activity.web)return <WebResearchRow key={activity.id} activity={activity}/>;
           if(activity.foundation)return <FoundationRow key={activity.id} operation={activity.foundation} onOpenDocument={activity.foundation.kind==="design-plan"?onOpenDocument:undefined}/>;
           const Icon = activityIcons[activity.kind];
           return (
@@ -894,11 +899,13 @@ function SkeletalPreview({
   layers,
   width,
   height,
+  annotations,
 }: {
   variant: "hero" | "cards" | "dashboard";
   layers?: Extract<ChatMessage, { role: "skeletal" }>["layers"];
   width?: number;
   height?: number;
+  annotations?: Extract<ChatMessage, { role: "skeletal" }>["annotations"];
 }) {
   const stageWidth = width ?? 520;
   const stageHeight = height ?? 330;
@@ -907,7 +914,7 @@ function SkeletalPreview({
   return (
     <div className="relative w-full overflow-hidden rounded-lg border border-border bg-[#0b0b0d]" style={{ aspectRatio: `${stageWidth} / ${stageHeight}` }}>
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.035)_1px,transparent_1px),linear-gradient(rgba(255,255,255,0.035)_1px,transparent_1px)] [background-size:12px_12px]" />
-      {visibleLayers.length ? visibleLayers.map((layer) => {
+      {layers ? visibleLayers.map((layer) => {
         if (layer.hidden) return null;
         if (layer.kind === "background") return (
           <div key={layer.id} className="absolute inset-0" style={{ zIndex: layer.z, opacity: layer.opacity / 100 }}>
@@ -922,11 +929,11 @@ function SkeletalPreview({
             left: `${layer.x / stageWidth * 100}%`, top: `${layer.y / stageHeight * 100}%`,
             width: `${layer.w / stageWidth * 100}%`, height: `${layer.h / stageHeight * 100}%`,
             opacity: layer.opacity / 100, transform: `rotate(${layer.rotation}deg)`,
-            background: layer.noFill ? "transparent" : layer.fill,
-            border: layer.kind === "line" ? 0 : `${Math.max(0.5, layer.strokeWidth)}px ${layer.dashed ? "dashed" : "solid"} ${layer.stroke}`,
+            background: layer.noFill || layer.kind === "triangle" || layer.kind === "line" ? "transparent" : layer.fill,
+            border: layer.kind === "line" || layer.kind === "triangle" ? 0 : `${Math.max(0.5, layer.strokeWidth)}px ${layer.dashed ? "dashed" : "solid"} ${layer.stroke}`,
             borderRadius: layer.kind === "circle" ? "50%" : layer.kind === "rect" ? layer.radius : 0,
           }} className={cn("flex items-center justify-center", layer.kind === "line" && "border-t")}>
-            {layer.kind === "triangle" && <span className="absolute inset-0 m-auto h-0 w-0 border-x-[18px] border-x-transparent border-b-[30px] border-b-white/15" />}
+            {(layer.kind === "triangle" || layer.kind === "line") && <svg className="pointer-events-none absolute inset-0 size-full overflow-visible" viewBox={`0 0 ${layer.w} ${layer.h}`} preserveAspectRatio="none" aria-hidden="true">{layer.kind === "triangle" ? <polygon points={`${layer.w / 2},1 ${layer.w - 1},${layer.h - 1} 1,${layer.h - 1}`} fill={layer.noFill ? "none" : layer.fill} stroke={layer.stroke} strokeWidth={layer.strokeWidth} strokeDasharray={layer.dashed ? "4 3" : undefined}/> : <line x1={0} y1={layer.lineReverse ? layer.h : 0} x2={layer.w} y2={layer.lineReverse ? 0 : layer.h} stroke={layer.stroke} strokeWidth={layer.strokeWidth}/>}</svg>}
             {layer.showLabel && layer.label && <span className="relative z-10 max-w-full truncate px-1 text-center text-[clamp(5px,1.1vw,9px)] tracking-[0.15em] text-violet-200/90" style={{ fontFamily: layer.fontFamily, fontSize: `clamp(5px, ${layer.fontSize / stageWidth * 100}vw, 9px)`, fontWeight: layer.fontWeight, lineHeight: layer.lineHeight, letterSpacing: `${Math.max(0.3, layer.letterSpacing / 3)}px` }}>{layer.label}</span>}
           </div>
         );
@@ -941,6 +948,7 @@ function SkeletalPreview({
           </> : <div className="grid flex-1 grid-cols-3 gap-1.5">{Array.from({length: variant === "cards" ? 6 : 4}, (_,i)=><div key={i} className="rounded border border-dashed border-violet-400/50 bg-violet-400/[0.035]" />)}</div>}
         </div>
       )}
+      {annotations?.length ? <svg className="pointer-events-none absolute inset-0 z-[1000] size-full" viewBox={`0 0 ${stageWidth} ${stageHeight}`} aria-label="Saved visual feedback" dangerouslySetInnerHTML={{ __html: annotations.map((annotation, index) => annotationSvg(annotation, index + 1)).join("") }}/> : null}
     </div>
   );
 }
@@ -975,7 +983,7 @@ function SkeletalCard({
       </div>
 
       <div className="p-3.5">
-        <SkeletalPreview variant={message.variant} layers={message.layers} width={message.width} height={message.height} />
+        <SkeletalPreview variant={message.variant} layers={message.layers} annotations={message.annotations} width={message.width} height={message.height} />
 
         {loading ? (
           <div className="mt-3 space-y-2" aria-live="polite">
@@ -988,6 +996,7 @@ function SkeletalCard({
             <p className="mt-3 text-[14px] font-medium text-foreground">{message.title}</p>
             <p className="mt-0.5 text-[11px] text-muted-foreground">
               Skeletal wireframe · {message.layers?.filter((layer) => layer.kind !== "background").length ?? 8} blocks · {message.width ?? 520}×{message.height ?? 330} · tokens carried over
+              {message.annotations?.length ? ` · ${message.annotations.filter(annotation => !annotation.resolved).length} open annotations` : ""}
             </p>
             <div className="mt-3 flex items-center gap-2">
               <Button size="sm" onClick={() => onAccept?.(message.id)} disabled={message.accepted}>

@@ -31,6 +31,8 @@ Include one Design Plan document named **Agent foundation artifacts**, backed by
 
 ## Shared row contract
 
+Scope: these restrictions govern Taro's operational chat rows only. Generated product canvases follow the independent [artifact design system](../../artifact-design-system.md), project style memory and user brand direction.
+
 - Reuse the incumbent dark surfaces, Geist/Geist Mono, purple Taro accent, semantic status colors, border token, 3.5-size icons and chevrons. Group header uses current `px-3 py-2.5 text-[13px]`; row body uses current `gap-2.5 py-1.5 text-xs`. Do not add gradients, decorative illustrations, oversized headers, new shadows or status badge walls.
 - A collapsed row shows operation icon, concise verb and subject, one status, optional duration/count, and disclosure chevron. One optional muted detail line. Full paths, IDs, diagnostics, usage and multiple actions belong inside the expanded body. Truncate visually while retaining accessible full text; wrap long paths in expanded details.
 - Group all operations sharing a run/tool-batch boundary. Preserve narration order; do not group across assistant prose, user decisions or unrelated runs. Lifecycle updates replace the same row ID, never append a row per progress tick. Runtime system activities count as **activities**, not falsely as tools.

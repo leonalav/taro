@@ -460,10 +460,10 @@ fn shell_command(shell: &str) -> Result<CommandBuilder, String> {
 // A kill-on-close job contains the shell and processes launched from it. This
 // avoids leaving build tools or interactive programs behind when a tab/app closes.
 #[cfg(windows)]
-struct ProcessJob(std::os::windows::io::OwnedHandle);
+pub(crate) struct ProcessJob(std::os::windows::io::OwnedHandle);
 #[cfg(windows)]
 impl ProcessJob {
-    fn attach(process: Option<std::os::windows::io::RawHandle>) -> Result<Self, String> {
+    pub(crate) fn attach(process: Option<std::os::windows::io::RawHandle>) -> Result<Self, String> {
         use std::{
             mem::{size_of, zeroed},
             os::windows::io::{AsRawHandle, FromRawHandle},
