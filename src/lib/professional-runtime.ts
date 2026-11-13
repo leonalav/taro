@@ -37,6 +37,7 @@ export interface RuntimeOptions {
   approve:(call:ToolCall,input:Record<string,unknown>,request:ToolApproval)=>Promise<boolean>;
   emit:(message:ChatMessage)=>void;
   updateChild:(childId:string,patch:Partial<SubagentMessage>)=>void;
+  observeWorkflowTool?:(call:ToolCall,input:Record<string,unknown>,execute:()=>Promise<ToolOutput>)=>Promise<ToolOutput>;
 }
 interface SessionState {catalog:DeferredToolCatalog;allowedTools?:ReadonlySet<string>;planPath?:string;worktreeRoot?:string}
 interface ChildTask {
@@ -107,12 +108,14 @@ export class ProfessionalToolRuntime {
     return !!agent?.enabled&&this.options.models.some(model=>model.id===agent.model||model.label===agent.model)&&
       (!requiresWrite||agent.canWriteCode&&agent.autonomy!=="suggest");
   }
-  kickoff(brief:string,options:{hasReferences?:boolean}={}):ToolCall|undefined{
+  kickoff(brief:string,options:{hasReferences?:boolean;taskTitle?:string;inspectBuild?:boolean}={}):ToolCall|undefined{
     if(this.workflowStarted||this.rootOwner.signal.aborted)return;
     const intent=workflowIntent(brief);
     this.delegationDisabled=intent.solo;
     this.delegationApprovalRequired=intent.askBeforeDelegating;
-    if(intent.discussion)return;
+    const titleIntent=options.taskTitle?workflowIntent(options.taskTitle):undefined;
+    const designBuild=intent.designBuild||Boolean(titleIntent?.designBuild&&!intent.discussion&&!intent.proposalRequested);
+    if(intent.discussion&&!designBuild)return;
     if(intent.askBeforeDelegating){
       this.workflowNote="The user asked to approve delegation before it starts. Ask for that decision before involving a specialist.";
       return;
@@ -134,28 +137,29 @@ export class ProfessionalToolRuntime {
         this.workflowNote=`The requested ${intent.specialist} specialist is unavailable. Explain the missing workspace, permissions or model configuration instead of claiming delegation.`;
       }else return schedule("Agent",{description:`${intent.specialist} handoff`,prompt:brief,subagent_type:intent.specialist,read_only:intent.specialist==="Designer"||intent.specialist==="Type & QA"},"The runtime delegated the explicitly requested specialist. Use the returned evidence to finish the request.");
     }
-    if(intent.designBuild&&!intent.solo&&!intent.specialist&&ready){
-      const title=brief.trim().split(/\r?\n/,1)[0].slice(0,160);
+    if(designBuild&&!intent.solo&&!intent.specialist&&ready){
+      const title=(options.taskTitle??brief.trim().split(/\r?\n/,1)[0]).slice(0,160);
       if(brief.length<=6000)return schedule("DesignJob",{action:"start",title,brief,...(intent.inPlace?{worktree:false}:{})},"The runtime started the Designer → Code → QA relay. Report its actual result. If blocked or interrupted, surface the blocker and retained job instead of bypassing approval or repeating work.");
       this.workflowNote="The visual brief exceeds the DesignJob input limit. Condense it into a faithful brief with all constraints, then call DesignJob.";
     }
     if(intent.designDraft&&!intent.solo&&!intent.specialist&&this.options.workspaceRoot&&this.specialistReady("Designer")&&roleKey(this.role(this.rootOwner)?.role??"")!=="designer"){
       return schedule("Agent",{description:"Designer proposal",prompt:`Produce a design proposal using ArtifactDesign and incumbent workspace styles. Include semantic token roles, component states, breakpoints and verification criteria. User request: ${brief}`,subagent_type:"Designer",read_only:true},"The runtime started a Designer proposal. Present the actual design decisions and retain the user's scope.");
     }
-    if(intent.delegation&&!intent.solo&&!intent.specialist&&this.options.workspaceRoot){
+    if((intent.delegation||options.inspectBuild)&&!intent.solo&&!intent.specialist&&this.options.workspaceRoot){
       const specialist:Specialist[]=intent.visual?["Designer","Type & QA","Code","Orchestrator"]:["Type & QA","Designer","Code","Orchestrator"];
       const role=specialist.find(type=>this.specialistReady(type));
-      if(role||!this.options.agents)return schedule("Agent",{description:"Independent workspace inspection",prompt:`Inspect the relevant files and return concrete findings, constraints and verification steps for the parent. User request: ${brief}`,subagent_type:role??"Explore",read_only:true},"The runtime started an independent inspection. Use the child result and delegate further only where it advances the work.");
+      if(role||!this.options.agents)return schedule("Agent",{description:"Independent workspace inspection",prompt:`Use ListFiles, Glob or Grep to locate the relevant files, then Read the files and tests needed to ground your findings. Return concrete file paths, constraints and verification steps for the parent. User request: ${brief}`,subagent_type:role??"Explore",read_only:true},"Use the independent inspection result to plan the work and delegate further where it advances the request.");
       this.workflowNote="No enabled specialist has a configured model. Report the configuration gap when explaining why delegation did not run.";
     }
     if(intent.visual){
       return schedule("ArtifactDesign",{action:"read"},this.workflowNote??(
-        intent.designBuild&&!intent.solo&&!ready
+        designBuild&&!intent.solo&&!ready
           ?"The full design relay needs a writable workspace, no active plan and enabled Designer, Code and Type & QA models. Use the loaded project contract within the current permissions and report any unavailable stage."
           :"The runtime loaded the project design contract. Use its semantic tokens, components and responsive rules for the requested visual work."
       ));
     }
   }
+  kickoffStatus(){return this.workflowNote;}
   async reserveModelRequest(requestId:string,kind:"model"|"child"="model"){
     if(this.controller.signal.aborted)throw stopped();
     if(this.remainingRequests<=0)throw Error("The parent and its agents exhausted their shared 128-request budget.");
@@ -420,7 +424,11 @@ export class ProfessionalToolRuntime {
     if(activeDesignJobs.has(workspace))throw Error("This workspace already has an active design job.");
     activeDesignJobs.set(workspace,{id:task.id,stop:()=>this.stopAll()});
     const parent={...owner,reviewScope:scope};
-    const call=(name:string,args:Record<string,unknown>)=>this.executeFor({name,id:uid("design"),arguments:JSON.stringify(args)},args,parent);
+    const call=(name:string,args:Record<string,unknown>)=>{
+      const tool={name,id:uid("design"),arguments:JSON.stringify(args)};
+      const execute=()=>this.executeFor(tool,args,parent);
+      return this.options.observeWorkflowTool?.(tool,args,execute)??execute();
+    };
     const services=this.options.reviewServices??defaultReviewServices;
     const designs=this.options.artifactServices?.repository??services.designRepository;
     let createdWorktree=false;
@@ -525,8 +533,14 @@ export class ProfessionalToolRuntime {
         const previousPreviews=job.code?[...job.previousPreviews??[],job.code].slice(-12):job.previousPreviews;
         await persist({phase:"qa",code,previousPreviews,auditId:undefined,verdict:undefined});
         const review=async(name:string,args:Record<string,unknown>)=>{
-          const output=await executeReviewTool(name,{...args,preview_id:code.previewId,expected_revision_id:code.revisionId},{scope,author:"Taro",role:"QA",signal:owner.signal},services);
-          assertRevision(code);
+          const input={...args,preview_id:code.previewId,expected_revision_id:code.revisionId};
+          const tool={name,id:uid("design-review"),arguments:JSON.stringify(input)};
+          const execute=async()=>{
+            const output=await executeReviewTool(name,input,{scope,author:"Taro",role:"QA",signal:owner.signal},services);
+            assertRevision(code);
+            return output;
+          };
+          const output=await (this.options.observeWorkflowTool?.(tool,input,execute)??execute());
           return JSON.parse(output.text);
         };
         const widths=[{width:393,height:852},{width:768,height:1024},{width:1440,height:900}];
