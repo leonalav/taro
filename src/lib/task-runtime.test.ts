@@ -4,11 +4,39 @@ import {createTaskExecutor} from './task-runtime';
 import {defaultSettings} from '@/data/settings';
 
 describe('task-owned execution',()=>{
+  it('inspects the workspace, delegates investigation, and persists a build plan before writing',async()=>{
+    const repository=createTaskRepository({read:async()=>null,write:async()=>{}});
+    await repository.add('root',createTask('Fix input validation','build'));
+    const agents=['Orchestrator','Type & QA'].map(role=>({id:role,name:role,role,model:'m',enabled:true,autonomy:'auto' as const,canWriteCode:true}));
+    const settings={...defaultSettings,agents,models:{...defaultSettings.models,customModels:[{id:'m',label:'m',endpoint:'http://localhost/v1'}],defaultModel:'m'}};
+    const native=vi.fn(async(call:{name:string})=>call.name==='Agent'
+      ?{text:'Authorized',artifact:{kind:'agent-authorization',workspaceRoot:'A:/test'}}
+      :{text:'src/validation.ts',artifact:{kind:'file-list'}});
+    const stream=vi.fn().mockResolvedValueOnce([{id:'child-read',name:'Read',arguments:'{"file_path":"src/validation.ts"}'}])
+      .mockImplementationOnce(async(_input,delta)=>{delta('Validation is in src/validation.ts.');return [];})
+      .mockResolvedValueOnce([{id:'early-write',name:'Write',arguments:'{"file_path":"src/validation.ts","content":"changed"}'}])
+      .mockResolvedValueOnce([{id:'plan',name:'TaskUpdate',arguments:JSON.stringify({priority:'Medium',tags:['validation'],description:'Fix validation',details:'Reject invalid input.',solution:['Inspect src/validation.ts.','Update validation and run its tests.']})}])
+      .mockResolvedValueOnce([{id:'done',name:'TaskComplete',arguments:'{"whatWasDone":"Checked validation","finalProduct":"Validation checked"}'}]);
+    const executor=createTaskExecutor(repository,{stream,native,stop:async()=>{},listMcp:async()=>({tools:[]})});
+    const running=executor.start('root','build','A:/test',settings);
+    try{
+      await vi.waitFor(()=>expect(executor.active('root','build')).toBe(false));
+      await running;
+    }finally{await executor.stop('root','build');}
+    const [task]=repository.snapshot('root').tasks;
+    expect(native.mock.calls.map(([call])=>call.name)).toContain('ListFiles');
+    expect(native.mock.calls.map(([call])=>call.name)).not.toContain('Write');
+    expect(task.messages).toContainEqual(expect.objectContaining({role:'subagent',status:'completed',activities:expect.arrayContaining([expect.objectContaining({id:'child-read',status:'done'})])}));
+    expect(task.messages).toContainEqual(expect.objectContaining({role:'plan',markdown:expect.stringContaining('src/validation.ts')}));
+    expect(task.messages).toContainEqual(expect.objectContaining({role:'activity-group',activities:expect.arrayContaining([expect.objectContaining({label:expect.stringContaining('ListFiles'),status:'done'})])}));
+    expect(task.messages).toContainEqual(expect.objectContaining({role:'activity-group',activities:expect.arrayContaining([expect.objectContaining({id:'early-write',status:'failed',errorTrace:expect.stringContaining('TaskUpdate')})])}));
+    expect(task.status).toBe('Done');
+  });
   it('starts the Designer on the same board task when the task is an interface build',async()=>{
     const workspace='path:a:/test';
     let saved:string|null=null;
     const repository=createTaskRepository({read:async()=>saved,write:async(_key,value)=>{saved=value;}});
-    await repository.add(workspace,createTask('Build a responsive dashboard','design'));
+    await repository.add(workspace,{...createTask('Build a responsive dashboard','design'),description:'A responsive overview with a summary and a chart.'});
     const stream=vi.fn(async()=>[]);
     const native=vi.fn(async()=>({text:'Authorized',artifact:{kind:'agent-authorization',workspaceRoot:'A:/test'}}));
     const executor=createTaskExecutor(repository,{stream,native,stop:async()=>{},listMcp:async()=>({tools:[]})});
@@ -22,6 +50,7 @@ describe('task-owned execution',()=>{
     expect(task.designJob).toMatchObject({phase:'interrupted',brief:expect.stringContaining('Build a responsive dashboard')});
     expect(task.error).toContain('structured handoff');
     expect(task.messages).toContainEqual(expect.objectContaining({role:'subagent',subagentType:'Designer'}));
+    expect(task.messages).toContainEqual(expect.objectContaining({role:'activity-group',activities:expect.arrayContaining([expect.objectContaining({label:'Resume design job',status:'failed'})])}));
   });
   it('stops a stalled model and preserves its partial text',async()=>{
     const repository=createTaskRepository({read:async()=>null,write:async()=>{}});await repository.load('root');await repository.add('root',createTask('Stop','stop'));
@@ -34,9 +63,11 @@ describe('task-owned execution',()=>{
   it('does not dispatch an approved write if stopped during intent persistence',async()=>{
     let release!:()=>void,held=false;
     const repository=createTaskRepository({read:async()=>null,write:async(_k,value)=>{if(!held&&value.includes('"executions"')&&value.includes('"name":"Write"')){held=true;await new Promise<void>(resolve=>{release=resolve;});}}});
-    await repository.load('root');await repository.add('root',createTask('Stop before write','stop'));
+    await repository.load('root');await repository.add('root',createTask('Fix the write target','stop'));
     const native=vi.fn().mockResolvedValue({text:'cleanup',artifact:{kind:'task-stop'}});
-    const executor=createTaskExecutor(repository,{stream:async()=>[{id:'write',name:'Write',arguments:'{"file_path":"x","content":"x"}'}],native,stop:async()=>{},listMcp:async()=>({tools:[]})});
+    const stream=vi.fn().mockResolvedValueOnce([{id:'plan',name:'TaskUpdate',arguments:JSON.stringify({priority:'Medium',tags:['write'],description:'Update x',details:'Change the contents of x.',solution:['Write x.','Read back x.']})}])
+      .mockResolvedValue([{id:'write',name:'Write',arguments:'{"file_path":"x","content":"x"}'}]);
+    const executor=createTaskExecutor(repository,{stream,native,stop:async()=>{},listMcp:async()=>({tools:[]})});
     const settings={...defaultSettings,agents:[],models:{...defaultSettings.models,customModels:[{id:'m',label:'m',endpoint:'http://localhost/v1'}],defaultModel:'m'}};
     const running=executor.start('root','stop','A:/test',settings);
     await vi.waitFor(()=>expect(repository.snapshot('root').tasks[0].messages.some(m=>m.role==='permission')).toBe(true));
