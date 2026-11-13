@@ -115,7 +115,7 @@ importers:
       '@fontsource-variable/geist-mono':
         specifier: ^5.3.0
         version: 5.3.0
-      '@fontsource/merriweather':
+      '@fontsource/instrument-serif':
         specifier: ^5.3.0
         version: 5.3.0
       '@hugeicons/core-free-icons':
@@ -145,6 +145,9 @@ importers:
       clsx:
         specifier: 2.1.1
         version: 2.1.1
+      gsap:
+        specifier: ^3.15.1
+        version: 3.15.1
       lucide-react:
         specifier: ^1.69.0
         version: 1.69.0(@types/react@19.2.7)(react@19.2.6)
@@ -521,8 +524,8 @@ packages:
   '@fontsource-variable/geist@5.3.0':
     resolution: {integrity: sha512-j0m+vLQuG5XAYoHtGCVu0spvlGreR3EzpECUVzkFmI1mTVnAO38l/NEPDCFgZ177JxzYJCLSmTQibIiYPilGrA==}
 
-  '@fontsource/merriweather@5.3.0':
-    resolution: {integrity: sha512-9LpPsNTYzRALj468Uj1K9Usl5eXk991L/kKmcpdWbTF1na9NfMyAXMgUABlMReViU1MYBz9kJ8jEzEOtX9qGDg==}
+  '@fontsource/instrument-serif@5.3.0':
+    resolution: {integrity: sha512-mDiaIg0u67sYV59fie92Wz4sM8UiVlbL7fLxnFPCKkX15DMASEnQTREbaP5S5/3DCcsoAOcQ0sV9E4AeY4QqYQ==}
 
   '@hugeicons/core-free-icons@4.4.0':
     resolution: {integrity: sha512-7Mz8bmGoY6tZ6l3C2TXwNMLVSr0I8HPwjjFIERAuJFj3rWwLxdF2ZLkDqdrVuEE1dx5b/VXyIsP4WoSU6Q40KQ==}
@@ -1132,6 +1135,9 @@ packages:
 
   graceful-fs@4.2.11:
     resolution: {integrity: sha512-RbJ5/jmFcNNCcDV5o9eTnBLJ/HszWV0P73bc+Ff4nS/rJj+YaS6IGyiOL0VoBYX+l1Wrl3k63h/KrH+nhJ0XvQ==}
+
+  gsap@3.15.1:
+    resolution: {integrity: sha512-63yjWRFWj3QRP1UOuD8kcidCcy3nxb1mMRpwHr/xJRvPfm9GtWOXFAYUiL0ro1fgPq2nY53LR+98pAgy9BumBg==}
 
   hast-util-to-jsx-runtime@2.3.7:
     resolution: {integrity: sha512-F7DNV2NMcTxA4GqPVHnXzX+mpoPHAIY9rJAVH3CZ1FdBZOcBUEjUuvMkMpHVs/sicEtznh9tMGj5WUR9S4E2rg==}
@@ -2039,7 +2045,7 @@ snapshots:
 
   '@fontsource-variable/geist@5.3.0': {}
 
-  '@fontsource/merriweather@5.3.0': {}
+  '@fontsource/instrument-serif@5.3.0': {}
 
   '@hugeicons/core-free-icons@4.4.0': {}
 
@@ -2521,6 +2527,8 @@ snapshots:
   gensync@1.0.0-beta.2: {}
 
   graceful-fs@4.2.11: {}
+
+  gsap@3.15.1: {}
 
   hast-util-to-jsx-runtime@2.3.7:
     dependencies:

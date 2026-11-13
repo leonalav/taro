@@ -719,7 +719,7 @@ export function NikeReviewCanvas({scope,preview}:{scope:ReviewScope;preview:Revi
                         {card.label}
                       </span>
                       {overlaysVisible && (
-                        <span className="pointer-events-none absolute inset-0 z-10 rounded-2xl border border-dashed border-violet-400/80" />
+                        <span className="pointer-events-none absolute inset-0 z-10 rounded-2xl border border-dashed border-white/45" />
                       )}
                     </div>
                   ))}
@@ -748,8 +748,8 @@ export function NikeReviewCanvas({scope,preview}:{scope:ReviewScope;preview:Revi
                       }}
                       style={{ left: `${pin.x}%`, top: `${pin.y}%` }}
                       className={cn(
-                        "absolute z-30 flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-violet-600 text-[11px] font-semibold text-white shadow-lg ring-2 ring-white/80 transition-transform hover:scale-110",
-                        openPinId === pin.id && "scale-110 bg-violet-500"
+                        "absolute z-30 flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-[#f2eee6] text-[11px] font-semibold text-black shadow-lg ring-2 ring-white/80 transition-transform hover:scale-110",
+                        openPinId === pin.id && "scale-110 bg-white"
                       )}
                     >
                       {pins.indexOf(pin) + 1}
@@ -864,7 +864,7 @@ function DockButton({
     >
       <Icon className="size-4" strokeWidth={1.75} />
       {badge !== undefined && badge > 0 && (
-        <span className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-taro text-[9px] font-bold text-white">
+        <span className="absolute -top-1 -right-1 flex size-4 items-center justify-center rounded-full bg-taro text-[9px] font-bold text-black">
           {badge}
         </span>
       )}

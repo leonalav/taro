@@ -20,7 +20,7 @@ describe("past message actions",()=>{
   it("edits a clicked user message and retains its image",async()=>{
     const host=document.createElement("div");document.body.append(host);const root=createRoot(host);const onEditMessage=vi.fn();
     await act(async()=>{root.render(<MessageItem message={{id:"u1",role:"user",segments:[{type:"text",text:"Original"},{type:"attachment",attachment:{id:"img",name:"image.png",mime:"image/png",size:1,dataUrl:"data:image/png;base64,AA"}}]}} agentLabel={()=>"Planner agent"} onRevert={()=>{}} onEditMessage={onEditMessage}/>);});
-    await act(async()=>{host.querySelector<HTMLElement>('[aria-label="Edit message"]')!.click();});
+    await act(async()=>{host.querySelector<HTMLElement>('[aria-label^="Edit message"]')!.click();});
     const editor=host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Edit message text"]')!;
     await act(async()=>{Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype,"value")!.set!.call(editor,"Revised");editor.dispatchEvent(new Event("input",{bubbles:true}));});
     await act(async()=>{host.querySelector<HTMLButtonElement>('button[aria-label="Send edited message"]')!.click();});

@@ -96,7 +96,7 @@ function ExpandedSidebar({
     catch(error) { setFolderError(String(error)); }
   };
   return (
-    <aside className="flex h-full w-[264px] shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
+    <aside aria-label="Workspace sidebar" className="flex h-full w-[264px] shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
       {/* Brand */}
       <div className="flex items-center gap-2.5 px-3 pt-3">
         <BrandMark />
@@ -126,7 +126,7 @@ function ExpandedSidebar({
       <nav className="scrollbar-thin min-h-0 flex-1 overflow-y-auto px-3 pb-4">
         {navSections.map((section) => (
           <div key={section.label} className="mt-5 first:mt-4">
-            <p className="px-2.5 pb-1.5 text-xs text-muted-foreground/70">{section.label}</p>
+            <p className="px-2.5 pb-1.5 text-xs text-muted-foreground">{section.label}</p>
             <div className="flex flex-col gap-0.5">
               {section.items.map((item) =>
                 item.id === "agents" ? (
@@ -156,12 +156,12 @@ function ExpandedSidebar({
         {/* Explorer — folders (directories) holding chat sessions */}
         <div className="mt-6">
           <div className="flex items-center justify-between px-2.5 pb-1 pt-1">
-            <p className="text-xs text-muted-foreground/70">Explorer</p>
+            <p className="text-xs text-muted-foreground">Explorer</p>
             <div className="flex items-center gap-0.5">
-              <button type="button" aria-label="Open folder" title="Open an existing folder" onClick={()=>{setFolderError("");void Promise.resolve().then(onOpenFolder).catch(error=>setFolderError(String(error)));}} className="flex size-6 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-taro">
+              <button type="button" aria-label="Open folder" title="Open an existing folder" onClick={()=>{setFolderError("");void Promise.resolve().then(onOpenFolder).catch(error=>setFolderError(String(error)));}} className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-taro">
                 <Folder className="size-3.5" />
               </button>
-              <button type="button" aria-label="Create folder" title="Create and open a folder" onClick={()=>{setFolderError("");setAddingFolder(true);}} className="flex size-6 items-center justify-center rounded-md text-muted-foreground/70 transition-colors hover:bg-sidebar-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-taro">
+              <button type="button" aria-label="Create folder" title="Create and open a folder" onClick={()=>{setFolderError("");setAddingFolder(true);}} className="flex size-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground focus-visible:outline-2 focus-visible:outline-taro">
                 <FolderPlus className="size-3.5" />
               </button>
             </div>
@@ -246,7 +246,7 @@ function RailSidebar({
   onUpgradePlan,
 }: AppSidebarProps) {
   return (
-    <aside className="flex h-full w-[60px] shrink-0 flex-col items-center border-r border-sidebar-border bg-sidebar py-3">
+    <aside aria-label="Workspace sidebar" className="flex h-full w-[60px] shrink-0 flex-col items-center border-r border-sidebar-border bg-sidebar py-3">
       <button
         type="button"
         onClick={onToggle}

@@ -121,7 +121,7 @@ export function SessionTree({
             {isOpen && (
               <ul className="flex flex-col gap-px">
                 {sessions.length === 0 && (
-                  <li className="py-1 pl-8 text-xs text-muted-foreground/60">No chats</li>
+                  <li className="py-1 pl-8 text-xs text-muted-foreground">No chats</li>
                 )}
                 {sessions.map((session) => {
                   const active = session.id === activeThreadId;
@@ -142,7 +142,7 @@ export function SessionTree({
                       >
                         {session.id===runningThreadId?<LoaderCircle aria-label="Running" className="size-3 shrink-0 animate-spin text-taro"/>:<span data-status-dot="true" className={cn("size-1.5 shrink-0 rounded-full",active?"bg-taro":"bg-muted-foreground/40")}/>}
                         <span className="min-w-0 flex-1 truncate">{session.name}</span>
-                        <span className="shrink-0 text-[11px] text-muted-foreground/60 tabular-nums group-focus-within/row:opacity-0 group-hover/row:opacity-0">
+                        <span className="shrink-0 text-[11px] text-muted-foreground tabular-nums group-focus-within/row:opacity-0 group-hover/row:opacity-0">
                           {session.updated}
                         </span>
                       </button>

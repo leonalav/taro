@@ -1108,6 +1108,7 @@ export default function App() {
                 thread={activeThread}
                 agent={activeAgent}
                 thinking={thinking}
+                visible={!receptionOpen}
                 panel={panel}
                 onTogglePanel={handleTogglePanel}
                 width={panel && panel !== "tasks" ? chatWidth : undefined}

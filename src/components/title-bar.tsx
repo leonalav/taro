@@ -48,7 +48,7 @@ export function TitleBar({ crumbs,welcome,onHome,onAccount }: { crumbs: string[]
 
   return (
     <header className="app-drag relative flex h-10 shrink-0 items-center border-b border-border bg-background px-4" data-tauri-drag-region="deep">
-      <div className="app-no-drag flex items-center gap-2">
+      <div className="app-no-drag flex items-center gap-0.5">
         <WindowControl label="Close window" color="bg-[#ff5f57]" onClick={() => void runWindowAction("close")}>
           <X />
         </WindowControl>
@@ -63,7 +63,7 @@ export function TitleBar({ crumbs,welcome,onHome,onAccount }: { crumbs: string[]
           <Minus />
         </WindowControl>
       </div>
-      {onHome&&<button type="button" onClick={onHome} aria-label="Go to welcome" className="app-no-drag ml-6 flex items-center gap-2 rounded-md text-sm font-semibold text-foreground focus-visible:outline-2 focus-visible:outline-taro"><BrandMark className="size-6"/>{welcome&&"Taro"}</button>}
+      {onHome&&<button type="button" onClick={onHome} aria-label={welcome ? "Taro — go to welcome" : "Go to welcome"} className="app-no-drag ml-6 flex items-center gap-2 rounded-md text-sm font-semibold text-foreground focus-visible:outline-2 focus-visible:outline-taro"><BrandMark className="size-6"/>{welcome&&"Taro"}</button>}
       {!welcome&&<p className="pointer-events-none absolute inset-x-32 truncate text-center text-xs text-muted-foreground">
         <span className="text-foreground/80">Taro</span>
         {crumbs.map((crumb, i) => (
@@ -96,9 +96,10 @@ function WindowControl({
       title={label}
       onClick={onClick}
       data-tauri-drag-region="false"
-      className={`group/control relative flex size-3 items-center justify-center rounded-full ${color} ring-1 ring-inset ring-black/20 outline-none focus-visible:ring-2 focus-visible:ring-white/80`}
+      className="group/control relative flex size-6 items-center justify-center rounded-full outline-none focus-visible:ring-2 focus-visible:ring-white/80"
     >
-      <span className="opacity-0 transition-opacity group-hover/control:opacity-100 group-focus-visible/control:opacity-100 [&>svg]:size-2 [&>svg]:stroke-[2.5]" aria-hidden="true">
+      <span aria-hidden="true" className={`pointer-events-none absolute size-3 rounded-full ${color} ring-1 ring-inset ring-black/20`} />
+      <span className="relative z-10 flex items-center justify-center opacity-0 transition-opacity group-hover/control:opacity-100 group-focus-visible/control:opacity-100 [&>svg]:size-2 [&>svg]:stroke-[2.5]" aria-hidden="true">
         {children}
       </span>
     </button>

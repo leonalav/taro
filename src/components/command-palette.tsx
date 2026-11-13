@@ -111,7 +111,7 @@ export function CommandPalette({
           title: artifact.name,
           breadcrumb: `${artifact.kind} · ${artifact.frames} frames`,
           kind: "artifact",
-          icon: <Package className="size-3.5 text-violet-400/80" />,
+          icon: <Package className="size-3.5 text-[#d8d2c4]/80" />,
           run: onSelectArtifact,
         })
       );

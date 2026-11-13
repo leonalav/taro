@@ -18,6 +18,8 @@ export default defineConfig({
     host: "127.0.0.1",
     port: 1420,
     strictPort: true,
+    // Hosted previews serve the app from a proxied *.e2b.app origin.
+    allowedHosts: [".e2b.app"],
     watch: { ignored: ["**/refs/**", "**/src-tauri/target/**"] },
   },
   resolve: {

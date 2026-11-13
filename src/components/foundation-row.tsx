@@ -26,19 +26,19 @@ export function FoundationRow({operation,onAction,onOpenDocument}:{operation:Ope
   const bodyId=React.useId();
   const Icon=kindIcon(operation.kind);
   const actions=availableActions(operation);
-  return <div data-foundation-row={operation.id} data-foundation-state={operation.state} className="min-w-0 py-1.5 text-xs">
+  return <div data-foundation-row={operation.id} data-foundation-state={operation.state} className="min-w-0 py-2 font-mono text-[11px]">
     <div className="flex min-w-0 items-start gap-2.5">
       <span className="mt-0.5"><FoundationStatusIcon state={operation.state} reduceMotion={reduceMotion}/></span>
       <Icon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 text-muted-foreground"/>
       <button type="button" aria-expanded={open} aria-controls={bodyId} onClick={()=>{userToggled.current=true;setOpen(v=>!v);}} className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1 rounded-sm text-left leading-relaxed focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-taro">
-        <span title={operation.label} className="min-w-0 flex-1 truncate text-foreground/85">{operation.label}</span>
-        <span aria-live="polite" aria-atomic="true" className="text-[11px] text-muted-foreground">{foundationStateLabels[operation.state]}</span>
+        <span title={operation.label} className="min-w-0 flex-1 truncate text-[#e2deea]">{operation.label}</span>
+        <span aria-live="polite" aria-atomic="true" className="text-[10px] text-[#a8a3b3]">{foundationStateLabels[operation.state]}</span>
         <ChevronDown aria-hidden="true" className={cn("size-3.5 shrink-0 text-muted-foreground",open&&"rotate-180")}/>
       </button>
       {actions.some(a=>a.id==="open")&&<button type="button" onClick={onOpenDocument} disabled={!onOpenDocument} title={!onOpenDocument?"Document editor unavailable":undefined} className="mt-0.5 shrink-0 rounded-sm text-[11px] text-taro hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-taro disabled:text-muted-foreground disabled:no-underline">Open</button>}
     </div>
-    <p className="ml-[3.25rem] mt-0.5 break-words text-[11px] leading-relaxed text-muted-foreground">{operation.detail}</p>
-    {open&&<div id={bodyId} className="ml-0 mt-2 min-w-0 rounded-md bg-background/60 p-2.5 sm:ml-[3.25rem]">
+    <p className="ml-[3.25rem] mt-0.5 break-words text-[10.5px] leading-relaxed text-[#918b9e]">{operation.detail}</p>
+    {open&&<div id={bodyId} className="ml-0 mt-2 min-w-0 rounded-md border border-[#24242b] bg-[#08080b] p-2.5 sm:ml-[3.25rem]">
       {operation.sample&&<p className="mb-2 text-[11px] text-muted-foreground">Sample data · No workspace operations</p>}
       <div className="max-h-64 min-w-0 space-y-2 overflow-auto whitespace-pre-wrap leading-relaxed [overflow-wrap:anywhere]">
         <OperationDetails operation={operation}/>

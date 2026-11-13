@@ -15,7 +15,7 @@ describe("editing a past chat message",()=>{
     const thread:Thread={id:"chat",name:"Chat",folderId:"folder",updated:"now",messages:[{id:"u1",role:"user",segments:[{type:"text",text:"Original"}]},{id:"a1",role:"agent",agentId:"planner",text:"Answer"}]};
     const host=document.createElement("div");document.body.append(host);const root=createRoot(host);const onEditMessage=vi.fn();
     await act(async()=>{root.render(<ChatPanel threads={[thread]} folderName="Project" thread={thread} agent={agents[0]} thinking={false} panel={null} onTogglePanel={()=>{}} onSelectThread={()=>{}} onRenameThread={()=>{}} onNewThread={()=>{}} onRevert={()=>{}} onRetry={()=>{}} onEditMessage={onEditMessage} onDecide={()=>{}} onOpenDoc={()=>{}} docForMessage={()=>undefined} onAnswerQuestion={()=>{}} onAcceptSkeletal={()=>{}} onEditSkeletal={()=>{}} onInsertionConsumed={()=>{}} onSend={()=>{}} onStop={()=>{}} effort={1} onEffortChange={()=>{}} permissionRules={[]} onSetPermissionRule={()=>{}} onRemovePermissionRule={()=>{}}/>);});
-    await act(async()=>{host.querySelector<HTMLElement>('[aria-label="Edit message"]')!.click();});
+    await act(async()=>{host.querySelector<HTMLElement>('[aria-label^="Edit message"]')!.click();});
     await act(async()=>{host.querySelector<HTMLButtonElement>('button[aria-label="Send edited message"]')!.click();});
     expect(document.querySelector('[role="dialog"]')?.textContent).toContain("all later messages");
     expect(onEditMessage).not.toHaveBeenCalled();

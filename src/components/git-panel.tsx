@@ -93,7 +93,7 @@ export function GitPanel({ workspaceRoot, sourceControl, onClose,onOpenTasks }: 
       {!isStaged && change.index === " " && !change.conflict && <Button size="icon-sm" variant="ghost" disabled={busy} title="Discard unstaged changes" aria-label={`Discard ${change.path}`} onClick={() => setConfirmation({ kind: "discard", path: change.path })}><Undo2 /></Button>}
     </div>;
   }
-  return <aside className="flex min-w-0 flex-1 flex-col bg-[#0b0b0b]">
+  return <aside aria-label="Source control" className="flex min-w-0 flex-1 flex-col bg-[#0b0b0b]">
     <header className="flex h-14 shrink-0 items-center gap-2 border-b border-border px-4">
       <GitBranch className="size-4 text-taro" /><h2 className="text-sm font-medium">Source control</h2>
       <Button className="ml-auto" variant="ghost" size="icon-sm" aria-label="Refresh source control" disabled={loading || busy} onClick={() => { void refresh(); void loadHistory(0); }}><RefreshCw className={loading ? "animate-spin" : ""} /></Button>

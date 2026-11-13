@@ -51,7 +51,7 @@ export type Density = "compact" | "comfortable" | "spacious";
 export type Accent = "taro" | "blue" | "green" | "amber" | "pink" | "mono";
 
 export const accents: { id: Accent; label: string; hex: string }[] = [
-  { id: "taro", label: "Taro", hex: "#a78bfa" },
+  { id: "taro", label: "Taro", hex: "#e6e0d4" },
   { id: "blue", label: "Blue", hex: "#3b9eff" },
   { id: "green", label: "Green", hex: "#3dd68c" },
   { id: "amber", label: "Amber", hex: "#ffb224" },

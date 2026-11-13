@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { DropdownMenu } from "@/components/ui/dropdown-menu";
 import { Composer } from "@/components/composer";
 import { MessageItem } from "@/components/chat-message";
+import "@/components/chat-motion.css";
 import {EditHistoryWarning,shouldWarnOnEdit} from "@/components/edit-history-warning";
 import { TaroMark } from "@/components/taro-mark";
 import {
@@ -30,6 +31,8 @@ interface ChatPanelProps {
   thread: Thread;
   agent: Agent;
   thinking: boolean;
+  /** False while the welcome page covers the workspace. */
+  visible?: boolean;
   panel: RightPanel;
   onTogglePanel: (panel: Exclude<RightPanel, null>) => void;
   /** Fixed width in px when a right panel is open; otherwise the chat fills the row. */
@@ -63,6 +66,7 @@ export function ChatPanel({
   workspaceRoot,
   thread,
   thinking,
+  visible = true,
   panel,
   onTogglePanel,
   width,
@@ -114,6 +118,45 @@ export function ChatPanel({
   const compact = width !== undefined && width < 480;
   const messageCount = thread.messages.length;
 
+  /* Generation entrance: history renders instantly when a thread opens; only
+     messages appended afterwards rise in, cascading when several arrive in the
+     same update (artifacts generated back-to-back). */
+  const entranceThread = React.useRef<string | null>(null);
+  const instantMessages = React.useRef<Set<string>>(new Set());
+  const entranceDelays = React.useRef<Map<string, number>>(new Map());
+  if (entranceThread.current !== thread.id) {
+    entranceThread.current = thread.id;
+    instantMessages.current = new Set(thread.messages.map((message) => message.id));
+    entranceDelays.current.clear();
+  }
+  let entranceBatch = 0;
+  for (const message of thread.messages) {
+    if (instantMessages.current.has(message.id) || entranceDelays.current.has(message.id)) continue;
+    entranceDelays.current.set(message.id, Math.min(entranceBatch * 90, 450));
+    entranceBatch += 1;
+  }
+
+  /* First time a thread is brought on screen, replay the tail as a short
+     generation cascade so its artifacts assemble in view rather than
+     appearing as one finished block. */
+  const [entryReveal, setEntryReveal] = React.useState<string[] | null>(null);
+  const revealedThreads = React.useRef<Set<string>>(new Set());
+  const coveredByWelcome = React.useRef(!visible);
+  const threadMessages = React.useRef(thread.messages);
+  threadMessages.current = thread.messages;
+  React.useEffect(() => {
+    if (!visible) { coveredByWelcome.current = true; return; }
+    if (!coveredByWelcome.current) return;
+    coveredByWelcome.current = false;
+    if (revealedThreads.current.has(thread.id)) return;
+    const ids = threadMessages.current.slice(-6).map((message) => message.id);
+    if (!ids.length) return;
+    revealedThreads.current.add(thread.id);
+    setEntryReveal(ids);
+    const timer = window.setTimeout(() => setEntryReveal(null), 1600);
+    return () => window.clearTimeout(timer);
+  }, [visible, thread.id]);
+
   // Keep the latest message in view.
   React.useEffect(() => {
     const el = scrollRef.current;
@@ -125,14 +168,10 @@ export function ChatPanel({
       className={cn("relative flex min-w-0 flex-col", width === undefined ? "flex-1" : "shrink-0")}
       style={width === undefined ? undefined : { width, minWidth: 320, maxWidth: "calc(100% - 360px)" }}
     >
-      {/* Ambient glow */}
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-x-0 top-0 h-80 bg-[radial-gradient(50%_60%_at_50%_0%,rgba(139,92,246,0.12),transparent_70%)]"
-      />
+      <h1 className="sr-only">{thread.name}</h1>
 
       {/* Header */}
-      <header className={cn("relative z-30 flex h-14 shrink-0 items-center gap-2", compact ? "px-4" : "px-5")}>
+      <header className={cn("relative z-30 flex h-14 shrink-0 items-center gap-2 border-b border-[#161619]", compact ? "px-4" : "px-5")}>
         <div className="flex min-w-0 flex-1 items-center gap-1">
           {renaming?<input autoFocus aria-label="Rename chat" value={draftName} onChange={event=>setDraftName(event.target.value)} onKeyDown={event=>{if(event.key==="Enter")commitName();if(event.key==="Escape")setRenaming(false);}} onBlur={commitName} className="h-8 w-60 rounded-lg border border-taro/50 bg-card px-2.5 text-[13px] text-foreground outline-none"/>:<DropdownMenu
             value={thread.id}
@@ -140,7 +179,7 @@ export function ChatPanel({
             options={threads.map((t) => ({ value: t.id, label: t.name }))}
             triggerClassName={cn("justify-between text-foreground", compact ? "w-40" : "w-60")}
             contentClassName="w-72"
-            ariaLabel={`Chats in ${folderName}`}
+            ariaLabel={`${thread.name} — chats in ${folderName}`}
           />}
           {thread.id!=="brand"&&<Button variant="ghost" size="icon-sm" aria-label="Rename chat" title="Rename chat" onClick={()=>{setDraftName(thread.name);setRenaming(true);}}><Pencil className="size-3.5"/></Button>}
         </div>
@@ -182,26 +221,37 @@ export function ChatPanel({
           {thread.messages.length === 0 ? (
             <EmptyState onPick={onSend} />
           ) : (
-            thread.messages.map((message) => (
-              <MessageItem
-                key={message.id}
-                message={message}
-                agentLabel={id=>settings.agents.find(agent=>agent.id===id)?.name??agentName(id)}
-                onRevert={requestRevert}
-                onRetry={onRetry}
-                editRequestToken={revertEdit?.messageId===message.id?revertEdit.token:undefined}
-                revertEnabled={revertToEdit(thread.messages,message.id)!==null}
-                retryEnabled={retryFromMessage(thread.messages,message.id)!==null}
-                onEditMessage={requestEdit}
-                busy={thinking}
-                onDecide={onDecide}
-                onOpenDoc={onOpenDoc}
-                docForMessage={docForMessage}
-                onAnswerQuestion={onAnswerQuestion}
-                onAcceptSkeletal={onAcceptSkeletal}
-                onEditSkeletal={onEditSkeletal}
-              />
-            ))
+            thread.messages.map((message) => {
+              const instant = instantMessages.current.has(message.id);
+              const revealIndex = entryReveal ? entryReveal.indexOf(message.id) : -1;
+              const delay = revealIndex >= 0 ? revealIndex * 60 : entranceDelays.current.get(message.id) ?? 0;
+              const animate = revealIndex >= 0 || !instant;
+              return (
+                <div
+                  className={cn("chat-message-item", revealIndex >= 0 && "chat-message-item--replay", revealIndex < 0 && instant && "chat-message-item--instant")}
+                  key={message.id}
+                  style={animate ? { animationDelay: `${delay}ms` } : undefined}
+                >
+                  <MessageItem
+                    message={message}
+                    agentLabel={id=>settings.agents.find(agent=>agent.id===id)?.name??agentName(id)}
+                    onRevert={requestRevert}
+                    onRetry={onRetry}
+                    editRequestToken={revertEdit?.messageId===message.id?revertEdit.token:undefined}
+                    revertEnabled={revertToEdit(thread.messages,message.id)!==null}
+                    retryEnabled={retryFromMessage(thread.messages,message.id)!==null}
+                    onEditMessage={requestEdit}
+                    busy={thinking}
+                    onDecide={onDecide}
+                    onOpenDoc={onOpenDoc}
+                    docForMessage={docForMessage}
+                    onAnswerQuestion={onAnswerQuestion}
+                    onAcceptSkeletal={onAcceptSkeletal}
+                    onEditSkeletal={onEditSkeletal}
+                  />
+                </div>
+              );
+            })
           )}
         </div>
       </div>
@@ -245,12 +295,12 @@ export function ChatPanel({
 function EmptyState({ onPick }: { onPick: (segments: Segment[]) => void }) {
   return (
     <div className="animate-pop flex flex-col items-center gap-5 pt-16 text-center">
-      <div className="flex size-12 items-center justify-center rounded-2xl bg-taro/10 ring-1 ring-inset ring-taro/25">
-        <TaroMark className="size-6 text-taro" />
+      <div className="flex size-11 items-center justify-center rounded-xl border border-[#3a2d4d] bg-gradient-to-b from-[#241a33] to-[#141018]">
+        <TaroMark className="size-5 text-[#c9a8ff]" />
       </div>
-      <div className="space-y-1.5">
-        <h2 className="text-2xl font-semibold tracking-tight">What should we design today?</h2>
-        <p className="text-sm text-muted-foreground">
+      <div className="space-y-2">
+        <h2 className="text-xl font-semibold tracking-tight text-[#f7f5fb]">What should we design today?</h2>
+        <p className="font-mono text-[11px] leading-6 text-[#918b9e]">
           Ask an agent to plan, write, or review. Tasks stay in sync automatically.
         </p>
       </div>
@@ -260,7 +310,7 @@ function EmptyState({ onPick }: { onPick: (segments: Segment[]) => void }) {
             key={prompt}
             type="button"
             onClick={() => onPick([{ type: "text", text: prompt }])}
-            className="rounded-full border border-border bg-card px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:border-[#333] hover:text-foreground"
+            className="rounded-md border border-[#24242b] bg-[#0b0b0b] px-3 py-1.5 font-mono text-[10.5px] text-[#a8a3b3] transition-colors hover:border-[#4c4059] hover:text-[#f7f5fb]"
           >
             {prompt}
           </button>
