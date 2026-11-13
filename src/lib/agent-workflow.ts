@@ -10,8 +10,8 @@ export function workflowIntent(brief: string) {
   const solo = /\b(?:without|avoid|skip|no|don['’]t use|do not use)\s+(?:any\s+)?(?:sub[ -]?agents?|agents|delegation|the design (?:job|relay)|other agents)\b|\b(?:work|do it)\s+(?:alone|yourself|solo)\b|\bonly one agent\b|\b(?:don['’]t|do not)\s+(?:delegate\b(?!\s+to\b)|(?:spawn|launch|dispatch|ask)\s+(?:any\s+)?(?:sub[ -]?)?agents?\b)/i.test(text);
   const interfaceWork = /\b(?:landing page|web ?site|dashboard|user interface|ui|mobile app|layout|wireframe|mockup|prototype|(?:login|sign-in|pricing|home|settings|checkout|onboarding) (?:page|screen|flow))\b/i.test(text);
   const visual = interfaceWork || /\b(?:design (?:system|tokens?)|visual design|typography|color palette)\b/i.test(text);
-  const designBuild = interfaceWork && !proposalOnly && /^(?:design and |use (?:the )?(?:agents|sub[ -]?agents) to )?(?:build|implement|create|redesign|revamp|rebuild|make)\b/i.test(firstSentence) &&
-    !/\b(?:plan only|design only|review only|just a plan|without (?:coding|implementing)|(?:do not|don['’]t) (?:build|create|implement|edit|redesign))\b/i.test(text);
+  const proposalRequested=proposalOnly||/\b(?:plan only|design only|review only|just a plan|without (?:coding|implementing)|(?:do not|don['']t) (?:build|create|implement|edit|redesign))\b/i.test(text);
+  const designBuild = interfaceWork && !proposalRequested && /^(?:design and |use (?:the )?(?:agents|sub[ -]?agents) to )?(?:build|implement|create|redesign|revamp|rebuild|make)\b/i.test(firstSentence);
   const designDraft = visual && /^(?:design|sketch|mock up)\b/i.test(firstSentence) && !designBuild;
   const delegation = /^(?:delegate|hand off|ask|have|use|launch|spawn|dispatch|assign)\b[^.!?\n]{0,75}\b(?:sub[ -]?agents?|(?:designer|code|qa|orchestrator) agents?|the designer|type & qa)\b/i.test(firstSentence);
   const specialist = /\b(?:qa agent|type & qa)\b/i.test(text) ? 'Type & QA'
@@ -21,7 +21,7 @@ export function workflowIntent(brief: string) {
   const inPlace = /\b(?:without|no|skip|don['’]t use|do not use)\s+(?:a\s+|any\s+)?(?:git\s+)?worktrees?\b/i.test(text);
   const references = /\b(?:as (?:discussed|above|before|agreed)|we (?:discussed|agreed|planned)|from (?:the )?(?:previous|earlier) (?:message|plan|draft)|same (?:design|layout|brief)|(?:use|invoke|apply|load|follow)\b[^.!?\n]{0,50}\bskills?\b)\b|(?:^|\s)\/[a-z0-9_.-]+\b/i.test(text);
   const askBeforeDelegating = /\b(?:ask me first|ask(?: me)? before (?:delegat|spawn|launch|us)|ask(?: me)? whether to use|(?:confirm|check) with me before (?:delegat|us|launch))/i.test(text);
-  return { discussion, solo, visual, designBuild, designDraft, delegation, specialist: specialist as Specialist | undefined, inPlace, references, askBeforeDelegating };
+  return { discussion, solo, visual, designBuild, designDraft, delegation, specialist: specialist as Specialist | undefined, inPlace, references, askBeforeDelegating, proposalRequested };
 }
 
 export function specialistPlaybook(role: string | undefined) {
