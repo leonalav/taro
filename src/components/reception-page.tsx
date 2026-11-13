@@ -1,5 +1,5 @@
 import * as React from "react";
-import {ArrowRight,ArrowUpRight,BookOpen,Clock3,Command,Folder,FolderOpen,Grid2X2,Layers,Play,Plus,Search,Settings,Sparkles,Zap} from "lucide-react";
+import {ArrowRight,ArrowUpRight,BookOpen,Clock3,Command,Folder,FolderOpen,Grid2X2,Layers,Play,Plus,Search,Settings,Zap} from "lucide-react";
 import {GitHubMark} from "@/components/github-mark";
 import {TaroMark} from "@/components/taro-mark";
 import {cn} from "@/utils/cn";
@@ -42,9 +42,7 @@ export function ReceptionPage({recent,composer,reduceMotion,error:externalError,
       .from(".reception-rail-button",{opacity:0,x:-10,stagger:.035,duration:.45},"-=0.35")
       .from(".reception-crumb",{opacity:0,y:-6,duration:.5},"-=0.45")
       .from(".reception-search",{opacity:0,y:-6,duration:.5},"<")
-      .from(".reception-eyebrow",{opacity:0,y:8,duration:.5},"<")
       .from(".reception-hero h1",{opacity:0,y:26,filter:"blur(12px)",duration:.95},"-=0.45")
-      .from(".reception-status-item",{opacity:0,y:6,stagger:.06,duration:.5},"-=0.75")
       .from(".reception-subtitle",{opacity:0,y:14,duration:.6},"-=0.6")
       .from(".reception-composer",{opacity:0,y:20,scale:.99,duration:.85},"-=0.5")
       .from(".reception-suggestions button",{opacity:0,y:8,stagger:.04,duration:.45},"-=0.55")
@@ -64,7 +62,6 @@ export function ReceptionPage({recent,composer,reduceMotion,error:externalError,
     {name:"Command palette…",icon:Command,keys:["Ctrl","Shift","P"],action:onCommands},
     {name:"Settings",icon:Settings,keys:["Ctrl",","],action:onSettings},
   ];
-  const projectCount=recent.length;
   return <main ref={page} className="reception-page" aria-label="Welcome to Taro">
     <div className="reception-frame">
       <nav className="reception-rail" aria-label="Workspace shortcuts">
@@ -78,7 +75,6 @@ export function ReceptionPage({recent,composer,reduceMotion,error:externalError,
         </div>
         <div className="reception-rail-group reception-rail-group--end">
           <RailButton label="Documentation" onClick={()=>run(onDocs)}><BookOpen/></RailButton>
-          <RailButton label="What's new" onClick={()=>run(onWhatsNew)}><Sparkles/></RailButton>
           <RailButton label="Settings" onClick={()=>run(onSettings)}><Settings/></RailButton>
         </div>
       </nav>
@@ -97,14 +93,6 @@ export function ReceptionPage({recent,composer,reduceMotion,error:externalError,
           <section className="reception-panel reception-hero" aria-labelledby="reception-title">
             <div className="reception-hero-art" aria-hidden="true"/>
             <div className="reception-hero-glow" aria-hidden="true"/>
-            <div className="reception-hero-head">
-              <p className="reception-eyebrow"><Layers aria-hidden="true"/>New session</p>
-              <div className="reception-status">
-                <span className="reception-status-item"><i aria-hidden="true"/>Local workspace</span>
-                <span className="reception-status-item">{projectCount} {projectCount===1?"project":"projects"}</span>
-                <span className="reception-status-item">Design-first</span>
-              </div>
-            </div>
             <h1 id="reception-title">Welcome to <em>Taro</em></h1>
             <p className="reception-subtitle">Design-first coding agent for turning ideas into production-ready products.</p>
             <div className="reception-composer">{composer}</div>

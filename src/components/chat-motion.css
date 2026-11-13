@@ -68,3 +68,30 @@
     background: Canvas;
   }
 }
+
+/* History is already written: show it without a replayed entrance.
+   Only messages appended after the thread opened animate, so generated
+   artifacts rise in one at a time instead of popping in as a block. */
+.chat-message-item--instant {
+  animation: none;
+}
+
+/* First view of a thread: the tail assembles like a finished generation. */
+.chat-message-item--replay {
+  animation: chat-message-rise 460ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chat-message-item,
+  .chat-message-item--replay {
+    animation: none;
+  }
+}
+
+/* The in-app Appearance preference must also cancel stagger delays; otherwise
+   fill-mode would keep a delayed message invisible for up to 450 ms. */
+html[data-motion="reduced"] .chat-message-item,
+html[data-motion="reduced"] .chat-message-item--replay {
+  animation: none !important;
+  animation-delay: 0s !important;
+}

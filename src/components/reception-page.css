@@ -150,21 +150,6 @@
 
 /* Hero ------------------------------------------------------------ */
 .reception-hero{padding:20px 22px}
-.reception-hero-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;flex:none}
-.reception-eyebrow{
-  display:flex;align-items:center;gap:6px;margin:0;
-  color:#b3aac2;font-family:var(--font-mono);font-size:10px;font-weight:500;
-  letter-spacing:.16em;text-transform:uppercase;line-height:1.6;
-}
-.reception-eyebrow svg{width:12px;height:12px;color:#cfc9bc;stroke-width:1.8}
-.reception-status{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-.reception-status-item{
-  display:inline-flex;align-items:center;gap:6px;
-  height:24px;padding:0 9px;
-  border:1px solid #26262e;border-radius:999px;background:#ffffff06;
-  color:#c1bacd;font-family:var(--font-mono);font-size:10px;letter-spacing:.03em;line-height:1;white-space:nowrap;
-}
-.reception-status-item i{width:5px;height:5px;border-radius:50%;background:var(--reception-success);box-shadow:0 0 0 2px #59d18b22}
 .reception-hero h1{
   margin:22px 0 6px;
   color:#f6f2fb;
@@ -330,7 +315,6 @@
   .reception-canvas{padding:12px 12px 0}
   .reception-lower{grid-template-columns:minmax(0,1fr)}
   .reception-hero h1{margin-top:16px}
-  .reception-status{display:none}
   .reception-search kbd{display:none}
   .reception-grid{gap:10px}
 }
@@ -396,7 +380,7 @@
 .reception-panel:not(.reception-hero)>*{position:relative;z-index:1}
 
 /* Hero art --------------------------------------------------------- */
-.reception-hero{padding:22px 24px 20px;isolation:isolate;overflow:hidden}
+.reception-hero{padding:24px 24px 20px;isolation:isolate;overflow:hidden}
 .reception-hero-art{
   position:absolute;top:-1px;right:-1px;bottom:-1px;width:min(64%,720px);z-index:0;pointer-events:none;
   background-image:
@@ -423,13 +407,8 @@
 .reception-hero>:not(.reception-hero-art):not(.reception-hero-glow){position:relative;z-index:1}
 
 /* Type ------------------------------------------------------------- */
-.reception-eyebrow{padding-left:0;color:#b8afc7}
-.reception-eyebrow::before{
-  content:"";width:22px;height:1px;flex:none;margin-right:2px;
-  background:linear-gradient(90deg,#d8d2c4,#ffffff00);
-}
 .reception-hero h1{
-  margin:20px 0 10px;
+  margin:4px 0 10px;
   font-family:"Instrument Serif",Georgia,serif;font-weight:400;
   font-size:clamp(38px,4.1vw,60px);line-height:1.02;letter-spacing:-.015em;
   color:#f9f6fd;
@@ -442,12 +421,6 @@
   padding-right:.06em;
 }
 .reception-subtitle{max-width:54ch;color:#bdb5c9;font-size:clamp(13px,1.05vw,14.5px)}
-.reception-status-item{
-  background:#0b0b10e6;border-color:#2c2c37;color:#c8c1d4;
-  box-shadow:0 8px 24px -18px #000;
-  backdrop-filter:blur(6px);
-}
-.reception-status-item i{animation:reception-pulse 4.2s ease-in-out infinite}
 
 /* Composer --------------------------------------------------------- */
 .reception-composer{margin-top:24px}
@@ -543,10 +516,6 @@
   from{transform:translate3d(0,0,0) scale(1.02)}
   to{transform:translate3d(-1.6%,-1.2%,0) scale(1.07)}
 }
-@keyframes reception-pulse{
-  0%,100%{box-shadow:0 0 0 2px #59d18b22}
-  50%{box-shadow:0 0 0 4px #59d18b1f}
-}
 
 @media (max-width:1280px){
   .reception-hero-art{width:min(56%,620px);opacity:.44}
@@ -566,7 +535,6 @@
 }
 @media (prefers-reduced-motion:reduce){
   .reception-hero-art{animation:none}
-  .reception-status-item i{animation:none}
   .reception-start-tile:hover,.reception-suggestions button:hover,.reception-footer button:hover,
   .reception-template-list button:hover{transform:none}
   .reception-recent:hover{padding-left:6px}
@@ -594,31 +562,33 @@
   background-size:cover;background-position:center;
   filter:contrast(1.05) brightness(.74);
   mix-blend-mode:screen;
-  opacity:0;
+  opacity:.12;
   transform:translate3d(-3%,-2%,0) scale(1.06);
   transition:opacity .55s ease;
-  animation:reception-media 30s ease-in-out infinite alternate;
+  animation:reception-media 24s ease-in-out infinite alternate;
   animation-play-state:paused;
 }
 .reception-start-tile{isolation:isolate}
-.reception-start-tile::before{inset:-42%;background-position:72% 58%}
+.reception-start-tile::before{inset:-42%;background-position:72% 58%;opacity:.14}
 .reception-recents::before{background-position:78% 16%}
 .reception-start::before{background-position:82% 74%}
 .reception-templates::before{background-position:58% 40%;animation-direction:alternate-reverse}
 .reception-quick::before{background-position:94% 68%;animation-direction:alternate-reverse}
-.reception-panel:not(.reception-hero):is(:hover,:focus-within)::before{opacity:.18;animation-play-state:running}
-.reception-start-tile:is(:hover,:focus-visible)::before{opacity:.24;animation-play-state:running}
+.reception-panel:not(.reception-hero):is(:hover,:focus-within)::before{opacity:.22;animation-play-state:running}
+.reception-start-tile:is(:hover,:focus-visible)::before{opacity:.28;animation-play-state:running}
 
 @keyframes reception-media{
-  from{transform:translate3d(-4%,-3%,0) scale(1.08)}
-  to{transform:translate3d(4%,3%,0) scale(1.18)}
+  from{transform:translate3d(-5%,-4%,0) scale(1.08)}
+  to{transform:translate3d(5%,4%,0) scale(1.2)}
 }
 
 @media (prefers-reduced-motion:reduce){
-  .reception-panel::before,
-  .reception-start-tile::before{display:none}
+  .reception-panel:not(.reception-hero)::before,
+  .reception-start-tile::before{animation:none}
 }
+html[data-motion="reduced"] .reception-panel:not(.reception-hero)::before,
+html[data-motion="reduced"] .reception-start-tile::before{animation:none!important}
 @media (forced-colors:active){
-  .reception-panel::before,
+  .reception-panel:not(.reception-hero)::before,
   .reception-start-tile::before{display:none}
 }

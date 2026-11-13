@@ -24,14 +24,16 @@ describe("reception entry actions",()=>{
     await click("Build a new app");expect(handlers.onPrompt).toHaveBeenCalledWith("Build a new app");
     expect(host.textContent).toContain("Last active 4m ago");expect(host.textContent).not.toContain("Edited Last active");
   });
-  it("keeps the workspace rail, status and section headings accessible",async()=>{
+  it("keeps the workspace rail and section headings accessible",async()=>{
     await mount();
     const rail=host.querySelector('nav[aria-label="Workspace shortcuts"]');
     expect(rail).not.toBeNull();
     const labels=[...rail!.querySelectorAll("button")].map(button=>button.getAttribute("aria-label"));
     expect(labels).toEqual(expect.arrayContaining(["New project","Search workspace","Open project","Browse templates","Import from GitHub","Settings"]));
-    expect(host.textContent).toContain("Local workspace");
-    expect(host.textContent).toContain("1 project");
+    expect(labels).not.toContain("What's new");
+    expect(host.querySelector(".reception-hero-head")).toBeNull();
+    expect(host.querySelector(".reception-eyebrow")).toBeNull();
+    expect(host.querySelector(".reception-status")).toBeNull();
     expect([...host.querySelectorAll("h2")].map(heading=>heading.textContent)).toEqual(expect.arrayContaining(["Recent","Start something new","Templates"]));
     expect(host.querySelector("h1")?.textContent).toBe("Welcome to Taro");
     expect(host.querySelector(".reception-hero-art")?.getAttribute("aria-hidden")).toBe("true");
