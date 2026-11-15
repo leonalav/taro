@@ -10,6 +10,7 @@ const chipStyles = {
   skill: "border-[#5a564d] bg-white/[0.07] text-[#efe9dc]",
   artifact: "border-[#423f37] bg-[#1b1a17] text-[#e6e0d4]",
   comment: "border-amber-500/40 bg-amber-500/10 text-amber-300",
+  review: "border-amber-500/40 bg-amber-500/10 text-amber-300",
 } as const;
 
 /**

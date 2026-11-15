@@ -42,7 +42,7 @@ function setup(settings: { deny?: boolean; omitIntent?: boolean; revise?: boolea
     plan: ['Build the hero in a standalone document.'],
   };
   const options: RuntimeOptions = {
-    ...scope, sessionId: scope.sessionId, workspaceRoot: scope.workspace, tasks, agentId: 'parent', model, models: [model], plugins: [],
+    ...scope, sessionId: scope.sessionId, workspaceRoot: scope.workspace, tasks, boardTasks: true, agentId: 'parent', model, models: [model], plugins: [],
     agents: ['Designer', 'Code', 'Type & QA'].map(role => ({ id: role, name: role, role, model: model.id, enabled: true, autonomy: 'auto', canWriteCode: true })),
     reviewServices: {
       repository: review,
@@ -74,7 +74,7 @@ function setup(settings: { deny?: boolean; omitIntent?: boolean; revise?: boolea
       }
       if(tool.name==='Read'&&input.file_path==='index.html')return {text:source,artifact:{kind:'read',content:source}};
       if (tool.name === 'ExitPlanMode') {
-        if (!approved&&settings.editIntent) plan=plan.replace('#702c91','#88205d');
+        if (!approved&&settings.editIntent) plan=plan.replace('## Accessibility','## Accessibility\n\nUse the approved keyboard behavior.');
         if (approved) sequence.push('approved plan');
         return { text: plan, artifact: { kind: 'plan', name: planName, path: 'plan.md', markdown: plan, planKind: 'Design Plan' } };
       }
@@ -102,7 +102,12 @@ function setup(settings: { deny?: boolean; omitIntent?: boolean; revise?: boolea
         if (stageCalls === 1) return [call('ArtifactDesign',{action:'export'})];
         if (stageCalls === 2) {
           const css=messages.find(message=>message.role==='tool'&&message.content.includes('--art-accent'))?.content;
-          expect(css).toContain(settings.editIntent?'#88205d':'#702c91');
+          expect(css).toContain('#702c91');
+          if(settings.editIntent){
+            const brief=JSON.parse(messages.find(message => message.role === 'user')!.content.split('\n').slice(1).join('\n'));
+            expect(brief.approvedPlan).toContain('Use the approved keyboard behavior.');
+            expect(brief.approvedPlan).not.toContain('#702c91');
+          }
           return [
           call('Write',{file_path:'index.html',content:`<!doctype html><html lang="en"><style>${css}</style><body data-taro-artifact style="margin:0"><main data-taro-layer="hero"><h1 class="art-display">Hero</h1><p>Revision ${qaRuns+1}</p></main></body></html>`}),
           call('BrowserPreview', { file_path:'index.html' }),
@@ -121,9 +126,11 @@ function setup(settings: { deny?: boolean; omitIntent?: boolean; revise?: boolea
     },
   };
   const runtime = new ProfessionalToolRuntime(options);
-  const start = () => {
-    const kickoff=runtime.kickoff(`Build a responsive landing page for the studio${settings.worktree?'':' without a worktree'}.`)!;
-    return runtime.execute(kickoff,JSON.parse(kickoff.arguments));
+  const start = async () => {
+    const inputs={title:"Build the studio landing page",description:"A responsive introduction to the studio",details:"Use the hero layout and validate it at all breakpoints.",priority:"High",tags:["landing"],solution:["Build the responsive studio hero.","Verify the preview across viewport sizes."]};
+    const card=await runtime.execute(call("TaskCreate",inputs),inputs);
+    const args={action:"start",task_id:card.artifact.taskId,brief:"Build a responsive landing page for the studio.",worktree:!!settings.worktree};
+    return runtime.execute(call("DesignJob",args),args);
   };
   return { tasks, review, sequence, start, scope, runtime };
 }
@@ -155,10 +162,10 @@ describe('design relay', () => {
     expect(sequence).toEqual(['designer']);
     expect(tasks.snapshot(workspace).tasks[0].designJob).toMatchObject({ phase: 'interrupted', planPath: 'plan.md', intent: { plan: ['Build the hero in a standalone document.'] } });
   });
-  it('exports the contract from the exact approved plan when its tokens were edited',async()=>{
+  it('carries approved Markdown edits separately from the private design intent',async()=>{
     const {start,tasks}=setup({editIntent:true});
     await expect(start()).resolves.toMatchObject({artifact:{phase:'verified'}});
-    expect(tasks.snapshot(workspace).tasks[0].designJob?.intent?.design.themes.light.accent).toBe('#88205d');
+    expect(tasks.snapshot(workspace).tasks[0].designJob?.intent?.design.themes.light.accent).toBe('#702c91');
   });
   it('rejects a prose-only Designer response before opening a plan', async () => {
     const { start, sequence } = setup({ omitIntent: true });

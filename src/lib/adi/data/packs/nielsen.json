@@ -1,0 +1,177 @@
+{
+  "sourceId": "nielsen",
+  "edition": "2024-01-30 review",
+  "rules": [
+    {
+      "id": "nielsen:1",
+      "sourceId": "nielsen",
+      "edition": "2024-01-30 review",
+      "locator": "Heuristic 1",
+      "contentHash": "539ef34919884b4dbc149d517b050970acceca2db2124733d3ef2efdcf9c6956",
+      "title": "Heuristic 1",
+      "category": "interaction",
+      "authority": "heuristic",
+      "interpretation": "Show confirmation and progress for actions that take time.",
+      "applicability": {},
+      "exceptions": [],
+      "relatedRuleIds": [],
+      "verificationMethods": [
+        "human"
+      ]
+    },
+    {
+      "id": "nielsen:2",
+      "sourceId": "nielsen",
+      "edition": "2024-01-30 review",
+      "locator": "Heuristic 2",
+      "contentHash": "21b21dfbf08e960af14ad2ebc7c2941965d3ceb7e61ce5c65be02f7e44617762",
+      "title": "Heuristic 2",
+      "category": "interaction",
+      "authority": "heuristic",
+      "interpretation": "Use terminology and ordering familiar to the target audience.",
+      "applicability": {},
+      "exceptions": [],
+      "relatedRuleIds": [],
+      "verificationMethods": [
+        "human"
+      ]
+    },
+    {
+      "id": "nielsen:3",
+      "sourceId": "nielsen",
+      "edition": "2024-01-30 review",
+      "locator": "Heuristic 3",
+      "contentHash": "8c47e9527a5dab4699e645a9c499ac32917e986ba5af26763ec71328181551a1",
+      "title": "Heuristic 3",
+      "category": "interaction",
+      "authority": "heuristic",
+      "interpretation": "Provide a clear exit and recovery path for accidental actions.",
+      "applicability": {},
+      "exceptions": [],
+      "relatedRuleIds": [],
+      "verificationMethods": [
+        "human"
+      ]
+    },
+    {
+      "id": "nielsen:4",
+      "sourceId": "nielsen",
+      "edition": "2024-01-30 review",
+      "locator": "Heuristic 4",
+      "contentHash": "30e3713157a5f946e15ae1a603c4dd8effa3fecc7926ef7ec02aff9f217fbc0c",
+      "title": "Heuristic 4",
+      "category": "interaction",
+      "authority": "heuristic",
+      "interpretation": "Reuse established labels and interaction patterns across equivalent controls.",
+      "applicability": {},
+      "exceptions": [],
+      "relatedRuleIds": [],
+      "verificationMethods": [
+        "human"
+      ]
+    },
+    {
+      "id": "nielsen:5",
+      "sourceId": "nielsen",
+      "edition": "2024-01-30 review",
+      "locator": "Heuristic 5",
+      "contentHash": "2bd1aa0ebb4cdf6255aae17941f56b3536ee780b62193c15800298dcf123dbe2",
+      "title": "Heuristic 5",
+      "category": "interaction",
+      "authority": "heuristic",
+      "interpretation": "Prevent predictable mistakes before committing a destructive action.",
+      "applicability": {},
+      "exceptions": [],
+      "relatedRuleIds": [],
+      "verificationMethods": [
+        "human"
+      ]
+    },
+    {
+      "id": "nielsen:6",
+      "sourceId": "nielsen",
+      "edition": "2024-01-30 review",
+      "locator": "Heuristic 6",
+      "contentHash": "adeb467672d07eb3d270ecd42cc2d11bfa79672d8018d50c141078fc736aeea1",
+      "title": "Heuristic 6",
+      "category": "interaction",
+      "authority": "heuristic",
+      "interpretation": "Keep available actions and required information visible where used.",
+      "applicability": {},
+      "exceptions": [],
+      "relatedRuleIds": [],
+      "verificationMethods": [
+        "human"
+      ]
+    },
+    {
+      "id": "nielsen:7",
+      "sourceId": "nielsen",
+      "edition": "2024-01-30 review",
+      "locator": "Heuristic 7",
+      "contentHash": "fa64453486c8a66415dccc94ba0f126b555f87e9529edd3baae1ba1ea676d659",
+      "title": "Heuristic 7",
+      "category": "interaction",
+      "authority": "heuristic",
+      "interpretation": "Provide shortcuts without hiding the normal path.",
+      "applicability": {},
+      "exceptions": [],
+      "relatedRuleIds": [],
+      "verificationMethods": [
+        "human"
+      ]
+    },
+    {
+      "id": "nielsen:8",
+      "sourceId": "nielsen",
+      "edition": "2024-01-30 review",
+      "locator": "Heuristic 8",
+      "contentHash": "20a9106b78a1dc4db21e761428751aa1e261434d5e02d2473051e5fe5261141f",
+      "title": "Heuristic 8",
+      "category": "interaction",
+      "authority": "heuristic",
+      "interpretation": "Remove information that competes with the primary task.",
+      "applicability": {},
+      "exceptions": [],
+      "relatedRuleIds": [],
+      "verificationMethods": [
+        "human"
+      ]
+    },
+    {
+      "id": "nielsen:9",
+      "sourceId": "nielsen",
+      "edition": "2024-01-30 review",
+      "locator": "Heuristic 9",
+      "contentHash": "a8fcf156f57be7d12ce47f0da1cacc850273da8feba253aa7ab555cfa11c7101",
+      "title": "Heuristic 9",
+      "category": "interaction",
+      "authority": "heuristic",
+      "interpretation": "Describe what happened and provide the next corrective step.",
+      "applicability": {},
+      "exceptions": [],
+      "relatedRuleIds": [],
+      "verificationMethods": [
+        "human"
+      ]
+    },
+    {
+      "id": "nielsen:10",
+      "sourceId": "nielsen",
+      "edition": "2024-01-30 review",
+      "locator": "Heuristic 10",
+      "contentHash": "f22c9ebcf2a6b7d77faeeeb8c1a1c95e2d4aa0e146b674fd119002cc9ed69e75",
+      "title": "Heuristic 10",
+      "category": "interaction",
+      "authority": "heuristic",
+      "interpretation": "Provide concise guidance at the point of need.",
+      "applicability": {},
+      "exceptions": [],
+      "relatedRuleIds": [],
+      "verificationMethods": [
+        "human"
+      ]
+    }
+  ],
+  "sections": []
+}

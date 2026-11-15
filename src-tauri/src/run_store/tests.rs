@@ -437,7 +437,7 @@ fn run_store_migrates_v1_without_replacing_existing_transcripts() {
         .unwrap();
     store
         .connection
-        .execute_batch("DROP TABLE tool_outputs; PRAGMA user_version=1;")
+        .execute_batch("DROP TABLE adi_policy_operations; DROP TABLE adi_policy_runs; DROP TABLE tool_outputs; PRAGMA user_version=1;")
         .unwrap();
     drop(store);
     let store = RunStore::open(&db).unwrap();
@@ -449,7 +449,7 @@ fn run_store_migrates_v1_without_replacing_existing_transcripts() {
         .connection
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .unwrap();
-    assert_eq!(version, 2);
+    assert_eq!(version, 3);
 }
 #[test]
 fn run_store_cancelled_or_failed_roots_keep_uncertain_work_discoverable() {

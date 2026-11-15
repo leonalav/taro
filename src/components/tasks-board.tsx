@@ -5,6 +5,7 @@ import {Badge} from '@/components/ui/badge';
 import {Button} from '@/components/ui/button';
 import {Input} from '@/components/ui/input';
 import {Dialog} from '@/components/ui/dialog';
+import {ReviewMarkdown} from '@/components/review-comments';
 import {MessageItem} from '@/components/chat-message';
 import {TASK_STATUSES,type PermissionChoice,type Priority,type TaskStatus} from '@/data/mock';
 import type {Settings} from '@/data/settings';
@@ -23,18 +24,18 @@ const executor=createTaskExecutor(taskRepository);
 const priorityVariant={Low:'low',Medium:'medium',High:'high'} as const;
 const icons={Failed:CircleX,'To Do':Circle,'In Progress':CircleDot,Done:CircleCheck};
 const area='min-h-24 w-full resize-y rounded-lg border border-border bg-background px-3 py-2 text-sm text-foreground outline-none focus-visible:border-taro';
-interface TasksBoardProps {workspaceRoot?:string;workspaceId:string;settings:Settings;onClose:()=>void}
-export function TasksBoard({workspaceRoot,workspaceId,settings,onClose}:TasksBoardProps){
+interface TasksBoardProps {initialTaskId?:string;workspaceRoot?:string;workspaceId:string;settings:Settings;onClose:()=>void}
+export function TasksBoard({workspaceRoot,workspaceId,settings,onClose,initialTaskId}:TasksBoardProps){
   const snapshot=React.useSyncExternalStore(taskRepository.subscribe,()=>taskRepository.snapshot(workspaceId),()=>taskRepository.snapshot(workspaceId));
   React.useEffect(()=>{void taskRepository.load(workspaceId);},[workspaceId]);
-  const [selected,setSelected]=React.useState<string|null>(null),[creating,setCreating]=React.useState(false);
+  const [selected,setSelected]=React.useState<string|null>(initialTaskId??null),[creating,setCreating]=React.useState(false);
   const [title,setTitle]=React.useState(''),[description,setDescription]=React.useState(''),[priority,setPriority]=React.useState<Priority>('Medium');
   const [query,setQuery]=React.useState(''),[filter,setFilter]=React.useState<TaskStatus|'all'>('all'),[error,setError]=React.useState('');
   const [priorityFilter,setPriorityFilter]=React.useState<Priority|'all'>('all');
   const [document,setDocument]=React.useState<{taskId:string;messageId:string;text:string}|null>(null),[saving,setSaving]=React.useState(false);
   const tasks=snapshot.unsavedTasks??snapshot.tasks;
   const task=tasks.find(t=>t.id===selected);
-  React.useEffect(()=>{setSelected(null);setCreating(false);setDocument(null);setError('');},[workspaceId]);
+  React.useEffect(()=>{setSelected(initialTaskId??null);setCreating(false);setDocument(null);setError('');},[workspaceId,initialTaskId]);
   const action=(promise:Promise<unknown>)=>{setError('');void promise.catch(e=>setError(String(e)));};
   const create=async()=>{const task=createTask(title);task.description=description.trim()||title.trim();task.details=task.description;task.priority=priority;await taskRepository.add(workspaceId,task);setTitle('');setDescription('');setCreating(false);setSelected(task.id);};
   const run=(task:WorkspaceTask)=>{if(!isTauri()){setError('Task execution requires the Taro desktop app. Your task and plan are saved.');return;}action(executor.start(workspaceId,task.id,workspaceRoot??'',settings));};
@@ -48,7 +49,7 @@ export function TasksBoard({workspaceRoot,workspaceId,settings,onClose}:TasksBoa
     if(!document)return;setSaving(true);setError('');
     try{
       const item=taskRepository.snapshot(workspaceId).tasks.find(t=>t.id===document.taskId)?.messages.find(m=>m.id===document.messageId);
-      if(item?.role==='plan'&&item.path)await executeAgentTool({id:crypto.randomUUID(),name:'Write',arguments:'{}'},{file_path:item.path,content:document.text},item.workspaceRoot||workspaceRoot||'',true,undefined,crypto.randomUUID(),{sessionId:item.sessionId||`task:${document.taskId}`,readOnly:false});
+      if(item?.role==='plan'&&item.path)await executeAgentTool({id:crypto.randomUUID(),name:'Write',arguments:'{}'},{file_path:item.path,content:document.text},item.workspaceRoot||workspaceRoot||'',true,undefined,crypto.randomUUID(),{sessionId:item.sessionId||`task:${document.taskId}`,readOnly:false,interactive:true});
       await taskRepository.mutate(workspaceId,document.taskId,t=>({...t,messages:t.messages.map(m=>m.id===document.messageId&&m.role==='plan'?{...m,markdown:document.text}:m)}));setDocument(null);
     }catch(e){setError(String(e));}finally{setSaving(false);}
   };
@@ -72,7 +73,7 @@ export function TasksBoard({workspaceRoot,workspaceId,settings,onClose}:TasksBoa
       <div className='flex flex-wrap items-center gap-2 p-4'><div className='relative min-w-0 flex-1'><Search className='absolute top-2.5 left-2.5 size-3.5 text-muted-foreground'/><Input className='pl-8' value={query} onChange={e=>setQuery(e.target.value)} aria-label='Search tasks' placeholder='Search tasks'/></div><select aria-label='Filter tasks by priority' value={priorityFilter} onChange={e=>setPriorityFilter(e.target.value as typeof priorityFilter)} className='h-8 rounded-lg border border-border bg-background px-2 text-xs'><option value='all'>All priorities</option>{(['Low','Medium','High'] as const).map(priority=><option key={priority}>{priority}</option>)}</select><select aria-label='Filter tasks by status' value={filter} onChange={e=>setFilter(e.target.value as typeof filter)} className='h-8 rounded-lg border border-border bg-background px-2 text-xs'><option value='all'>All statuses</option>{TASK_STATUSES.map(s=><option key={s}>{s}</option>)}</select></div>
       {!workspaceRoot&&<p className='px-4 pb-3 text-xs text-muted-foreground'>Open a workspace folder to run tasks. Plans and artifacts stay with their workspace.</p>}
       <div className='scrollbar-thin grid min-h-0 flex-1 auto-rows-min grid-cols-1 content-start gap-3 overflow-y-auto px-4 pb-4 @[600px]:grid-cols-2 @[1060px]:grid-cols-4'>
-        {TASK_STATUSES.filter(s=>filter==='all'||filter===s).map(status=>{const Icon=icons[status],items=filtered.filter(t=>t.status===status);return <section key={status} className='min-w-0 rounded-xl border border-border bg-background p-2'><div className='flex items-center gap-2 px-2 pt-1 pb-3 text-xs text-muted-foreground'><Icon className={cn('size-3.5',status==='Failed'&&'text-destructive',status==='In Progress'&&'text-taro')}/><h3>{status}</h3><span className='ml-auto tabular-nums'>{items.length}</span></div><div className='space-y-2'>{items.map(t=><button key={t.id} type='button' onClick={()=>setSelected(t.id)} className='w-full rounded-xl border border-border bg-card p-3 text-left transition-colors hover:border-taro/50 focus-visible:outline-2 focus-visible:outline-taro'><h4 className='break-words text-[13px] leading-5 font-medium'>{t.title}</h4><p className='mt-1.5 line-clamp-3 break-words text-xs leading-5 text-muted-foreground'>{t.description}</p><div className='mt-3 flex flex-wrap gap-1.5'><Badge variant={priorityVariant[t.priority]??'medium'}>{t.priority}</Badge>{t.tags.map(tag=><Badge key={tag}>{tag}</Badge>)}</div>{t.error&&<p className='mt-2 line-clamp-2 text-xs text-destructive'>{t.error}</p>}{t.messages.length>0&&<span className='mt-2 block text-[11px] text-muted-foreground'>{t.messages.filter(m=>m.role==='plan').length} documents · {t.attempts} attempt{t.attempts===1?'':'s'}</span>}</button>)}{!items.length&&<p className='rounded-lg border border-dashed border-border px-3 py-7 text-center text-xs text-muted-foreground'>No tasks</p>}</div></section>;})}
+        {TASK_STATUSES.filter(s=>filter==='all'||filter===s).map(status=>{const Icon=icons[status],items=filtered.filter(t=>t.status===status);return <section key={status} className='min-w-0 rounded-xl border border-border bg-background p-2'><div className='flex items-center gap-2 px-2 pt-1 pb-3 text-xs text-muted-foreground'><Icon className={cn('size-3.5',status==='Failed'&&'text-destructive',status==='In Progress'&&'text-taro')}/><h3>{status}</h3><span className='ml-auto tabular-nums'>{items.length}</span></div><div className='space-y-2'>{items.map(t=><button key={t.id} type='button' onClick={()=>setSelected(t.id)} className='w-full rounded-xl border border-border bg-card p-3 text-left transition-colors hover:border-taro/50 focus-visible:outline-2 focus-visible:outline-taro'><h4 className='break-words text-[13px] leading-5 font-medium'>{t.title}</h4><ReviewMarkdown inline className='mt-1.5 line-clamp-3 text-muted-foreground' body={t.description}/><div className='mt-3 flex flex-wrap gap-1.5'><Badge variant={priorityVariant[t.priority]??'medium'}>{t.priority}</Badge>{t.tags.map(tag=><Badge key={tag}>{tag}</Badge>)}</div>{t.error&&<p className='mt-2 line-clamp-2 text-xs text-destructive'>{t.error}</p>}{t.messages.length>0&&<span className='mt-2 block text-[11px] text-muted-foreground'>{t.messages.filter(m=>m.role==='plan').length} documents · {t.attempts} attempt{t.attempts===1?'':'s'}</span>}</button>)}{!items.length&&<p className='rounded-lg border border-dashed border-border px-3 py-7 text-center text-xs text-muted-foreground'>No tasks</p>}</div></section>;})}
       </div>
     </>}
     <Dialog open={!!document} onOpenChange={open=>{if(!open&&!saving)setDocument(null);}} labelledBy='task-document-title' className='flex h-[min(740px,90vh)] w-[min(900px,94vw)] flex-col'>
@@ -116,14 +117,18 @@ function DesignComparison({job}:{job:DesignJob}){
   </details>;
 }
 
+function TaskSolution({steps}:{steps:string[]}) {
+  return <ol className='mt-2 list-decimal space-y-1 pl-5 text-muted-foreground'>{steps.map((step,index)=><li key={index}><ReviewMarkdown className='task-markdown' body={step.replace(/^\s*\d+[.)]\s+/,'')}/></li>)}</ol>;
+}
+
 function TaskDetail({task,settings,onRun,onStop,onSave,onOpenDoc,onDecide,onReview}:{task:WorkspaceTask;settings:Settings;onRun:()=>void;onStop:()=>void;onSave:(update:(task:WorkspaceTask)=>WorkspaceTask)=>void;onOpenDoc:(id:string)=>void;onDecide:(id:string,choice:PermissionChoice|null)=>void;onReview:()=>void}){
   const [editing,setEditing]=React.useState(false),[draft,setDraft]=React.useState(task.description),[completion,setCompletion]=React.useState(false),[done,setDone]=React.useState(''),[product,setProduct]=React.useState('');
   const busy=task.status==='In Progress';
   const job=task.designJob;
   const link=task.reviewItem??job?.code??job?.layout;
   return <div className='scrollbar-thin min-h-0 flex-1 overflow-y-auto p-4'>
-    <div className='flex flex-wrap items-center gap-2'><Badge variant={priorityVariant[task.priority]??'medium'}>{task.priority}</Badge>{task.tags.map(tag=><Badge key={tag}>{tag}</Badge>)}<div className='ml-auto flex flex-wrap gap-1.5'>{busy?<Button size='sm' variant='secondary' onClick={onStop}><Square/>Stop task</Button>:<>{(!job||!job.intent&&job.phase!=='verified')&&<Button size='sm' variant='ghost' onClick={()=>setEditing(v=>!v)}>Edit task</Button>}{task.status==='Failed'&&<Button size='sm' variant='secondary' onClick={()=>onSave(t=>({...t,status:'To Do',error:undefined}))}>Return to To Do</Button>}{job?.phase!=='verified'&&<Button size='sm' onClick={onRun}><Play/>{task.attempts?'Run again':'Run task'}</Button>}</>}</div></div>
-    {editing?<form className='mt-4 space-y-2' onSubmit={e=>{e.preventDefault();onSave(t=>({...t,description:draft,details:draft,designJob:t.designJob&&!t.designJob.intent?{...t.designJob,brief:draft}:t.designJob}));setEditing(false);}}><textarea className={area} aria-label='Edit task description' value={draft} onChange={e=>setDraft(e.target.value)}/><Button size='sm' type='submit' disabled={!draft.trim()}>Save task</Button></form>:<p className='mt-4 whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground'>{task.description}</p>}
+    <div className='flex flex-wrap items-center gap-2'><Badge variant={priorityVariant[task.priority]??'medium'}>{task.priority}</Badge>{task.tags.map(tag=><Badge key={tag}>{tag}</Badge>)}<div className='ml-auto flex flex-wrap gap-1.5'>{task.chatRunId?null:busy?<Button size='sm' variant='secondary' onClick={onStop}><Square/>Stop task</Button>:<>{(!job||!job.intent&&job.phase!=='verified')&&<Button size='sm' variant='ghost' onClick={()=>setEditing(v=>!v)}>Edit task</Button>}{task.status==='Failed'&&<Button size='sm' variant='secondary' onClick={()=>onSave(t=>({...t,status:'To Do',error:undefined}))}>Return to To Do</Button>}{job?.phase!=='verified'&&<Button size='sm' onClick={onRun}><Play/>{task.attempts?'Run again':'Run task'}</Button>}</>}</div></div>
+    {editing?<form className='mt-4 space-y-2' onSubmit={e=>{e.preventDefault();onSave(t=>({...t,description:draft,details:draft,designJob:t.designJob&&!t.designJob.intent?{...t.designJob,brief:draft}:t.designJob}));setEditing(false);}}><textarea className={area} aria-label='Edit task description' value={draft} onChange={e=>setDraft(e.target.value)}/><Button size='sm' type='submit' disabled={!draft.trim()}>Save task</Button></form>:<ReviewMarkdown className='task-markdown mt-4' body={task.description}/>}
     {task.error&&<p role='alert' className='mt-4 whitespace-pre-wrap break-words rounded-lg border border-destructive/40 p-3 text-sm text-destructive'>{task.error}</p>}
     {(job||link)&&<section className='mt-4 space-y-2 rounded-lg border border-border p-3 text-xs'>
       {job&&<p>Design job · {job.phase} · version {job.version}</p>}
@@ -138,10 +143,11 @@ function TaskDetail({task,settings,onRun,onStop,onSave,onOpenDoc,onDecide,onRevi
       {link&&<Button size='sm' variant='secondary' onClick={onReview}>Open linked revision</Button>}
     </section>}
     <div className='mt-5 space-y-5 border-y border-border py-5'>
-      <section><h3 className='text-sm font-medium'>{task.status==='Done'?'What was done':'What this means'}</h3><ol className='mt-2 list-decimal space-y-1 pl-5 text-sm leading-6 text-muted-foreground'>{(task.status==='Done'?[task.whatWasDone||'']:task.details.split(/\n+/)).filter(Boolean).map((text,i)=><li key={i} className='whitespace-pre-wrap break-words'>{text.replace(/^\d+[.)]\s*/,'')}</li>)}</ol></section>
-      <section><h3 className='text-sm font-medium'>{task.status==='Done'?'The final product':'Planned solution'}</h3>{task.status==='Done'?<p className='mt-2 whitespace-pre-wrap break-words text-sm leading-6 text-muted-foreground'>{task.finalProduct}</p>:<ol className='mt-2 list-decimal space-y-1 pl-5 text-sm leading-6 text-muted-foreground'>{task.solution.map((step,i)=><li key={i}>{step.replace(/^\d+[.)]\s*/,'')}</li>)}</ol>}</section>
-      {task.status==='Done'&&<details><summary className='cursor-pointer text-xs text-muted-foreground'>Original plan</summary><ol className='mt-2 list-decimal pl-5 text-sm text-muted-foreground'>{task.solution.map((step,i)=><li key={i}>{step}</li>)}</ol></details>}
-      {!busy&&!job&&task.status!=='Done'&&<Button size='sm' variant='ghost' onClick={()=>setCompletion(v=>!v)}>Record completed work</Button>}
+      <section><h3 className='text-sm font-medium'>{task.status==='Done'?'What was done':'What this means'}</h3><ReviewMarkdown className='task-markdown mt-2' body={task.status==='Done'?task.whatWasDone??'':task.details}/></section>
+      <section><h3 className='text-sm font-medium'>{task.status==='Done'?'The final product':'Planned solution'}</h3>
+        {task.status==='Done'?<ReviewMarkdown className='task-markdown mt-2' body={task.finalProduct??''}/>:<TaskSolution steps={task.solution}/>}</section>
+      {task.status==='Done'&&<details><summary className='cursor-pointer text-xs text-muted-foreground'>Original plan</summary><TaskSolution steps={task.solution}/></details>}
+      {!task.chatRunId&&!busy&&!job&&task.status!=='Done'&&<Button size='sm' variant='ghost' onClick={()=>setCompletion(v=>!v)}>Record completed work</Button>}
       {completion&&<form className='space-y-2' onSubmit={e=>{e.preventDefault();onSave(t=>completeTask(t,done,product));setCompletion(false);}}><textarea className={area} aria-label='What was done' placeholder='Describe what was actually done.' value={done} onChange={e=>setDone(e.target.value)}/><textarea className={area} aria-label='The final product' placeholder='Describe the final product and verification.' value={product} onChange={e=>setProduct(e.target.value)}/><Button type='submit' size='sm' disabled={!done.trim()||!product.trim()}>Mark Done</Button></form>}
     </div>
     <h3 className='mt-5 text-sm font-medium'>Execution and artifacts</h3>

@@ -28,7 +28,6 @@ export interface AppSidebarProps {
   onNavChange: (id: string) => void;
   onOpenSearch: () => void;
   activeAgentId: string;
-  onAgentChange: (id: string) => void;
   folders: FolderType[];
   threads: Thread[];
   activeThreadId: string;
@@ -68,7 +67,6 @@ function ExpandedSidebar({
   onNavChange,
   onOpenSearch,
   activeAgentId,
-  onAgentChange,
   folders,
   threads,
   activeThreadId,
@@ -135,7 +133,6 @@ function ExpandedSidebar({
                     item={item}
                     active={activeNav === item.id}
                     activeAgentId={activeAgentId}
-                    onAgentChange={onAgentChange}
                     onActivate={() => onNavChange(item.id)}
                   />
                 ) : (
@@ -340,13 +337,11 @@ function AgentGroup({
   item,
   active,
   activeAgentId,
-  onAgentChange,
   onActivate,
 }: {
   item: NavItem;
   active: boolean;
   activeAgentId: string;
-  onAgentChange: (id: string) => void;
   onActivate: () => void;
 }) {
   const [open, setOpen] = React.useState(true);
@@ -379,14 +374,11 @@ function AgentGroup({
           {agents.map((agent) => {
             const selected = agent.id === activeAgentId;
             return (
-              <button
+              <div
                 key={agent.id}
-                type="button"
-                onClick={() => onAgentChange(agent.id)}
-                disabled={!agent.enabled}
                 aria-current={selected ? "true" : undefined}
                 className={cn(
-                  "flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-[13px] text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-foreground",
+                  "flex h-8 items-center gap-2.5 rounded-lg px-2.5 text-[13px] text-muted-foreground",
                   selected && "bg-sidebar-accent text-foreground ring-1 ring-inset ring-white/[0.06]"
                 )}
               >
@@ -398,7 +390,7 @@ function AgentGroup({
                 />
                 <span className="flex-1 truncate text-left">{agent.name}</span>
                 {!agent.enabled && <span className="text-[10px] text-muted-foreground">Off</span>}
-              </button>
+              </div>
             );
           })}
         </div>

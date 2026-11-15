@@ -7,25 +7,38 @@ import type { ToolCall } from "./lib/model-stream";
 import App from "./App";
 import {invoke} from '@tauri-apps/api/core';
 import { defaultSettings } from "./data/settings";
+import {taskRepository} from "./lib/task-persistence";
+import {workspaceRuleKey} from "./lib/workspace-preferences";
 import {getUsageMetricsSnapshot} from "./lib/usage-metrics";
+import {loadChildCheckpoints} from "./lib/chat-db";
+import type {SavedChild} from "./lib/subagent-continuity";
 
 type View=ComponentProps<typeof ChatPanel>;
-const io=vi.hoisted(()=>({view:null as View|null,load:vi.fn(),persist:vi.fn().mockResolvedValue(undefined),stream:vi.fn(),stop:vi.fn().mockResolvedValue(undefined),execute:vi.fn(),list:vi.fn(),chooseFolder:vi.fn()}));
+const io=vi.hoisted(()=>({taskRows:new Map<string,string>(),adiRows:new Map<string,{generation:number;payload:string}>(),view:null as View|null,load:vi.fn(),persist:vi.fn().mockResolvedValue(undefined),stream:vi.fn(),stop:vi.fn().mockResolvedValue(undefined),execute:vi.fn(),list:vi.fn(),chooseFolder:vi.fn()}));
 vi.mock("@tauri-apps/plugin-dialog",()=>({open:io.chooseFolder}));
 vi.mock("@tauri-apps/api/core",()=>({isTauri:()=>true,invoke:vi.fn().mockResolvedValue([])}));
 vi.mock("./components/title-bar",()=>({TitleBar:({onHome}:{onHome?:()=>void})=><button aria-label="Go to welcome" onClick={onHome}>Home</button>}));
 vi.mock("./components/chat-panel",()=>({ChatPanel:(props:View)=>{io.view=props;return null;}}));
-vi.mock("./lib/chat-db",()=>({loadChat:io.load,persistChat:io.persist,persistModels:io.persist,persistWorkspaceSettings:io.persist,persistPermissionRules:io.persist,persistWorkspaceRules:io.persist}));
+vi.mock("./lib/chat-db",()=>({chatDb:async()=>({
+  select:async(sql:string,[key]:[string])=>{const payload=io.taskRows.get(key);const row=sql.includes("task_boards")?(payload?{payload}:undefined):io.adiRows.get(key);return row?[row]:[];},
+  execute:async(sql:string,params:unknown[]=[])=>{
+    if(sql.startsWith('INSERT INTO task_boards')){const [key,payload]=params as [string,string];io.taskRows.set(key,payload);}
+    if(sql.startsWith('INSERT INTO adi_runs')){const [key,generation,payload]=params as [string,number,string];if(io.adiRows.has(key))return {rowsAffected:0};io.adiRows.set(key,{generation,payload});}
+    if(sql.startsWith('UPDATE adi_runs')){const [generation,payload,key,expected]=params as [number,string,string,number];if(io.adiRows.get(key)?.generation!==expected)return {rowsAffected:0};io.adiRows.set(key,{generation,payload});}
+    return {rowsAffected:1};
+  },
+}),loadChat:io.load,loadChildCheckpoints:vi.fn().mockResolvedValue([]),saveChildCheckpoint:io.persist,persistChat:io.persist,persistModels:io.persist,persistWorkspaceSettings:io.persist,persistPermissionRules:io.persist,persistWorkspaceRules:io.persist}));
 vi.mock("./lib/model-stream",()=>({streamModel:io.stream,stopModel:io.stop}));
 vi.mock("./lib/agent-tools",async importOriginal=>({...await importOriginal<typeof import("./lib/agent-tools")>(),executeAgentTool:io.execute,listMcpTools:io.list}));
 
 Object.assign(globalThis,{IS_REACT_ACT_ENVIRONMENT:true});
 let root:Root,host:HTMLDivElement;
 beforeEach(()=>{
-  localStorage.clear();vi.clearAllMocks();
+  localStorage.clear();io.adiRows.clear();vi.resetAllMocks();vi.mocked(invoke).mockResolvedValue([]);io.persist.mockResolvedValue(undefined);
   Object.defineProperty(HTMLElement.prototype,"scrollTo",{configurable:true,value:vi.fn()});
   io.load.mockResolvedValue({threads:[{id:"brand",name:"Nike/Brand Discovery",folderId:"taro",updated:"now",messages:[]}],folders:[{id:"taro",name:"taro",path:"A:/taro"}],models:{...defaultSettings.models,defaultModel:"test",customModels:[{id:"test",label:"Test model",endpoint:"http://example.invalid"}],streamResponses:false},plugins:[],permissionRules:[]});
   io.stop.mockResolvedValue(undefined);
+  vi.mocked(loadChildCheckpoints).mockResolvedValue([]);
   host=document.createElement("div");document.body.append(host);root=createRoot(host);
 });
 afterEach(async()=>{await act(async()=>root.unmount());host.remove();});
@@ -33,22 +46,59 @@ const thought=()=>io.view!.thread.messages.find(message=>message.role==="thought
 const send=async()=>{await act(async()=>{root.render(<App/>);});await act(async()=>{io.view!.onSend([{type:"text",text:"Inspect a.ts"}]);});};
 
 describe("agentic ThoughtLine lifecycle",()=>{
-  it("routes a chat delegation through permission and gives the parent the real child result",async()=>{
+  it("pings a saved child when its chat reopens and gives the orchestrator its result",async()=>{
+    const data=await io.load();
+    const childId="agent-app-reconnect";
+    const request={credentialId:"test",endpoint:"http://example.invalid",model:"Test model",
+      messages:[{role:"system",content:"Frozen child rules"},{role:"user",content:"Inspect the file"}],tools:[]};
+    const saved:SavedChild={
+      message:{id:"saved-child",role:"subagent",agentId:"planner",childId,subagentType:"Explore",description:"Inspect the file",
+        prompt:"Inspect the file",status:"running",runInBackground:true,activities:[]},
+      checkpoint:{version:1,root:"A:/taro",rootSessionId:"brand",parentSessionId:"brand",
+        owner:{sessionId:"brand:"+childId,workspaceRoot:"A:/taro",readOnly:true,depth:1,childId},
+        model:{credentialId:request.credentialId,endpoint:request.endpoint,model:request.model},
+        messages:request.messages,request,loadedTools:[],round:0},
+    };
+    io.load.mockResolvedValue({...data,threads:[{...data.threads[0],messages:[
+      {id:"saved-user",role:"user",segments:[{type:"text",text:"Inspect a.ts"}]},
+      {...saved.message,waitingForConnection:true},
+    ]}]});
+    vi.mocked(loadChildCheckpoints).mockResolvedValue([saved]);
+    io.stream.mockImplementation(async(input,delta)=>{
+      if(input.messages.some((message:{content?:string})=>message.content==="Frozen child rules")){
+        delta("Recovered finding.");
+        return [];
+      }
+      if(input.messages.some((message:{role?:string})=>message.role==="tool")){
+        delta("I used the recovered finding.");
+        return [];
+      }
+      return [{id:"check-child",name:"TaskOutput",arguments:JSON.stringify({task_id:childId})}];
+    });
+    await act(async()=>{root.render(<App/>);});
+    expect(io.view!.thread.messages.filter(message=>message.role==="user")).toHaveLength(1);
+    expect(io.view!.thread.messages).toContainEqual(expect.objectContaining({childId,status:"completed",result:"Recovered finding."}));
+    expect(io.stream.mock.calls.map(([input])=>input)).toContainEqual(expect.objectContaining(request));
+    expect(JSON.stringify(io.stream.mock.calls.at(-1)?.[0].messages)).toContain("Recovered finding.");
+    expect(io.execute.mock.calls.some(([tool])=>tool.name==="Agent")).toBe(false);
+  });
+  it("sends the request to the Orchestrator before delegating without an approval",async()=>{
     const data=await io.load();
     const agents=[
-      {id:"planner",name:"Kai",role:"Orchestrator agent",model:"test",enabled:true,autonomy:"auto",canWriteCode:true},
-      {id:"qa",name:"Theo",role:"Type & QA",model:"test",enabled:true,autonomy:"ask",canWriteCode:false},
+      {id:"orchestrator",name:"Kai",role:"Orchestrator agent",model:"test",enabled:true,autonomy:"ask",canWriteCode:true},
+      {id:"qa",name:"Theo",role:"Type & QA",model:"qa-model",enabled:true,autonomy:"ask",canWriteCode:false},
     ];
-    io.load.mockResolvedValue({...data,preferences:{...defaultSettings,models:data.models,agents}});
+    io.load.mockResolvedValue({...data,preferences:{...defaultSettings,models:{...data.models,customModels:[...data.models.customModels,{id:"qa-model",label:"QA model",endpoint:"http://qa.invalid"}]},agents}});
     io.execute.mockResolvedValue({text:"Authorized",artifact:{kind:"agent-authorization",workspaceRoot:"A:/taro"}});
-    io.stream.mockImplementationOnce(async(_request,delta)=>{delta("Child found the relevant selector.");return [];})
+    io.stream.mockResolvedValueOnce([{id:"delegate",name:"Agent",arguments:JSON.stringify({description:"Inspect TypeScript",prompt:"Read a.ts and identify selectors.",subagent_type:"Type & QA",read_only:true})}])
+      .mockImplementationOnce(async(_request,delta)=>{delta("Child found the relevant selector.");return [];})
       .mockImplementationOnce(async(_request,delta)=>{delta("The QA finding is available.");return [];});
     await act(async()=>{root.render(<App/>);});
     await act(async()=>io.view!.onSend([{type:"text",text:"Ask the QA agent to inspect a.ts."}]));
-    const permission=io.view!.thread.messages.find(message=>message.role==="permission")!;
-    expect(permission).toMatchObject({tool:expect.stringContaining("Type & QA handoff"),onceOnly:true});
-    expect(io.stream).not.toHaveBeenCalled();
-    await act(async()=>io.view!.onDecide(permission.id,{label:"Allow once",allowed:true,target:"tool",duration:"once"}));
+    expect(io.stream.mock.calls.map(([request])=>request.credentialId)).toEqual(["test","qa-model","test"]);
+    expect(io.stream.mock.calls[0][0].messages).toContainEqual({role:"user",content:"Ask the QA agent to inspect a.ts."});
+    expect(io.stream.mock.calls[1][0].messages).toContainEqual({role:"user",content:"Read a.ts and identify selectors."});
+    expect(io.view!.thread.messages.some(message=>message.role==="permission")).toBe(false);
     expect(io.view!.thread.messages).toContainEqual(expect.objectContaining({role:"subagent",subagentType:"Type & QA",status:"completed"}));
     expect(JSON.stringify(io.stream.mock.calls.at(-1)?.[0].messages)).toContain("Child found the relevant selector.");
   });
@@ -136,21 +186,17 @@ describe("agentic ThoughtLine lifecycle",()=>{
     expect(io.view!.workspaceRoot).toBe("A:/different-workspace");
   });
 
-  it("exposes discovered PowerShell to the next model request and executes after approval",async()=>{
+  it("exposes discovered PowerShell, but blocks unknown shell effects before an ADI plan",async()=>{
     io.stream.mockResolvedValueOnce([{id:"search",name:"ToolSearch",arguments:'{"query":"select:PowerShell"}'}]).mockImplementationOnce(async request=>{
       expect(request.tools.map((tool:{function:{name:string}})=>tool.function.name)).toContain("PowerShell");
       return [{id:"ps",name:"PowerShell",arguments:'{"command":"Write-Output hello"}'}];
-    }).mockResolvedValueOnce([]);
+    }).mockResolvedValue([]);
     io.execute.mockResolvedValue({text:"hello",artifact:{kind:"terminal",stdout:"hello",status:"completed",exitCode:0}});
     await send();
+    await vi.waitFor(()=>expect(thought().status).toBe("failed"),{timeout:10000});
     const permission=io.view!.thread.messages.find(message=>message.role==="permission")!;
-    expect(permission).toMatchObject({tool:"Ran Write-Output hello"});
-    expect(io.execute).not.toHaveBeenCalled();
-    await act(async()=>io.view!.onDecide(permission.id,{label:"Allow once",allowed:true,target:"tool",duration:"once"}));
-    expect(io.execute.mock.calls[0][0]).toMatchObject({name:"PowerShell"});
-    expect(io.execute.mock.calls[0][3]).toBe(true);
-    expect(io.view!.thread.messages.some(message=>message.role==="activity-group"&&message.activities.some(activity=>activity.kind==="terminal"&&activity.status==="done"))).toBe(true);
-    expect(thought()).toMatchObject({status:"completed"});
+    expect(permission).toBeUndefined();
+    expect(io.execute.mock.calls.some(([tool])=>tool.name==="PowerShell")).toBe(false);
   });
 
   it("shows the real plan and opens its Markdown before one-time exit approval",async()=>{
@@ -174,11 +220,13 @@ describe("agentic ThoughtLine lifecycle",()=>{
     io.stream.mockImplementationOnce(async()=>[{id:"edit",name:"Edit",arguments:'{"file_path":"a.ts","old_string":"old","new_string":"new"}'}]).mockImplementationOnce(()=>new Promise(resolve=>{finishStream=resolve;}));
     io.execute.mockImplementation(()=>new Promise(resolve=>{finishTool=resolve;}));
     await send();
-    expect(thought()).toMatchObject({status:"working",label:"Waiting for approval…"});
+    expect(thought()).toMatchObject({status:"working",label:"Waiting for approval…",pausedAt:expect.any(Number)});
     const id=thought().id;
     const permission=io.view!.thread.messages.find(message=>message.role==="permission")!;
     await act(async()=>io.view!.onDecide(permission.id,{label:"Allow once",allowed:true,target:"tool",duration:"once"}));
-    expect(thought()).toMatchObject({id,label:"Using tools…"});
+    expect(thought()).toMatchObject({id,label:"Using tools…",pausedAt:undefined});
+    const tasks=()=>taskRepository.snapshot(workspaceRuleKey("A:/taro","taro")).tasks;
+    const originalTasks=tasks();
     await act(async()=>finishTool({text:"Edited a.ts",artifact:{kind:"edit",path:"a.ts",before:"old",after:"new"}}));
     expect(thought()).toMatchObject({id,status:"working",label:"Thinking…"});
     await act(async()=>finishStream([]));
@@ -186,6 +234,7 @@ describe("agentic ThoughtLine lifecycle",()=>{
     expect(thought()).toMatchObject({id,status:"completed"});
     expect(io.view!.thread.messages.filter(message=>message.role==="thought")).toHaveLength(1);
     expect(io.view!.thinking).toBe(false);
+    expect(tasks()).toEqual(originalTasks);
   });
 
   it("settles stopped progress and cancels the live model request",async()=>{

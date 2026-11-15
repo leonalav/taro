@@ -83,7 +83,7 @@ export function browserQualitySnapshot(options={}) {
     if(interactive){const refs=(el.getAttribute('aria-labelledby')??'').split(/\s+/).map(id=>document.getElementById(id)?.textContent??'').join(' ').trim();const name=(el.getAttribute('aria-label')??'').trim()||refs||[...el.labels??[]].map(label=>label.textContent).join(' ').trim()||(el.innerText??'').trim()||(el.getAttribute('alt')??'').trim()||(el.getAttribute('title')??'').trim()||(el.matches('input[type=submit],input[type=button],input[type=reset]')?el.value:'')||(el.matches('input[type=image]')?el.alt:'')||[...el.querySelectorAll('img[alt]')].map(img=>img.alt).join(' ').trim();
       if(!name)add('accessible-name','error',el,'Interactive element has no measured accessible name.');
       const inlineLink=el.tagName==='A'&&s.display==='inline';
-      if(!inlineLink&&(r.width<24||r.height<24))add('target-size','warning',el,`Target is ${Math.round(r.width)}×${Math.round(r.height)}px; inspect spacing exceptions and increase to at least 24px, preferably 44px.`);
+      if(!inlineLink&&(r.width<24||r.height<24))add('target-size','warning',el,`Target is ${Math.round(r.width)}×${Math.round(r.height)}px; inspect the WCAG 2.5.8 exceptions before changing it.`);
     }
     const text=[...el.childNodes].some(n=>n.nodeType===Node.TEXT_NODE&&n.textContent.trim());
     if(text&&!['SCRIPT','STYLE','NOSCRIPT'].includes(el.tagName)){
@@ -156,7 +156,7 @@ export function createReviewBrowser() {
     await settled(page);
     const snapshot=await evaluate(page,`(${browserPageSnapshot.toString()})(${JSON.stringify({selector:request.selector,point:request.point,anchors:request.anchors,allowMissingSelector:request.action!=='inspect',source:request.action==='open'||request.action==='save'})})`);
     const {data}=await command('Page.captureScreenshot',{format:'png',captureBeyondViewport:false},page.sessionId);
-    return {...snapshot,screenshot:`data:image/png;base64,${data}`};
+    return {...snapshot,captureId:randomUUID(),capturedAt:Date.now(),navigationId:page.navigationId,screenshot:`data:image/png;base64,${data}`};
   }
   async function execute(request){
     if(typeof request.key!=='string'||!request.key||request.key.length>4096)throw Error('A scoped preview key is required.');
@@ -171,7 +171,7 @@ export function createReviewBrowser() {
     if(request.action==='close'){try{await command('Target.closeTarget',{targetId:page.targetId});}finally{targets.delete(request.key);if(page.browserContextId)await command('Target.disposeBrowserContext',{browserContextId:page.browserContextId});}return {closed:true};}
     if(request.action==='open'){
       page.content=request.html!==undefined?{html:request.html}:{url:pageUrl(request.url)};
-      page.opened=false;await resize(page,request.viewport??page.viewport);
+      page.navigationId=randomUUID();page.opened=false;await resize(page,request.viewport??page.viewport);
       const navigated=await send('Page.navigate',{url:request.html!==undefined?'about:blank':pageUrl(request.url)});
       if(navigated.errorText)throw Error(`Preview navigation failed: ${navigated.errorText}`);
       if(request.html!==undefined){const {frameTree}=await send('Page.getFrameTree');await send('Page.setDocumentContent',{frameId:frameTree.frame.id,html:request.html});}
@@ -183,6 +183,12 @@ export function createReviewBrowser() {
       if(request.spacing!==undefined&&(!Array.isArray(request.spacing)||request.spacing.length>32||request.spacing.some(n=>!Number.isFinite(n)||n<0||n>256)))throw Error('Invalid project spacing scale.');
       const hash=text=>createHash('sha256').update(text).digest('hex');
       const sourceHash=hash(await evaluate(page,'document.documentElement.outerHTML'));
+      const resourceSnapshot=async target=>evaluate(target,`JSON.stringify({
+        styles:[...document.styleSheets].map(sheet=>{try{return [sheet.href,[...sheet.cssRules].map(rule=>rule.cssText)];}catch{return [sheet.href,null];}}),
+        resources:performance.getEntriesByType('resource').map(entry=>[entry.name,entry.decodedBodySize]).sort(),
+        fonts:document.fonts?.status,
+      })`);
+      const resourceFingerprint=hash(await resourceSnapshot(page));
       const auditKey=`audit:${randomUUID()}`,cases=[];
       try{
         const isolated=await target(auditKey,true);
@@ -195,10 +201,10 @@ export function createReviewBrowser() {
           const measured=await evaluate(isolated,`(${browserQualitySnapshot.toString()})(${JSON.stringify({spacing:request.spacing??[0,4,8,12,16,24,32,48,64,96]})})`);
           const observed=await capture(isolated,{action:'capture'});
           const observedHash=hash(await evaluate(isolated,'document.documentElement.outerHTML'));
-          cases.push({scheme,mode,viewport:size,zoom,reducedMotion,screenshot:observed.screenshot,sourceHash:observedHash,...measured});
+          cases.push({scheme,mode,viewport:size,zoom,reducedMotion,screenshot:observed.screenshot,sourceHash:observedHash,resourceFingerprint:hash(await resourceSnapshot(isolated)),...measured});
         }
       }finally{const isolated=targets.get(auditKey);if(isolated){await command('Target.closeTarget',{targetId:isolated.targetId}).catch(()=>{});if(isolated.browserContextId)await command('Target.disposeBrowserContext',{browserContextId:isolated.browserContextId}).catch(()=>{});targets.delete(auditKey);}await command('Page.bringToFront',{},page.sessionId).catch(()=>{});}
-      const audit={version:1,id:randomUUID(),createdAt:Date.now(),sourceHash,sourceKind:page.content.html!==undefined?'html':'url',status:cases.some(c=>c.truncated)?'incomplete':cases.some(c=>c.findings.some(f=>f.severity!=='info'))?'issues':'measured-clear',cases,
+      const audit={version:1,id:randomUUID(),createdAt:Date.now(),sourceHash,resourceFingerprint,sourceKind:page.content.html!==undefined?'html':'url',status:cases.some(c=>c.truncated||c.sourceHash!==sourceHash||c.resourceFingerprint!==resourceFingerprint)?'incomplete':cases.some(c=>c.findings.some(f=>f.severity!=='info'))?'issues':'measured-clear',cases,
         manualChecks:['Inspect all screenshots for hierarchy, typography, imagery and brand fit.','Exercise keyboard focus order, visible focus and all interaction states.','Review overlapping paint, pseudo-elements, placeholder text, complex contrast and intentional spacing.','Revise the source, save a new revision and rerun checks before claiming completion.'],
         limitations:['These bounded DOM checks are not a complete accessibility certification.','Zoom is a 200% browser-zoom-equivalent layout: half the desktop CSS viewport and double device scale, not native browser UI zoom.','Screenshots cover the initial viewport; inspect content below the fold and interaction states separately.','Contrast uses supported opaque text on solid/composited backgrounds; unsupported paint is explicitly unmeasured.',...(page.content.html===undefined?['Live URLs may change between cases; source fingerprints identify each observed document.']:[])]};
       return {...await capture(page,{action:'capture'}),audit};

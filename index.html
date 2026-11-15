@@ -4,9 +4,17 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Taro — Design-first AI Coding Agent</title>
+    <style>html:has(#taro-startup) { background-color: #0b0b10; color-scheme: dark; }</style>
+    <link rel="stylesheet" href="/src/startup.css" />
   </head>
   <body>
-    <div id="root"></div>
+    <div id="taro-startup">
+      <div role="status">
+        <span class="startup-spinner" aria-hidden="true"></span>
+        Starting Taro…
+      </div>
+    </div>
+    <div id="root" inert></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

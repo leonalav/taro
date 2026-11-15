@@ -3,12 +3,15 @@ import { validateArtifactAudit } from './artifact-audit';
 import { artifactDesignRepository } from './artifact-design-persistence';
 import type { ArtifactDesignRepository } from './artifact-design';
 import { reviewRepository } from './review-persistence';
+import { createReviewAnchor } from './review-anchors';
 import { syncReviewWorkItem } from './review-work-items';
+import { createReviewCommentService } from './review-comment-service';
 import { browserPreviewKey, publishReviewCapture, requestReviewBrowser, type BrowserCapture, type BrowserRequest } from './review-browser';
-import { activeRevision, addPreview, addReviewComment, attachReviewCapture, attachArtifactAudit, previewById, replyToComment, resolveComment, revisePreview, reviewId, reviewScopeKey, selectPreview, setReviewViewport, validateViewport, type ReviewRepository, type ReviewScope } from './review-store';
+import { activeRevision, addPreview, attachReviewCapture, attachArtifactAudit, previewById, revisePreview, reviewId, reviewScopeKey, selectPreview, setReviewViewport, validateViewport, type ReviewRepository, type ReviewScope } from './review-store';
 
 export interface ReviewContext { scope:ReviewScope;author:string;role:string;signal?:AbortSignal }
 export interface ReviewServices { repository:ReviewRepository;browser:(request:BrowserRequest)=>Promise<BrowserCapture>;designRepository?:ArtifactDesignRepository;notify?:(scope:ReviewScope)=>void;syncWorkItem?:typeof syncReviewWorkItem }
+const commentServices=new WeakMap<ReviewServices,ReturnType<typeof createReviewCommentService>>();
 export const defaultReviewServices:ReviewServices={repository:reviewRepository,browser:requestReviewBrowser,designRepository:artifactDesignRepository,syncWorkItem:syncReviewWorkItem,notify:scope=>{if(typeof window!=='undefined')window.dispatchEvent(new CustomEvent('taro:review-open',{detail:scope}));}};
 const inspectors=new Map<string,(request:BrowserRequest)=>Promise<BrowserCapture>>();
 export function registerReviewInspector(key:string,inspect:(request:BrowserRequest)=>Promise<BrowserCapture>){inspectors.set(key,inspect);return()=>{inspectors.delete(key);};}
@@ -64,7 +67,7 @@ export async function executeReviewTool(name:string,input:Record<string,unknown>
       const report=validateArtifactAudit(capture.audit);
       await repository.change(scope,state=>attachArtifactAudit(state,preview.id,revision.id,report));services.notify?.(scope);
       const summary={previewId:preview.id,revisionId:revision.id,...report,cases:report.cases.map(({screenshot:_,...item})=>item)};
-      return {text:JSON.stringify(summary),artifact:{kind:'image',browser:true,previewId:preview.id,revisionId:revision.id,path:`Visual checks · ${preview.title}`,dataUrl:report.cases[0].screenshot}};
+      return {text:JSON.stringify(summary),artifact:{kind:'image',browser:true,previewId:preview.id,revisionId:revision.id,path:`Visual checks · ${preview.title}`,audit:report,dataUrl:report.cases[0].screenshot}};
     }finally{await browser({key:auditKey,action:'close'}).catch(()=>{});}
   }
   const request=async(action:BrowserRequest['action'],extra:Partial<BrowserRequest>={}):Promise<BrowserCapture>=>{
@@ -94,26 +97,36 @@ export async function executeReviewTool(name:string,input:Record<string,unknown>
   }
   if(name==='BrowserComments')return text({previewId:preview.id,threads:preview.threads.filter(t=>input.include_resolved===true||!t.resolved)});
   if(name==='BrowserComment'){
+    if(input.verified_resolution===true)throw Error('Verified resolution requires the assigned ADI run and trusted evidence.');
     const body=input.body===undefined?undefined:String(input.body),threadId=input.thread_id===undefined?undefined:String(input.thread_id);
     if(input.resolved!==undefined&&typeof input.resolved!=='boolean')throw Error('resolved must be a boolean.');
     if(input.resolved!==undefined&&!threadId)throw Error('Resolving a comment requires thread_id.');
+    let comments=commentServices.get(services);
+    if(!comments){
+      comments=createReviewCommentService(repository,async (...args)=>{await services.syncWorkItem?.(...args);});
+      commentServices.set(services,comments);
+    }
+    const mutationId=typeof input.client_mutation_id==='string'?input.client_mutation_id:reviewId();
     if(threadId){
       if(input.expected_revision_id!==undefined&&!preview.threads.some(thread=>thread.id===threadId&&thread.revisionId===revision.id))throw Error('This thread belongs to a different revision.');
       if(body===undefined&&input.resolved===undefined)throw Error('Supply a reply body or resolved status.');
-      await repository.change(scope,state=>{let next=state;if(body!==undefined)next=replyToComment(next,preview.id,threadId,{body,author:context.author,role:context.role});if(typeof input.resolved==='boolean')next=resolveComment(next,preview.id,threadId,input.resolved);return next;});
+      const current=preview.threads.find(thread=>thread.id===threadId);
+      if(!current)throw Error('Comment thread was not found.');
+      if(input.client_mutation_id!==undefined&&typeof input.expected_generation!=='number')throw Error('Include expected_generation with a retryable comment update.');
+      const expectedGeneration=typeof input.expected_generation==='number'?input.expected_generation:current.generation??0;
+      const change={previewId:preview.id,threadId,clientMutationId:mutationId,expectedGeneration};
+      const result=body===undefined?await comments.setStatus(scope,{...change,resolved:input.resolved as boolean})
+        :typeof input.resolved==='boolean'?await comments.replyAndSetStatus(scope,{...change,resolved:input.resolved,body,author:context.author,role:context.role})
+        :await comments.reply(scope,{...change,body,author:context.author,role:context.role});
       const saved=previewById(repository.snapshot(scope).state,preview.id);
-      const thread=saved.threads.find(t=>t.id===threadId)!;
-      await services.syncWorkItem?.(scope,saved,thread);
-      return text({previewId:preview.id,thread});
+      return text({previewId:preview.id,thread:saved.threads.find(thread=>thread.id===threadId),...result});
     }
     if(!body?.trim())throw Error('Comment body is required.');
     let anchor;
-    if(input.selector){const capture=await request('inspect',{selector:String(input.selector)});if(!capture.selection)throw Error('The component could not be measured.');const rect=capture.selection.rect;anchor={x:rect.x+rect.width/2,y:rect.y+rect.height/2,selector:capture.selection.selector,viewport:capture.viewport};}
+    if(input.selector){const capture=await request('inspect',{selector:String(input.selector)});if(!capture.selection)throw Error('The component could not be measured.');const rect=capture.selection.rect;anchor=createReviewAnchor({point:{x:rect.x+rect.width/2,y:rect.y+rect.height/2},capture,component:capture.selection,revisionId:revision.id,kind:'live'});}
     else {if(typeof input.x!=='number'||typeof input.y!=='number')throw Error('A comment requires a component selector or document x and y coordinates.');anchor={x:input.x,y:input.y,viewport:preview.viewport};}
-    const id=reviewId();await repository.change(scope,state=>addReviewComment(state,preview.id,{id,revisionId:revision.id,body,author:context.author,role:context.role,anchor}));
-    const saved=previewById(repository.snapshot(scope).state,preview.id);
-    await services.syncWorkItem?.(scope,saved,saved.threads.find(t=>t.id===id)!);
-    return text({previewId:preview.id,threadId:id,anchor});
+    const result=await comments.post(scope,{previewId:preview.id,revisionId:revision.id,clientMutationId:mutationId,body,author:context.author,role:context.role,anchor});
+    return text({previewId:preview.id,anchor,...result});
   }
   throw Error(`Unknown review tool: ${name}`);
 }

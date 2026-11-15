@@ -45,7 +45,9 @@ fn resolve(root: &Path, relative: &str) -> Result<PathBuf, String> {
     {
         return Err("Path must stay inside the selected workspace".into());
     }
-    let path = fs::canonicalize(root.join(input)).map_err(|e| format!("Cannot open path: {e}"))?;
+    let candidate = root.join(input);
+    if taro::private_design::private_workspace_path(root, &candidate) { return Err("Cannot open path".into()); }
+    let path = fs::canonicalize(candidate).map_err(|e| format!("Cannot open path: {e}"))?;
     if !path.starts_with(root) {
         return Err("Path is outside the selected workspace".into());
     }
@@ -69,7 +71,7 @@ pub fn list_workspace_directory(
         let Ok(canonical) = entry.path().canonicalize() else {
             continue;
         };
-        if !canonical.starts_with(&root) {
+        if !canonical.starts_with(&root) || taro::private_design::private_workspace_path(&root, &canonical) || taro::private_design::private_path(&entry.path()) {
             continue;
         }
         let kind = if canonical.is_dir() {
@@ -105,12 +107,12 @@ pub fn list_workspace_files(workspace_root: String) -> Result<Vec<String>, Strin
         .follow_links(false)
         .into_iter()
         .filter_entry(|entry| {
-            !entry.file_type().is_dir()
+            !taro::private_design::private_path(entry.path()) && (!entry.file_type().is_dir()
                 || entry.path() == root
                 || !matches!(
                     entry.file_name().to_str(),
                     Some(".git" | "node_modules" | "target" | "dist")
-                )
+                ))
         })
     {
         let Ok(entry) = item else { continue };
@@ -195,12 +197,12 @@ fn search_sync(workspace_root: String, query: String) -> Result<Vec<WorkspaceMat
         .follow_links(false)
         .into_iter()
         .filter_entry(|entry| {
-            !entry.file_type().is_dir()
+            !taro::private_design::private_path(entry.path()) && (!entry.file_type().is_dir()
                 || entry.path() == root
                 || !matches!(
                     entry.file_name().to_str(),
                     Some(".git" | "node_modules" | "target" | "dist")
-                )
+                ))
         })
     {
         let Ok(entry) = entry else { continue };
@@ -301,6 +303,21 @@ mod tests {
         reveal_workspace_entry, search_workspace,
     };
     use std::fs;
+
+    #[test]
+    fn excludes_private_reference_files_from_explorer_search_and_preview() {
+        let root = tempfile::tempdir().unwrap();
+        let workspace = root.path().to_str().unwrap().to_owned();
+        let directory = root.path().join("taro-adi-library");
+        fs::create_dir(&directory).unwrap();
+        fs::write(directory.join("manifest.json"), "private-test-needle").unwrap();
+        fs::write(root.path().join("public.txt"), "public").unwrap();
+        let listed = list_workspace_directory(workspace.clone(), String::new()).unwrap();
+        assert_eq!(listed.iter().map(|entry| entry.name.as_str()).collect::<Vec<_>>(), ["public.txt"]);
+        assert_eq!(list_workspace_files(workspace.clone()).unwrap(), ["public.txt"]);
+        assert!(super::search_sync(workspace.clone(), "private-test-needle".into()).unwrap().is_empty());
+        assert!(read_workspace_file(workspace, "taro-adi-library/manifest.json".into()).is_err());
+    }
 
     #[test]
     fn lists_real_files_and_directories_in_folder_first_order() {

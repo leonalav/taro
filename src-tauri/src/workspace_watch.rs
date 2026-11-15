@@ -44,6 +44,7 @@ fn subscribe(
             return Err("Watch path must stay in the workspace".into());
         }
         let path = root.join(relative);
+        if taro::private_design::private_workspace_path(&root, &path) { continue; }
         match path.canonicalize() {
             Ok(path) if !path.starts_with(&root) => {
                 return Err("Watch path is outside the workspace".into())

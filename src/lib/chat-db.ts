@@ -4,8 +4,26 @@ import { seedThreads,ensureNikeSubagentArtifact } from "@/data/mock";
 import type {PermissionRule} from "@/lib/permission-rules";
 import type {Settings} from '@/data/settings';
 import { recoverThoughts } from "@/lib/agent-progress";
+import type { SavedChild } from "./subagent-continuity";
 let db: Promise<Database> | undefined;
 export const chatDb = () => db ??= Database.load("sqlite:taro.db");
+let childSchema:Promise<unknown>|undefined;
+async function childDb(){
+ const db=await chatDb();
+ await (childSchema??=db.execute("CREATE TABLE IF NOT EXISTS child_checkpoints (session_id TEXT NOT NULL, child_id TEXT NOT NULL, payload TEXT NOT NULL, PRIMARY KEY(session_id,child_id))").catch(error=>{childSchema=undefined;throw error;}));
+ return db;
+}
+export async function saveChildCheckpoint(child:SavedChild){
+ const db=await childDb();
+ const payload=JSON.stringify(child.message.status==="running"?child:{message:child.message});
+ await db.execute("INSERT OR REPLACE INTO child_checkpoints(session_id,child_id,payload) VALUES(?,?,?)",
+   [child.checkpoint.rootSessionId,child.message.childId,payload]);
+}
+export async function loadChildCheckpoints(sessionId:string){
+ const db=await childDb();
+ const rows=await db.select<{payload:string}[]>("SELECT payload FROM child_checkpoints WHERE session_id=? ORDER BY rowid",[sessionId]);
+ return rows.map(row=>JSON.parse(row.payload) as {message:SavedChild["message"];checkpoint?:SavedChild["checkpoint"]});
+}
 async function schema(d: Database) {
  await d.execute("CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY,name TEXT NOT NULL,folder_id TEXT NOT NULL,updated TEXT NOT NULL,archived INTEGER NOT NULL DEFAULT 0,messages TEXT NOT NULL)");
  await d.execute("CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY,value TEXT NOT NULL)");
@@ -19,7 +37,22 @@ export async function loadChat() {
  if(!folders.some(f=>f.id==="taro")) folders.unshift({id:"taro",name:"taro"});
  const valid=new Set(folders.map(f=>f.id));
  const threads=rows.filter(r=>valid.has(r.folder_id) && !["scaffold","tokens"].includes(r.id)).map(r=>({id:r.id,name:r.name,folderId:r.folder_id,updated:r.updated,archived:!!r.archived,messages:(JSON.parse(r.messages) as Thread["messages"]).map(message=>message.role==="permission"&&message.live&&!message.decision?{...message,decision:{label:"Interrupted",allowed:false,target:"tool" as const,duration:"once" as const}}:message)})) as Thread[];
- for(const thread of threads)thread.messages=recoverThoughts(thread.messages);
+ const childRows=await (await childDb()).select<{session_id:string;payload:string}[]>("SELECT session_id,payload FROM child_checkpoints ORDER BY rowid");
+ const checkpoints=new Map<string,Awaited<ReturnType<typeof loadChildCheckpoints>>>();
+ for(const row of childRows){
+   const rows=checkpoints.get(row.session_id)??[];
+   rows.push(JSON.parse(row.payload));
+   checkpoints.set(row.session_id,rows);
+ }
+ for(const thread of threads){
+   thread.messages=recoverThoughts(thread.messages);
+   for(const {message,checkpoint} of checkpoints.get(thread.id)??[]){
+     const index=thread.messages.findIndex(item=>item.id===message.id);
+     const recovered=checkpoint?{...message,waitingForConnection:true,pausedAt:undefined}:message;
+     if(index>=0)thread.messages[index]=recovered;
+     else if(checkpoint)thread.messages.push(recovered);
+   }
+ }
  const reference=threads.find(t=>t.id==="brand");
  if(reference) { reference.name="Nike/Brand Discovery"; reference.folderId="taro"; reference.archived=false; reference.messages=ensureNikeSubagentArtifact(reference).messages; }
  else threads.push(seedThreads[0]);

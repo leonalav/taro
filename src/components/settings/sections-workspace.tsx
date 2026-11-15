@@ -623,13 +623,12 @@ export function AgentsSection({ settings, update }: SectionProps) {
                 triggerClassName="w-44"
               />
             </SettingsRow>
-            <SettingsRow label="Autonomy" description="Suggest is read-only. Ask confirms delegation. Tool permissions always apply.">
+            <SettingsRow label="Autonomy" description="Suggest is read-only. Auto lets the agent act within the current tool permissions.">
               <Segmented
                 ariaLabel={`${agent.name} autonomy`}
-                value={agent.autonomy}
+                value={agent.autonomy==="ask"?"auto":agent.autonomy}
                 onValueChange={(autonomy) => setAgent(agent.id, { autonomy })}
                 options={[
-                  { value: "ask", label: "Ask" },
                   { value: "suggest", label: "Suggest" },
                   { value: "auto", label: "Auto" },
                 ]}

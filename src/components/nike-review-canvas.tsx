@@ -770,7 +770,7 @@ export function NikeReviewCanvas({scope,preview}:{scope:ReviewScope;preview:Revi
                   </div>
                 )}
 
-                {pinsVisible&&draft&&<div className="review-floating-comment" style={{left:`${Math.min(draft.x,65)}%`,top:`${Math.min(draft.y,65)}%`}} onClick={event=>event.stopPropagation()}><div className="review-thread"><strong>New comment</strong><CommentComposer onCancel={()=>setDraft(null)} onSubmit={async body=>{await comments.add(body,{...draft,percent:true,viewport:preview.viewport});setDraft(null);}}/></div></div>}
+                {pinsVisible&&draft&&<div className="review-floating-comment" style={{left:`${Math.min(draft.x,65)}%`,top:`${Math.min(draft.y,65)}%`}} onClick={event=>event.stopPropagation()}><CommentComposer compact autoFocus onCancel={()=>setDraft(null)} onSubmit={async body=>{await comments.add(body,{...draft,percent:true,viewport:preview.viewport});setDraft(null);}}/></div>}
 
                 {/* Reloading overlay */}
                 {loading && (

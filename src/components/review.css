@@ -42,3 +42,62 @@
 .artifact-audit-viewer :where(button,div):focus-visible { outline:2px solid var(--taro); outline-offset:-3px; }
 .artifact-audit-image-scroll { overflow:auto; max-height:calc(100vh - 110px); }
 .artifact-audit-image-scroll img { display:block; height:auto; }
+
+.review-comment-bubble {
+  position: absolute;
+  z-index: 55;
+  width: 272px;
+  max-width: calc(100% - 16px);
+}
+.review-composer--compact {
+  margin: 0;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--popover);
+  box-shadow: 0 10px 28px #0008;
+}
+.review-composer--compact textarea {
+  min-height: 48px;
+  max-height: 120px;
+  padding: 8px;
+}
+.review-composer--compact:focus-within {
+  border-color: var(--taro);
+}
+.review-composer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 4px;
+  padding: 0 3px 3px;
+}
+.review-composer-actions button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  color: var(--muted-foreground);
+}
+.review-composer-actions .review-primary {
+  width: 28px;
+  padding: 0;
+  background: var(--secondary);
+  color: var(--foreground);
+}
+.review-composer-actions button:hover:not(:disabled) {
+  background: var(--accent);
+  color: var(--foreground);
+}
+.task-markdown {
+  color: var(--muted-foreground);
+  font-size: 14px;
+  line-height: 1.65;
+}
+.task-markdown :is(h1, h2, h3, h4, h5, h6, strong) {
+  color: var(--foreground);
+  font-weight: 600;
+}
+.task-markdown :is(h1, h2, h3, h4, h5, h6):not(:first-child),
+.task-markdown :is(h1, h2, h3, h4, h5, h6) + p {
+  margin-top: 8px;
+}

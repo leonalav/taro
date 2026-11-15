@@ -19,6 +19,9 @@ pub struct ToolRequest {
     pub input: Value,
     pub workspace_root: String,
     pub approved: bool,
+    pub adi: Option<taro::adi_policy::AdiMutation>,
+    #[serde(default)]
+    pub interactive: bool,
     pub mcp_config: Option<Value>,
     pub request_id: Option<String>,
     pub session_id: Option<String>,
@@ -48,6 +51,7 @@ fn target(root: &Path, input: &str, write: bool) -> Result<PathBuf, String> {
     } else {
         root.join(relative)
     };
+    if taro::private_design::private_workspace_path(root, &path) { return Err("Path is outside the readable workspace".into()); }
     let mut ancestor = path.as_path();
     while !ancestor.exists() {
         ancestor = ancestor.parent().ok_or("Invalid path")?;
@@ -75,7 +79,7 @@ mod web_dispatch_tests {
     use super::*;
     #[tokio::test]
     async fn web_dispatch_without_workspace_still_validates_url() {
-        let result=execute(ToolRequest{name:"WebFetch".into(),input:json!({"url":"http://127.0.0.1"}),workspace_root:String::new(),approved:false,mcp_config:None,request_id:None,session_id:None,read_only:true,planning_ancestors:vec![]}).await;
+        let result=execute(ToolRequest{name:"WebFetch".into(),input:json!({"url":"http://127.0.0.1"}),workspace_root:String::new(),approved:false,adi:None,interactive:false,mcp_config:None,request_id:None,session_id:None,read_only:true,planning_ancestors:vec![]}).await;
         let error=result.unwrap_err();assert!(error.contains("Private")||error.contains("public"),"{error}");assert!(!error.contains("Workspace"));
     }
 }
@@ -287,11 +291,11 @@ pub async fn execute(request: ToolRequest) -> Result<ToolOutput, String> {
                     .follow_links(false)
                     .into_iter()
                     .filter_entry(|entry| {
-                        entry.path() == base
+                        !taro::private_design::private_path(entry.path()) && (entry.path() == base
                             || !matches!(
                                 entry.file_name().to_str(),
                                 Some(".git" | "node_modules" | "target" | "dist")
-                            )
+                            ))
                     })
                 {
                     let entry = item.map_err(|e| e.to_string())?;
@@ -314,7 +318,7 @@ pub async fn execute(request: ToolRequest) -> Result<ToolOutput, String> {
                 for item in fs::read_dir(&base).map_err(|e| e.to_string())? {
                     let entry = item.map_err(|e| e.to_string())?;
                     let canonical = entry.path().canonicalize().map_err(|e| e.to_string())?;
-                    if !canonical.starts_with(&root) {
+                    if !canonical.starts_with(&root) || taro::private_design::private_workspace_path(&root, &canonical) || taro::private_design::private_path(&entry.path()) {
                         continue;
                     }
                     let path = entry
@@ -362,7 +366,7 @@ pub async fn execute(request: ToolRequest) -> Result<ToolOutput, String> {
             };
             let mut found = Vec::new();
             for item in walkdir::WalkDir::new(&base).into_iter().filter_entry(|e| {
-                !matches!(
+                !taro::private_design::private_path(e.path()) && !matches!(
                     e.file_name().to_str().unwrap_or(""),
                     ".git" | "node_modules" | "target" | "dist"
                 )
@@ -532,6 +536,8 @@ mod tests {
             input,
             workspace_root: root.to_string_lossy().into_owned(),
             approved,
+            adi: None,
+            interactive: false,
             mcp_config: None,
             request_id: None,
             session_id: None,
@@ -909,6 +915,8 @@ mod tests {
             input: json!({"file_path":"a"}),
             workspace_root: dir.path().join("missing").to_string_lossy().into(),
             approved: false,
+            adi: None,
+            interactive: false,
             mcp_config: None,
             request_id: None,
         };

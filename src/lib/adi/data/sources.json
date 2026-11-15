@@ -1,0 +1,1753 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "id": "wcag-2.2",
+      "publisher": "W3C",
+      "title": "Web Content Accessibility Guidelines (WCAG) 2.2",
+      "edition": "2024-12-12",
+      "canonicalUrl": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/",
+      "snapshotUrl": "https://www.w3.org/TR/2024/REC-WCAG22-20241212/",
+      "retrievedAt": "2026-11-13",
+      "sectionManifest": [
+        {
+          "id": "non-text-content",
+          "status": "imported",
+          "contentHash": "0416fc72873cf689cc45fb73c384b7dd9393ca7efe5f8c8eafcb9ee250b7fb33"
+        },
+        {
+          "id": "audio-only-and-video-only-prerecorded",
+          "status": "imported",
+          "contentHash": "3ca5a601336048b8ebad75c33bcc4127b4ddcaf7bd53ec4dc86b6cd3b42fae6f"
+        },
+        {
+          "id": "captions-prerecorded",
+          "status": "imported",
+          "contentHash": "a173fc973247c8c1b3cbb931e45841facc2bef0e274314a02b9e4bfae5cda3c5"
+        },
+        {
+          "id": "audio-description-or-media-alternative-prerecorded",
+          "status": "imported",
+          "contentHash": "96fa2e34ea86edfe8c8fc9fb3f528f6082206f372f7e08aff62726565304dfbf"
+        },
+        {
+          "id": "captions-live",
+          "status": "imported",
+          "contentHash": "e4d119f7355222f98ee2a4a5c9a1794b32b4586753cbbdd55e65114ac35516a5"
+        },
+        {
+          "id": "audio-description-prerecorded",
+          "status": "imported",
+          "contentHash": "ecaa9e3b840a1d8a5bc5b51c3635584a0326b8c9130fd018ec9ac800b3fda8b0"
+        },
+        {
+          "id": "sign-language-prerecorded",
+          "status": "imported",
+          "contentHash": "c9201f94e6f35b86319093491f9ff21f739473da2ee902aea627a2b84b3760e0"
+        },
+        {
+          "id": "extended-audio-description-prerecorded",
+          "status": "imported",
+          "contentHash": "5ecad1e71b2a13fe10a0c6576ce7e853100dc3c63dda4372b34ca453215f221c"
+        },
+        {
+          "id": "media-alternative-prerecorded",
+          "status": "imported",
+          "contentHash": "64f3e09e313ae291d43dd3d51499c279509f3ae7d78a9427b41c7a17d081e8ef"
+        },
+        {
+          "id": "audio-only-live",
+          "status": "imported",
+          "contentHash": "930fb930e4e65e7aaaa50b6d34dbba943bcecf6ef4c84d26329d3782cfec963b"
+        },
+        {
+          "id": "info-and-relationships",
+          "status": "imported",
+          "contentHash": "ca37c039c7b46a74ca9553919b8890c026fcd0a05fb165f1207cc4dab36ac760"
+        },
+        {
+          "id": "meaningful-sequence",
+          "status": "imported",
+          "contentHash": "ec0113a25ec7b8e1e6372c18646a906764a742bea01a63eec30e993831ff3e10"
+        },
+        {
+          "id": "sensory-characteristics",
+          "status": "imported",
+          "contentHash": "6c553c3e5291fe2ecbd2d84e62b7085ee385d94c1c0b0b027ed2aebad808235f"
+        },
+        {
+          "id": "orientation",
+          "status": "imported",
+          "contentHash": "58e365dcc89916678e7ce60ea61e36bd812aa6ccfbfc2d61bda0435d648907e7"
+        },
+        {
+          "id": "identify-input-purpose",
+          "status": "imported",
+          "contentHash": "23bb03775ec8d34838ae0aed9d6940e23992d878d276eda44c521d17e9681096"
+        },
+        {
+          "id": "identify-purpose",
+          "status": "imported",
+          "contentHash": "539ef1345038c7b4950c8fb7a50afee2050d9a1d6e7483021a2b0f490bee146c"
+        },
+        {
+          "id": "use-of-color",
+          "status": "imported",
+          "contentHash": "36aad0f8de243086df13ada3b96575497cc358f558f5a526d401b77e53d4b2a1"
+        },
+        {
+          "id": "audio-control",
+          "status": "imported",
+          "contentHash": "584061978305a17cc0b2874fedc0f36b68bf3bc6dee7e799332b00898f7a78eb"
+        },
+        {
+          "id": "contrast-minimum",
+          "status": "imported",
+          "contentHash": "111ddd09330a1eff796944abc99ea047653a5d3c0870b09432bdbe46952fef32"
+        },
+        {
+          "id": "resize-text",
+          "status": "imported",
+          "contentHash": "110b47a3487dc73db8bf32935bedac0e85aac8e41c72f3bdc33a54169bea6477"
+        },
+        {
+          "id": "images-of-text",
+          "status": "imported",
+          "contentHash": "c0248063e9695923f2a60e7a9c4bb0338863a1f50fbf2a3fbdb3885826164864"
+        },
+        {
+          "id": "contrast-enhanced",
+          "status": "imported",
+          "contentHash": "fe4b464d7ef8a95e816ed89d0eb98373666cb248242276a70586717aeeded26e"
+        },
+        {
+          "id": "low-or-no-background-audio",
+          "status": "imported",
+          "contentHash": "db72241b7d618508fd1e43a86b689a0bde2b7adbc06ed56428e96700d6059a80"
+        },
+        {
+          "id": "visual-presentation",
+          "status": "imported",
+          "contentHash": "652fd571ebe2b6b3f27a498bb6a050eb060656717cb44f838ee03889778f5325"
+        },
+        {
+          "id": "images-of-text-no-exception",
+          "status": "imported",
+          "contentHash": "592ce1cf524ecd756e0501b0530322af4189c630471dc22b5f06bcd6a27d358b"
+        },
+        {
+          "id": "reflow",
+          "status": "imported",
+          "contentHash": "e56fd1ba945bc39da67b1702e0636b8240225121a8f3159a558dee03eb6a27a6"
+        },
+        {
+          "id": "non-text-contrast",
+          "status": "imported",
+          "contentHash": "3114a254d88d6f8e1ca85a76ea3b9323db6cd9e877054fcda14307c2e2ef589c"
+        },
+        {
+          "id": "text-spacing",
+          "status": "imported",
+          "contentHash": "65c1dc91f7a193ab1dde2e4117af6e553c6f36ba2ed64a2f18adbb78affd7fdc"
+        },
+        {
+          "id": "content-on-hover-or-focus",
+          "status": "imported",
+          "contentHash": "549950f1f8aecb1ecdf1aca01bfca405d52b77b72c506e48d0a9a61005418e77"
+        },
+        {
+          "id": "keyboard",
+          "status": "imported",
+          "contentHash": "ac82f69f41f35ddf703fc7dc63874051f87b33342e5b109a1607d4b389c8cab1"
+        },
+        {
+          "id": "no-keyboard-trap",
+          "status": "imported",
+          "contentHash": "6f9d7c8fd21a6a1b2a547e0124a8ea8e629b80e576834c23036b286d0e518ee0"
+        },
+        {
+          "id": "keyboard-no-exception",
+          "status": "imported",
+          "contentHash": "7b31a352a2c576d635c5ed7f5dc307de949cbf8536a281aa104d9b8ea4a083c9"
+        },
+        {
+          "id": "character-key-shortcuts",
+          "status": "imported",
+          "contentHash": "5ec88e91bd1bcfbe206697d9013b9e7639dc7884bd8b8e550e2b066cab5a0ec2"
+        },
+        {
+          "id": "timing-adjustable",
+          "status": "imported",
+          "contentHash": "44ab09efd785e48e19c766770cebf0b14690f727c3f2451232ee8f052b62c044"
+        },
+        {
+          "id": "pause-stop-hide",
+          "status": "imported",
+          "contentHash": "dad00c346c82b51988ad95ef3bfb845d81a804e48e9afc83c65b90669b737dc3"
+        },
+        {
+          "id": "no-timing",
+          "status": "imported",
+          "contentHash": "8c2705a6a8bb785491a5f3c78f00c2e239c9198d907cf98c62a8b276ea65a16a"
+        },
+        {
+          "id": "interruptions",
+          "status": "imported",
+          "contentHash": "bfe9a4e863dc327395f3b555bb838b4000d502a68c8319e81ebe3316f62ba846"
+        },
+        {
+          "id": "re-authenticating",
+          "status": "imported",
+          "contentHash": "e667a6acc9dbc7dafb4a130823a8f155bfeff2fb8fc5c1425683a1f44dae49c8"
+        },
+        {
+          "id": "timeouts",
+          "status": "imported",
+          "contentHash": "701b4935ccc96f83cc9150f5a573a5647bc1864404a71550d66666049bd32baf"
+        },
+        {
+          "id": "three-flashes-or-below-threshold",
+          "status": "imported",
+          "contentHash": "9f1732de81f8184b66489128b303ce2921678ecc64abafbfeca3f9ef99b44886"
+        },
+        {
+          "id": "three-flashes",
+          "status": "imported",
+          "contentHash": "ac58399bee4eec44b3dab51a3077a930469a30d0150554a52c9ad4e732cb3d62"
+        },
+        {
+          "id": "animation-from-interactions",
+          "status": "imported",
+          "contentHash": "2870b3e9c4d4c8c7c0f66c625d29e449ff1d101116673e40288b026fc8f9dc83"
+        },
+        {
+          "id": "bypass-blocks",
+          "status": "imported",
+          "contentHash": "be270a1f26dbacb6831171370fffcca3e7f5cafa904dbd3517b1d8d636624174"
+        },
+        {
+          "id": "page-titled",
+          "status": "imported",
+          "contentHash": "c3050a0693caf0a8ccc9933d7510d90bcade19e63c8ea03f1e4eb197f18f378c"
+        },
+        {
+          "id": "focus-order",
+          "status": "imported",
+          "contentHash": "2b178252a301af4486b074e2253c4a22f7c55ee55d99c7237771b9478496ef2e"
+        },
+        {
+          "id": "link-purpose-in-context",
+          "status": "imported",
+          "contentHash": "be01e599069ab72f7fd5fe61c3fce7366f296573fb247727f92117a1d093c818"
+        },
+        {
+          "id": "multiple-ways",
+          "status": "imported",
+          "contentHash": "f6a585541fdefcb0d74e1fa83a9c6fed38f9408640a8c43f1c285ef29440ed1e"
+        },
+        {
+          "id": "headings-and-labels",
+          "status": "imported",
+          "contentHash": "d6e71afb4544408d55ea88e3be19c0adcc81c7ee901fdf1480fcab87c675cfcb"
+        },
+        {
+          "id": "focus-visible",
+          "status": "imported",
+          "contentHash": "b56113bc7d1587840fce5a6b5705f03694dd9f8cae246b2dce4308518a4eb379"
+        },
+        {
+          "id": "location",
+          "status": "imported",
+          "contentHash": "b77f0a1ebe1b864b14a04a62076ac5f7124b7e1aa110441981ee71116fa647b2"
+        },
+        {
+          "id": "link-purpose-link-only",
+          "status": "imported",
+          "contentHash": "9deb35198f367ff361313bb4e264f927401bdb5adfce0877f227f970e105f790"
+        },
+        {
+          "id": "section-headings",
+          "status": "imported",
+          "contentHash": "26144073d37aa4a326331832a01c0299ca45d7c5aa038a3a92a343fe2a8adc6e"
+        },
+        {
+          "id": "focus-not-obscured-minimum",
+          "status": "imported",
+          "contentHash": "c71c374a6fdf81e491a6d325922400213fd54df997eecfc7d4b0dee9164bf994"
+        },
+        {
+          "id": "focus-not-obscured-enhanced",
+          "status": "imported",
+          "contentHash": "cf8a1e899f7dbfe89d1e7eefee48b06c38e137ea930aa812c2b9426de86b9b81"
+        },
+        {
+          "id": "focus-appearance",
+          "status": "imported",
+          "contentHash": "6deec07672814f6e7b86f56b540bcc242d7f681586a38ef33a759ed2556db384"
+        },
+        {
+          "id": "pointer-gestures",
+          "status": "imported",
+          "contentHash": "0078dc8a4eb2e2b3c9232d035fa4f2eb890ada987dc84eecb3be4e0c93ad23de"
+        },
+        {
+          "id": "pointer-cancellation",
+          "status": "imported",
+          "contentHash": "eb0071a82abcbbb50a5c36f8b3b62146919b27549dfb7e264ae6422bbb39f2ac"
+        },
+        {
+          "id": "label-in-name",
+          "status": "imported",
+          "contentHash": "c9e75d0cb5ba1b1b3a2d8ba172fff98067a21e607056ab34351fd878f2811fc6"
+        },
+        {
+          "id": "motion-actuation",
+          "status": "imported",
+          "contentHash": "d3da0999394a34ecae77719aee1ac9f161811fd807e030448f8f4c41bc771fbf"
+        },
+        {
+          "id": "target-size-enhanced",
+          "status": "imported",
+          "contentHash": "1f62c190f8e9fa835acaf7b8f8bde7ff36884981c80a2181f5124d6be46be5b2"
+        },
+        {
+          "id": "concurrent-input-mechanisms",
+          "status": "imported",
+          "contentHash": "baf79664e3c25fbd4fe7c0239a5e6701f1feca0c7d2f6bb17d9eb62e13dffd13"
+        },
+        {
+          "id": "dragging-movements",
+          "status": "imported",
+          "contentHash": "f7245f2d45cb364b3d2325b0dc365882baea29b2436c0d7ab4043cdc725da09e"
+        },
+        {
+          "id": "target-size-minimum",
+          "status": "imported",
+          "contentHash": "21e1bb0e4aa628c091ffef2ccaf4d07605634f1bdb0457da51e8d81cc92e9185"
+        },
+        {
+          "id": "language-of-page",
+          "status": "imported",
+          "contentHash": "388d8e2926215e8b32a51abb4c5033d6a2e2dee9dbdc91cb008359441a2369eb"
+        },
+        {
+          "id": "language-of-parts",
+          "status": "imported",
+          "contentHash": "b057e89a09e9a47d838b625c1d0bdf0e8ec8e057e1892430330bad429a9eb692"
+        },
+        {
+          "id": "unusual-words",
+          "status": "imported",
+          "contentHash": "5180f82393d745ee142b3ecdaea67a8190419a9626b3659cb7481cf13263e731"
+        },
+        {
+          "id": "abbreviations",
+          "status": "imported",
+          "contentHash": "85475e8667d8db503ed8344473254f17dce0138e5f93e04ac18c0996736395ac"
+        },
+        {
+          "id": "reading-level",
+          "status": "imported",
+          "contentHash": "2e1788dc2d6a7f4d0cb9357c693a1966adc9e4343c51fbe3b07dbd6701cb2f01"
+        },
+        {
+          "id": "pronunciation",
+          "status": "imported",
+          "contentHash": "7a79979ae6db242e156af5ed7008de157fde9ee976bbd6c33f853f3f4fd60464"
+        },
+        {
+          "id": "on-focus",
+          "status": "imported",
+          "contentHash": "0b57667b336cf5cb0852546a0a97e1796a1d8c6da28ed71692e9bc1ae8860e3b"
+        },
+        {
+          "id": "on-input",
+          "status": "imported",
+          "contentHash": "abcd53a30d387a67078cd9debde8baa38e82250a7b13dcd7d0f771a1a35c9f79"
+        },
+        {
+          "id": "consistent-navigation",
+          "status": "imported",
+          "contentHash": "ccbea890d3a3b18e70c2978bfe9ea3ab7617705b12bb56dcbf8afb760f0b0fcd"
+        },
+        {
+          "id": "consistent-identification",
+          "status": "imported",
+          "contentHash": "26617a9e1fe48e241ccda2b8ffb4ffdf21c162553b8267effea5362997b838a6"
+        },
+        {
+          "id": "change-on-request",
+          "status": "imported",
+          "contentHash": "2fed16fd20bc42a43262a4c240a869c7fe16b2806b0baa3e5d9826c0e06c647e"
+        },
+        {
+          "id": "consistent-help",
+          "status": "imported",
+          "contentHash": "64a2dd8c40145dd1904f40a6bd32ae0866ee2fc77605659e805ec3039f1f9f19"
+        },
+        {
+          "id": "error-identification",
+          "status": "imported",
+          "contentHash": "5a8d50de7240d6487c805e64fac6eff620af6b310ecb834b0593dad9e859614f"
+        },
+        {
+          "id": "labels-or-instructions",
+          "status": "imported",
+          "contentHash": "a727b475abd89a6e726acab01819dd4c92743133d2507a6e05fb2b9a64192419"
+        },
+        {
+          "id": "error-suggestion",
+          "status": "imported",
+          "contentHash": "d81551300225e228da7ced98c50b0beb3a51130b35340195bc7a94967a4430e3"
+        },
+        {
+          "id": "error-prevention-legal-financial-data",
+          "status": "imported",
+          "contentHash": "9ee5ab40eff37e3eecf246e9d491ad1978c7980b52c569e99b61cd928487d669"
+        },
+        {
+          "id": "help",
+          "status": "imported",
+          "contentHash": "5f27b8386f4abf8aaccb7b5276baed27a7fa26324afbacd7dc6c1a1122d2f3db"
+        },
+        {
+          "id": "error-prevention-all",
+          "status": "imported",
+          "contentHash": "af63dc7fe62e9bc875893a7f341048e6b40215be2f7b9a05bfde2b7f2ff8a713"
+        },
+        {
+          "id": "redundant-entry",
+          "status": "imported",
+          "contentHash": "9661550d4e886be71dc7ebbd448f5aa990f44673600df04c6526a5d87c1a3f87"
+        },
+        {
+          "id": "accessible-authentication-minimum",
+          "status": "imported",
+          "contentHash": "9758cf11a919c3174db83416fd20fea365703121032a67757f475c1b0e56f746"
+        },
+        {
+          "id": "accessible-authentication-enhanced",
+          "status": "imported",
+          "contentHash": "41b6aa24cd173d2abe2744838c57d75f323d839029d24d781cb66c35b4f3067b"
+        },
+        {
+          "id": "name-role-value",
+          "status": "imported",
+          "contentHash": "49b8fe4844bbf449130b9321db6b9933386822a3f320175e4ee8d1b397f972e2"
+        },
+        {
+          "id": "status-messages",
+          "status": "imported",
+          "contentHash": "92dc44e35f6445595eeaeb97b6fc37a15dea45f39e61886cd3e0bc6fad1663ce"
+        },
+        {
+          "id": "conformance",
+          "status": "imported",
+          "contentHash": "aebb65763fd2380f8bcebda61330969090ccf49aa4e491905fa6d4a83c43b618"
+        },
+        {
+          "id": "interpreting-normative-requirements",
+          "status": "imported",
+          "contentHash": "a573670213d7556b0ab4d5668f1b54c43e07de6f980b3f1117c18d06ceddf33f"
+        },
+        {
+          "id": "conformance-reqs",
+          "status": "imported",
+          "contentHash": "7a407e48c46cb24c050d8a218007008405bd9d9ea86ee74071930829541b9a50"
+        },
+        {
+          "id": "cc1",
+          "status": "imported",
+          "contentHash": "56efe7aac989b9b9a283a1c3c77dac9db8dd4fac44d2f6ceba8f8ba13a41c22f"
+        },
+        {
+          "id": "cc2",
+          "status": "imported",
+          "contentHash": "db6d24ede29cf55469d4d5ae36b9206fc15038582ea2436fafee1f34c48fd90e"
+        },
+        {
+          "id": "cc3",
+          "status": "imported",
+          "contentHash": "ad573f0ce6a187316c6c7fd547ae7601c44da42665a52fe504d32c74ae3f2258"
+        },
+        {
+          "id": "cc4",
+          "status": "imported",
+          "contentHash": "f67b772d26a3335360bb0bd9b75b37ec3ce9a6edc72555ca3e4009ebfc1eb7e8"
+        },
+        {
+          "id": "cc5",
+          "status": "imported",
+          "contentHash": "b51cf8f518c4a25e9cde7e7958a869cfe93ffd027e841d53679a9b55f23e9c51"
+        },
+        {
+          "id": "conformance-claims",
+          "status": "imported",
+          "contentHash": "353ef814e14d5faa77926773e2a984e082a28a2ea0babd3fb2ed29a43853bf3c"
+        },
+        {
+          "id": "conformance-required",
+          "status": "imported",
+          "contentHash": "46c0afa09c7e3a6deb02323e08c8b3e05d2cadd3be5e209b70619822a2c6f1ef"
+        },
+        {
+          "id": "conformance-optional",
+          "status": "imported",
+          "contentHash": "c351cf0ec60b40ab1d4d102c0ddf825176f29a56732136272e64df9a7d512ccd"
+        },
+        {
+          "id": "conformance-partial",
+          "status": "imported",
+          "contentHash": "4c03fc6bfbcaf3d0b4700d05e69497937999954fd1a61de801a6327d484bed13"
+        },
+        {
+          "id": "conformance-partial-lang",
+          "status": "imported",
+          "contentHash": "2e72542c7c6d96174871b6b03d5fb27f8c879b5665641707c6e9da5b658107cd"
+        },
+        {
+          "id": "privacy-summary",
+          "status": "imported",
+          "contentHash": "08b627b7f2ece0445eb325759d406aa402b7be5dad54661164b5627625c049eb"
+        },
+        {
+          "id": "security-summary",
+          "status": "imported",
+          "contentHash": "bb9aca9e21779dccd149145e85a8064cd1acee89c9b9ce1235a5dc80886371e8"
+        },
+        {
+          "id": "dfn-abbreviations",
+          "status": "imported",
+          "contentHash": "a7c1cc026b0b8ca5c382bab29343b3b451843e23b25e3a4a244ff949e0b5502d"
+        },
+        {
+          "id": "dfn-accessibility-supported",
+          "status": "imported",
+          "contentHash": "6c66bc61b2df0fc6f4f253657c9d00f1ba512323ff5116168ada1f897bc113b7"
+        },
+        {
+          "id": "dfn-alternative-for-time-based-media",
+          "status": "imported",
+          "contentHash": "a885d8de589ddad266f0341ad898156c5fc4c94b0234ebaecd0e05a77139eba7"
+        },
+        {
+          "id": "dfn-ambiguous-to-users-in-general",
+          "status": "imported",
+          "contentHash": "252985f7c9235b74d483abed58e90ac226bac05f4f8f10f9e09f5e452e92d42d"
+        },
+        {
+          "id": "dfn-ascii-art",
+          "status": "imported",
+          "contentHash": "eae12c275fe74190231cb927254805331f35ef319fe0d22143ba245b7a2b0ca9"
+        },
+        {
+          "id": "dfn-assistive-technologies",
+          "status": "imported",
+          "contentHash": "68efe9172774a4fee4fbebcf3626b2539fe83ff55705e6457cecc21e9b5d50e7"
+        },
+        {
+          "id": "dfn-audio",
+          "status": "imported",
+          "contentHash": "ae8be0242d5416c4dbe3c40be5d659022fe6afcf69be77eceb9b81910f40b39a"
+        },
+        {
+          "id": "dfn-audio-descriptions",
+          "status": "imported",
+          "contentHash": "c8a6beaabe4417f9f0409eba10dabe5faf2d160d6ff053c965f9cb04921dc595"
+        },
+        {
+          "id": "dfn-audio-only",
+          "status": "imported",
+          "contentHash": "e6ee0fcb63d7dce023778d9a2675b65d321b2c06c11b6fdc538aaad6c9e9ce53"
+        },
+        {
+          "id": "dfn-blinking",
+          "status": "imported",
+          "contentHash": "5cebb8ca8395ee55fe94bc4dc62eb5d98e9102029b49c81c63bc52d395f2f901"
+        },
+        {
+          "id": "dfn-blocks-of-text",
+          "status": "imported",
+          "contentHash": "d2639211f4bb444cc5dbd5197747fc13def011dec201bc53b52df3febf5614db"
+        },
+        {
+          "id": "dfn-captcha",
+          "status": "imported",
+          "contentHash": "98a2f1220fb3fb23dc820414a50623b1a111797a1a29019ae8848045103df157"
+        },
+        {
+          "id": "dfn-captions",
+          "status": "imported",
+          "contentHash": "53003992307f2c06bab7b2620f11f9d06516ff3db5405c433e7b3a5bb58e6895"
+        },
+        {
+          "id": "dfn-change-of-context",
+          "status": "imported",
+          "contentHash": "5d99592d5363e340a7362c53aebf6946d9fbfa3b60ed8d2ac5717622966276fd"
+        },
+        {
+          "id": "dfn-cognitive-function-test",
+          "status": "imported",
+          "contentHash": "67d67d02befcbaaee270d5080722e61e8311716a7b79391b50952d55b4feaebd"
+        },
+        {
+          "id": "dfn-conform",
+          "status": "imported",
+          "contentHash": "02916da58b149ee88333c2e1f0f92d2cbacb0e93ea809a79f0c65aab92fc142a"
+        },
+        {
+          "id": "dfn-conforming-alternate-versions",
+          "status": "imported",
+          "contentHash": "527f64185cb4ebff5ea24563430a9521d83b107d637679a3dd7615ea9c54146a"
+        },
+        {
+          "id": "dfn-content",
+          "status": "imported",
+          "contentHash": "f76da9bea6beb312cf738e107079afafde4aa9839f2a5f1d6d9e2b4eea444d17"
+        },
+        {
+          "id": "dfn-context-sensitive-help",
+          "status": "imported",
+          "contentHash": "d95c2a4c0104a1f4bac8191400776560ac0e706e2de9b6ed128b311b5df6b1e2"
+        },
+        {
+          "id": "dfn-contrast-ratio",
+          "status": "imported",
+          "contentHash": "d20c0b0df5b02304fce3df244d13dd3cc4815893864f07f963fa6dc51eb5df9d"
+        },
+        {
+          "id": "dfn-correct-reading-sequence",
+          "status": "imported",
+          "contentHash": "513a90f9baeeda3bca7f176abf473d091a6d6f6cd25d555f60a98896fc60689c"
+        },
+        {
+          "id": "dfn-css-pixels",
+          "status": "imported",
+          "contentHash": "51bf8b037cde302a9e0f14a09f608b9fc903e5cf480bd799962b4332adea9879"
+        },
+        {
+          "id": "dfn-down-event",
+          "status": "imported",
+          "contentHash": "6743af75fdea725a19bb5d0bffd728c20a2a9ac6482825106a6c2c33f7bd471b"
+        },
+        {
+          "id": "dfn-dragging-movements",
+          "status": "imported",
+          "contentHash": "2f434d2343a8cf023252768c0820446c39f2602723bfe7c322e57138d07bc30d"
+        },
+        {
+          "id": "dfn-emergency",
+          "status": "imported",
+          "contentHash": "60c89b42ddf20c8618352223d0b1ce173d19b209aa9ae53448ed1dfe5a3e8396"
+        },
+        {
+          "id": "dfn-essential",
+          "status": "imported",
+          "contentHash": "080f65ebeeab7cc14a6ca48bfcf4c17526ffa0ed862f727c21fa731923e29fce"
+        },
+        {
+          "id": "dfn-extended-audio-description",
+          "status": "imported",
+          "contentHash": "39b775cfa1fafec649768afd39929b4cc951921a8149cef48007b5653af8bd29"
+        },
+        {
+          "id": "dfn-flashes",
+          "status": "imported",
+          "contentHash": "6b70f750417ff14cb1db66051d7df457ebdbf8bd6708340706712c53d178ed31"
+        },
+        {
+          "id": "dfn-focus-indicator",
+          "status": "imported",
+          "contentHash": "425e7c59ca51d7d9c69f7f4c3c8b4906d991fc481b2d2e5ba5f248e488996d11"
+        },
+        {
+          "id": "dfn-functionality",
+          "status": "imported",
+          "contentHash": "5a523f4d848043158894176f5e2140171586cba16a6a197ee5e339ed319045fe"
+        },
+        {
+          "id": "dfn-general-flash-and-red-flash-thresholds",
+          "status": "imported",
+          "contentHash": "981927f8318f974fdabec93c14ef9ea0dbff3dcd71d625b0f9147807ed14a451"
+        },
+        {
+          "id": "dfn-human-language-s",
+          "status": "imported",
+          "contentHash": "f09b469c8a76a88cfb4c3c8423eb85673104c97ba8c687499aa9ad4f6edc87e2"
+        },
+        {
+          "id": "dfn-idioms",
+          "status": "imported",
+          "contentHash": "162a25ada157728e88741116837d1c6c44b5ee4dd2f11b9a53b4178263ceb38f"
+        },
+        {
+          "id": "dfn-images-of-text",
+          "status": "imported",
+          "contentHash": "0d785cdbc9e5ac2b364c6cd40661663d86e6982be7f209060e2628dc34eb8c30"
+        },
+        {
+          "id": "dfn-informative",
+          "status": "imported",
+          "contentHash": "a3794f321bf7ee6106dba5c90f383d0c0820fda9196ee7676082e1a611accba6"
+        },
+        {
+          "id": "dfn-input-error",
+          "status": "imported",
+          "contentHash": "585429fad1287128b122406b2cdc813d3b673283d72507f453831122dc73723c"
+        },
+        {
+          "id": "dfn-jargon",
+          "status": "imported",
+          "contentHash": "89556d1fb86e3e30ffed93fe14154751507b1eee2ab5a532f559ad662f54e800"
+        },
+        {
+          "id": "dfn-keyboard-interface",
+          "status": "imported",
+          "contentHash": "1da568babbf16933885aa684376ff00e5bfbea99814ac5184b212a1a91533f9f"
+        },
+        {
+          "id": "dfn-keyboard-shortcuts",
+          "status": "imported",
+          "contentHash": "e99fb56369977b34b4a2c9e3de5a3d33212235600ef4103a64f86c17387a5fd8"
+        },
+        {
+          "id": "dfn-labels",
+          "status": "imported",
+          "contentHash": "fe6415b9367ea004f66774a73368f94db33f5537d0ebeb83b09db46523ce748e"
+        },
+        {
+          "id": "dfn-large-scale",
+          "status": "imported",
+          "contentHash": "e28e714009e7fdeed1b07b10c013f3d3645fd953d954c2d1ab4fd11f02b4c06c"
+        },
+        {
+          "id": "dfn-legal-commitments",
+          "status": "imported",
+          "contentHash": "ea10b262824dacfb4e585e81fa79f8b1ba94d690b14beab063c82361b1170274"
+        },
+        {
+          "id": "dfn-purpose-of-each-link",
+          "status": "imported",
+          "contentHash": "edfe1f1fbf4502bd78e8f64378d085b3739ddc3f8123f3c044a3a868b874b6d5"
+        },
+        {
+          "id": "dfn-live",
+          "status": "imported",
+          "contentHash": "c943ca800404092c78c684fb8a97df627b5ff0bd2c6dda9882992595b29bb22e"
+        },
+        {
+          "id": "dfn-lower-secondary-education-level",
+          "status": "imported",
+          "contentHash": "cdba03eb3cdbb0076331c008a0099180f258fe00e3b7726e41ca88a9084fa1c4"
+        },
+        {
+          "id": "dfn-mechanism",
+          "status": "imported",
+          "contentHash": "1bfa6b373d71ecd313c59755384f1631260695fba2842b2fd5b5f772c69c4efe"
+        },
+        {
+          "id": "dfn-media-alternative-for-text",
+          "status": "imported",
+          "contentHash": "f1d3c6adb5d838ab450e66f65e2998a0bbb862edc768959b4618890dea5b9cc6"
+        },
+        {
+          "id": "dfn-motion-animation",
+          "status": "imported",
+          "contentHash": "445bd64f92a3d410056a98a9d04710d7cbf99f44e2649cc700251afbaa3b5d9d"
+        },
+        {
+          "id": "dfn-bounding-boxes",
+          "status": "imported",
+          "contentHash": "96d1951a2040109ddc3e416ea068ff243b9fcc58f9b4cba98c4f4ba349c3b964"
+        },
+        {
+          "id": "dfn-name",
+          "status": "imported",
+          "contentHash": "7a1a7987cb4de735a048d01622ba41154ee8dc0f935e454a1dd8cc5aa9c0e439"
+        },
+        {
+          "id": "dfn-navigated-sequentially",
+          "status": "imported",
+          "contentHash": "ba70aa3734d8eb5ae0b5c53cd52772436d4a37b0844cf029e8c50c8d3185dc5b"
+        },
+        {
+          "id": "dfn-non-text-content",
+          "status": "imported",
+          "contentHash": "ce9a2307124a4c582cfd959fa16bc77a341ca838c2a0e683947f2fac6a3f7797"
+        },
+        {
+          "id": "dfn-normative",
+          "status": "imported",
+          "contentHash": "6afb41240446013424be6c3e7a71740dacb4c3e7deec2c868ced846c5494ded1"
+        },
+        {
+          "id": "dfn-on-a-full-screen-window",
+          "status": "imported",
+          "contentHash": "19cf75902d4d15a9f6e47de2be4a977e3b7e8657fbc42d9130ecb12550ebaafb"
+        },
+        {
+          "id": "dfn-pause",
+          "status": "imported",
+          "contentHash": "811adc33ffc062114f311a8c6fa99c393582cf2f6d2550d6836fad36b4228f46"
+        },
+        {
+          "id": "dfn-perimeter",
+          "status": "imported",
+          "contentHash": "81e7dbec7a61e681feeb91a5feecada91cb0acf4b3cf1b4d24100d433c81ffa0"
+        },
+        {
+          "id": "dfn-pointer-inputs",
+          "status": "imported",
+          "contentHash": "97b9a2080de0361815c246b054b7b2cf1efd8c357cf3f5fde3889a87b97ccdb9"
+        },
+        {
+          "id": "dfn-prerecorded",
+          "status": "imported",
+          "contentHash": "e5cc8c57895b977ff0e73c98c2f63e31463903f7d72a2eba0725fd99bf75a7eb"
+        },
+        {
+          "id": "dfn-presentation",
+          "status": "imported",
+          "contentHash": "d821b704284649a30dee00a8c1f99d8d45f6683534fd0a33810658ac9506a909"
+        },
+        {
+          "id": "dfn-primary-education",
+          "status": "imported",
+          "contentHash": "f282179b99f8abc271f74585dbd895457635c8c18b9c583ae71636a115f0f0f1"
+        },
+        {
+          "id": "dfn-processes",
+          "status": "imported",
+          "contentHash": "9bae87287ccf7ea428d640fbdeda54c67b61f9c3955d39dacfb76ae730c25a6a"
+        },
+        {
+          "id": "dfn-programmatically-determinable",
+          "status": "imported",
+          "contentHash": "86eee38352b67e6095492ea7a831d363896d9cc5f2879494de67cafc14b6e909"
+        },
+        {
+          "id": "dfn-programmatically-determined-link-context",
+          "status": "imported",
+          "contentHash": "5a119dfcb618d399d2691009cee3b7f31c6b819df09d1cef4e16eb2f8cfc00d5"
+        },
+        {
+          "id": "dfn-programmatically-set",
+          "status": "imported",
+          "contentHash": "72d8e82e56ddfb7a1023687df80b297e9715b98263bc6a43b77953000a881b72"
+        },
+        {
+          "id": "dfn-pure-decoration",
+          "status": "imported",
+          "contentHash": "5cc5f276759fdb6d257b77c8b0fd6af677131f67101b658e4d0cfee39c0fae94"
+        },
+        {
+          "id": "dfn-real-time-events",
+          "status": "imported",
+          "contentHash": "f597bef61cc91845c80f040e251cc5758061c602f3df371b9f2fadd2f35b3e5d"
+        },
+        {
+          "id": "dfn-regions",
+          "status": "imported",
+          "contentHash": "c14e7893ce20b828b66e44a6bc9b21917f16fc361b58eb738643d419366198c9"
+        },
+        {
+          "id": "dfn-relationships",
+          "status": "imported",
+          "contentHash": "69c881f3f7353d606d50ae41656209be4950e3e8e4a3f644facf5619f721a3c3"
+        },
+        {
+          "id": "dfn-relative-luminance",
+          "status": "imported",
+          "contentHash": "3c0907c9c5e44ad729c2c70653fdd2402e17c234b34529ab3d6b9a24daa3329c"
+        },
+        {
+          "id": "dfn-relied-upon",
+          "status": "imported",
+          "contentHash": "195e2c428ddf970941d36045540b61a4274b7ee4ec6403fd733645a0250481b0"
+        },
+        {
+          "id": "dfn-role",
+          "status": "imported",
+          "contentHash": "848d4cbc505f47ebb7534471ad7117563a2e1135397b4ccc7ea4940bf31d753a"
+        },
+        {
+          "id": "dfn-same-functionality",
+          "status": "imported",
+          "contentHash": "0347558b8b398486e0313c7c6dbd9e1c208a29272a93fe2dcc3e564225f06f60"
+        },
+        {
+          "id": "dfn-same-relative-order",
+          "status": "imported",
+          "contentHash": "777943fe3512f97f43469487afba476283c82841697c88023025af7df57bb3c6"
+        },
+        {
+          "id": "dfn-satisfies",
+          "status": "imported",
+          "contentHash": "d931445e24016242d3d2b960fd87bd60df4d0f5af97dcbede1307fc8286d7993"
+        },
+        {
+          "id": "dfn-section",
+          "status": "imported",
+          "contentHash": "023f425270ba540176e659800fc1963d1dc51824c9642a0d6512d59203763477"
+        },
+        {
+          "id": "dfn-set-of-web-pages",
+          "status": "imported",
+          "contentHash": "17aaef89c5f7e3221e136de2d496d0847ed37f1a76ef3e258a02836bf352bca0"
+        },
+        {
+          "id": "dfn-sign-language",
+          "status": "imported",
+          "contentHash": "bd2abd93f6f8ffff2c0c21b4b3b1a4073c65d0034b5250a114e7a3a9233dc92c"
+        },
+        {
+          "id": "dfn-sign-language-interpretation",
+          "status": "imported",
+          "contentHash": "f6b15346af36db9670360beb0c99839516b25649fdb855318ae28e2e4ed1d2b7"
+        },
+        {
+          "id": "dfn-single-pointer",
+          "status": "imported",
+          "contentHash": "13fa6e6c2febb24ed57c1158989cd83bac1d3adf3def36f93d2169e6a8a36c51"
+        },
+        {
+          "id": "dfn-specific-sensory-experience",
+          "status": "imported",
+          "contentHash": "53399c9981b97df7930d7fe170811e6910fcfe7e9e2d1c9a13aba99bacd23352"
+        },
+        {
+          "id": "dfn-states",
+          "status": "imported",
+          "contentHash": "c1e00c8f05e685747b18b86907fbe7a2ea11b59593cf4cca0d6e45bf905cf9f9"
+        },
+        {
+          "id": "dfn-status-messages",
+          "status": "imported",
+          "contentHash": "24b6a0f4a655fdee4eb17d6ab2f1293d7b015fbfabb6b663aaa7d1cb5b77948e"
+        },
+        {
+          "id": "dfn-structure",
+          "status": "imported",
+          "contentHash": "8f06f76a4816def80ae449bb8aa0ffc9638c0dedb4d18c9daa009ad27e616de3"
+        },
+        {
+          "id": "dfn-style-properties",
+          "status": "imported",
+          "contentHash": "7a3f9c6fb237879b053935557ddf9b0371ca68b7fc442f63a82d30b8f713bb77"
+        },
+        {
+          "id": "dfn-supplementary-content",
+          "status": "imported",
+          "contentHash": "ccdd963ac120dcd197c543b12be6c880dd3f567e2dfd1507ca5d65e74a30bd6f"
+        },
+        {
+          "id": "dfn-synchronized-media",
+          "status": "imported",
+          "contentHash": "0ffcceb14a7734ac3aaa8f62deddc016baab35e37d42f4599587d38030adc331"
+        },
+        {
+          "id": "dfn-targets",
+          "status": "imported",
+          "contentHash": "e8f492847dd304a34f3c4cfd0bb721557c5574d3d64bd75e4d5db780249ee97f"
+        },
+        {
+          "id": "dfn-technologies",
+          "status": "imported",
+          "contentHash": "9dcab80a4ceac8b03139ef062f1b5ea36a2b5eea68e4707eb60654b3c7d59c62"
+        },
+        {
+          "id": "dfn-text",
+          "status": "imported",
+          "contentHash": "383a8cb0b8d0112584183dc70fc93b661afed4df6fe917d14224c8a6c3e6270a"
+        },
+        {
+          "id": "dfn-text-alternative",
+          "status": "imported",
+          "contentHash": "a80bdfb2ba18680f58996439469b2ae348c6de242424c9da9d72ac1bb1ac5712"
+        },
+        {
+          "id": "dfn-up-event",
+          "status": "imported",
+          "contentHash": "905d15d5c5cf895b3d32cead2792a87eb894d895f379e0a984b24327587600e1"
+        },
+        {
+          "id": "dfn-used-in-an-unusual-or-restricted-way",
+          "status": "imported",
+          "contentHash": "46e5fb0af7c61c7553c8f3148b3f3d6efa968f1b9791ab4bbb03313ece12ff7b"
+        },
+        {
+          "id": "dfn-user-agents",
+          "status": "imported",
+          "contentHash": "15ef47e448710fdafa289634c7efb68c0ef97e6afa7bfd85929f7abdda7c0a2a"
+        },
+        {
+          "id": "dfn-user-controllable",
+          "status": "imported",
+          "contentHash": "0faa355128383531af170c10e6f0ec745bef3ba5e64def369228af5e13e2773f"
+        },
+        {
+          "id": "dfn-user-interface-components",
+          "status": "imported",
+          "contentHash": "d00462d4300872d6ae30961f3b471e3befe057544a3c7d88e8d57ad359c9fb6a"
+        },
+        {
+          "id": "dfn-user-inactivity",
+          "status": "imported",
+          "contentHash": "d976c59cc151c0e1be8e93a801d1704380919d1e573a76115faf78ea653fa741"
+        },
+        {
+          "id": "dfn-video",
+          "status": "imported",
+          "contentHash": "4b1758398c3e3c7fd9d3670c7ede95a0bd68e993fb921dc195e2aefa8a7d3c2c"
+        },
+        {
+          "id": "dfn-video-only",
+          "status": "imported",
+          "contentHash": "c65ee7264e5b26651f65cfeaa56a41e92f58dcc26a5f43984e6daa3256ee67b9"
+        },
+        {
+          "id": "dfn-viewport",
+          "status": "imported",
+          "contentHash": "a0c0cc7fc0b713353563063baa8c76cd82e53df4efce51b623420902ab499143"
+        },
+        {
+          "id": "dfn-visually-customized",
+          "status": "imported",
+          "contentHash": "a9225f94e3dbe798849f052f039952d382614972e641ed8a4354a5373e459ee5"
+        },
+        {
+          "id": "dfn-web-page-s",
+          "status": "imported",
+          "contentHash": "50527441ea3c9fdd2ff61a1ac315c55fe817aa097a3454fedb8515911da5cba5"
+        }
+      ],
+      "contentHash": "bad0d929df0696128ae9c66321a8b448afd0ad1180ade4f20ab025bb26a7bedb",
+      "status": "published",
+      "rights": "redistributable",
+      "approvedHosts": [
+        "www.w3.org"
+      ],
+      "notice": "Copyright © 2020–2024 World Wide Web Consortium. Copyright © 2023 W3C®. This software includes material copied from or derived from Web Content Accessibility Guidelines (WCAG) 2.2 (https://www.w3.org/TR/2024/REC-WCAG22-20241212/). W3C Recommendation, 12 December 2024. https://www.w3.org/copyright/document-license-2023/"
+    },
+    {
+      "id": "aria-apg",
+      "publisher": "W3C WAI",
+      "title": "ARIA Authoring Practices Guide",
+      "edition": "f14b2490a6728cda85fd7feafbd148b3c3eaf038",
+      "canonicalUrl": "https://www.w3.org/WAI/ARIA/apg/",
+      "snapshotUrl": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/",
+      "retrievedAt": "2026-11-13",
+      "sectionManifest": [
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/about/introduction/introduction.html#main",
+          "status": "imported",
+          "contentHash": "c3eef11b8d2f845fff2f3f51caab3534e97943f35191d32f73aadd0a93675ee9"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/patterns/accordion/accordion-pattern.html#main",
+          "status": "imported",
+          "contentHash": "db34a3e8cbd4ebd6db855b71d0f7f9561ffd090dc06659f7b3f7698e614d281a"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/patterns/alert/alert-pattern.html#main",
+          "status": "imported",
+          "contentHash": "69176c5719d65a898742597c64825eee76b214110db270de1c5c63f76b861fd2"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/patterns/alertdialog/alertdialog-pattern.html#main",
+          "status": "imported",
+          "contentHash": "b9c7c7d8afd2c5cd9c33fe7e49872aa4943fe355635a56b4073ce10f4471eb31"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/patterns/breadcrumb/breadcrumb-pattern.html#main",
+          "status": "imported",
+          "contentHash": "a6ea69c59118ca65f97db101fbdd3d23fce596e5883899954c38eb997c5e0d92"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/patterns/button/button-pattern.html#main",
+          "status": "imported",
+          "contentHash": "0e3d3cde2505b8b754de2fba1f552fae1efc533a2ff484b34e7c948998090898"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/patterns/carousel/carousel-pattern.html#main",
+          "status": "imported",
+          "contentHash": "13bcbe78d9938f446841cc4852e3aede9b144aec3f5711bf1888934c8413a959"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/patterns/checkbox/checkbox-pattern.html#main",
+          "status": "imported",
+          "contentHash": "9c3456880f60f81440553420c972f2cb2c2804b1d69d5f017f8a42d15c536a62"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/patterns/combobox/combobox-pattern.html#main",
+          "status": "imported",
+          "contentHash": "0cfddb9b84fe4363fe0cd6bfcf6a3fdecf16d21574fe631cff5b9880f7e99d87"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/patterns/dialog-modal/dialog-modal-pattern.html#main",
+          "status": "imported",
+          "contentHash": "78b4dc0120c2e6e2c51f0be6b477f4ef86bb69e524a825feae901d9e60275015"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/patterns/disclosure/disclosure-pattern.html#main",
+          "status": "imported",
+          "contentHash": "b0b02a9fe4a1d66e553c29d24ae6ae6323b49e529e9421ff38f4b283e056e24c"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/patterns/feed/feed-pattern.html#main",
+          "status": "imported",
+          "contentHash": "1f40cc9abeeeed06ef238cebafee39266c7b833da52a0ee47f67e162c247502f"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/patterns/grid/grid-pattern.html#main",
+          "status": "imported",
+          "contentHash": "fb3fc3e7b311effadaa6c226ff7d354bdca12681767f4eb9805d979f537d4a46"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/patterns/landmarks/landmarks-pattern.html#main",
+          "status": "imported",
+          "contentHash": "d5d318af8f53c891a11da9cc1952ad367635663d1cb61b0e7d31947ed5e6e48f"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/patterns/link/link-pattern.html#main",
+          "status": "imported",
+          "contentHash": "d93bc3599a895b8ced79a07612b74800b4369ce67bdf1a7d29985ce1b35638cb"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/patterns/listbox/listbox-pattern.html#main",
+          "status": "imported",
+          "contentHash": "663c5a6f7a9f36e01ba25921acfd4ab66181f3fcee6d3260418af46ed9d74080"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/patterns/menu-button/menu-button-pattern.html#main",
+          "status": "imported",
+          "contentHash": "0ec32dfd87af6d80e40fedb83f41d4713bf640460c5b10c7034d6cffb31cb91f"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/patterns/menubar/menu-and-menubar-pattern.html#main",
+          "status": "imported",
+          "contentHash": "fab6e75c56ab319bec18eab5ac39902c5987a9c519ef2a3dab9f5405ec19dd4c"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/patterns/meter/meter-pattern.html#main",
+          "status": "imported",
+          "contentHash": "a2fa347c5596f7f334c276fa119e6307c01674a00073714f4923d2708dd2dbd7"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/patterns/radio/radio-group-pattern.html#main",
+          "status": "imported",
+          "contentHash": "e6b92b86e1e1cd01eef2cadcdc8fda88ccdfe9e302a7a816c0246cca851de8b7"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/patterns/slider-multithumb/slider-multithumb-pattern.html#main",
+          "status": "imported",
+          "contentHash": "2455f026a25922598c89d41d2e477c3e60659e85458f815b7f5916fe4cdee0a7"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/patterns/slider/slider-pattern.html#main",
+          "status": "imported",
+          "contentHash": "5e1f3304e263b45f84ed0746b2888f9f5dacde194843604bae7273e6edfac4eb"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/patterns/spinbutton/spinbutton-pattern.html#main",
+          "status": "imported",
+          "contentHash": "af0f2e5631fe2d6d560538ba15cb05f543513b26f8dcbcf511f10af6bc9174ff"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/patterns/switch/switch-pattern.html#main",
+          "status": "imported",
+          "contentHash": "1053c030f027a52b067b71e3d7950ff6c3499e9f1fbce615cfb94a8c2bc1b374"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/patterns/table/table-pattern.html#main",
+          "status": "imported",
+          "contentHash": "466651cc3d043629daf38ddd8e85ea79658a853e7e68f8f02405f69e10137cc8"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/patterns/tabs/tabs-pattern.html#main",
+          "status": "imported",
+          "contentHash": "9143e4c17766ede96673a0464452f25f2d7ade89203f8eff5c21ce90219f3327"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/patterns/toolbar/toolbar-pattern.html#main",
+          "status": "imported",
+          "contentHash": "dda7dd1965598ccc6dffde412cf1b8f62f75d9633ac9d2c8c422b5c37b20cf96"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/patterns/tooltip/tooltip-pattern.html#main",
+          "status": "imported",
+          "contentHash": "6e599606046fce20c21a09962f6b470a5ca63eb6afaf0304223e6068805f896e"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/patterns/treegrid/treegrid-pattern.html#main",
+          "status": "imported",
+          "contentHash": "d4f0acc4a715face093da5db9cffc411f6285b70190714d871a2b88d4eb40194"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/patterns/treeview/treeview-pattern.html#main",
+          "status": "imported",
+          "contentHash": "56432ef15e2044f4933f52975164fe7bf4ede377b1284eca8117ae32909939fc"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/patterns/windowsplitter/windowsplitter-pattern.html#main",
+          "status": "imported",
+          "contentHash": "f952594d27f5bb309d11a2452964b919f0e477683bf5ababf6c18b81af765f18"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/practices/grid-and-table-properties/grid-and-table-properties-practice.html#main",
+          "status": "imported",
+          "contentHash": "172766db8b1a5f21b301164e392ab0f10217607d3352fd78b987d7df9a229b3e"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/practices/hiding-semantics/hiding-semantics-practice.html#main",
+          "status": "imported",
+          "contentHash": "2e83e9c556f7c063d0d3e46a937b14c64b57af6d02bf2d9803962f8ee75fb306"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/practices/keyboard-interface/keyboard-interface-practice.html#main",
+          "status": "imported",
+          "contentHash": "5bc896d6fea658d563384c9901f7c9dbb3bf4b2a4ed67b67f745b4d00d4c5643"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/practices/landmark-regions/landmark-regions-practice.html#main",
+          "status": "imported",
+          "contentHash": "586bb6601baf611fe650007a6802daf594face1f703f9671a958c90b8e4eddb6"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/practices/names-and-descriptions/names-and-descriptions-practice.html#main",
+          "status": "imported",
+          "contentHash": "06ba291f751479995e89e5f8b7f7d222975ea9573cfd45759fc1af30161774cc"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/practices/range-related-properties/range-related-properties-practice.html#main",
+          "status": "imported",
+          "contentHash": "ae14697bccb0ffadb6403cb767ab9b4c50e28354af148d10618b01f5bdc2d8f1"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/practices/read-me-first/read-me-first-practice.html#main",
+          "status": "imported",
+          "contentHash": "aa0ee1b8e0c15cd0b576c005fa1ef4da8f5aee2cd1d35c52cc1c64dfcd99e095"
+        },
+        {
+          "id": "https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/content/practices/structural-roles/structural-roles-practice.html#main",
+          "status": "imported",
+          "contentHash": "5b85ff0e451b440808f023e5f5bb2b34a52a142059d9274c557a37e566425916"
+        }
+      ],
+      "contentHash": "9d6049bafa5912dba5907f20cb9a9eeac89b6aef31e640b2b6a5fe4928ed75ca",
+      "status": "published",
+      "rights": "redistributable",
+      "approvedHosts": [
+        "raw.githubusercontent.com"
+      ],
+      "notice": "Copyright © World Wide Web Consortium. ARIA Authoring Practices Guide (https://www.w3.org/WAI/ARIA/apg/), informative W3C WAI resource. Repository license: https://raw.githubusercontent.com/w3c/aria-practices/f14b2490a6728cda85fd7feafbd148b3c3eaf038/LICENSE.md"
+    },
+    {
+      "id": "iso-9241-110-2020",
+      "publisher": "ISO",
+      "title": "Ergonomics of human-system interaction — Interaction principles",
+      "edition": "9241-110:2020",
+      "canonicalUrl": "https://www.iso.org/standard/75258.html",
+      "snapshotUrl": "https://www.iso.org/standard/75258.html",
+      "retrievedAt": "2026-11-13",
+      "sectionManifest": [
+        {
+          "id": "licensed clauses",
+          "status": "unavailable",
+          "reason": "Licensed clauses have not been supplied."
+        }
+      ],
+      "contentHash": "daf20125bdd7a792d76ad31917e0b4a30958e55bd8694cd71b6281854faf19c6",
+      "rights": "metadata-only",
+      "status": "published"
+    },
+    {
+      "id": "iso-9241-210-2019",
+      "publisher": "ISO",
+      "title": "Human-centred design for interactive systems",
+      "edition": "9241-210:2019",
+      "canonicalUrl": "https://www.iso.org/standard/77520.html",
+      "snapshotUrl": "https://www.iso.org/standard/77520.html",
+      "retrievedAt": "2026-11-13",
+      "sectionManifest": [
+        {
+          "id": "licensed clauses",
+          "status": "unavailable",
+          "reason": "Licensed clauses have not been supplied."
+        }
+      ],
+      "contentHash": "daf20125bdd7a792d76ad31917e0b4a30958e55bd8694cd71b6281854faf19c6",
+      "rights": "metadata-only",
+      "status": "published"
+    },
+    {
+      "id": "iso-9241-112-2025",
+      "publisher": "ISO",
+      "title": "Principles for the presentation of information",
+      "edition": "9241-112:2025",
+      "canonicalUrl": "https://www.iso.org/standard/87518.html",
+      "snapshotUrl": "https://www.iso.org/standard/87518.html",
+      "retrievedAt": "2026-11-13",
+      "sectionManifest": [
+        {
+          "id": "licensed clauses",
+          "status": "unavailable",
+          "reason": "Licensed clauses have not been supplied."
+        }
+      ],
+      "contentHash": "daf20125bdd7a792d76ad31917e0b4a30958e55bd8694cd71b6281854faf19c6",
+      "rights": "metadata-only",
+      "status": "published"
+    },
+    {
+      "id": "nielsen",
+      "publisher": "Nielsen Norman Group",
+      "title": "10 Usability Heuristics for User Interface Design",
+      "edition": "2024-01-30 review",
+      "canonicalUrl": "https://www.nngroup.com/articles/ten-usability-heuristics/",
+      "snapshotUrl": "https://www.nngroup.com/articles/ten-usability-heuristics/",
+      "retrievedAt": "2026-11-13",
+      "sectionManifest": [
+        {
+          "id": "Heuristic 1",
+          "status": "imported",
+          "contentHash": "539ef34919884b4dbc149d517b050970acceca2db2124733d3ef2efdcf9c6956"
+        },
+        {
+          "id": "Heuristic 2",
+          "status": "imported",
+          "contentHash": "21b21dfbf08e960af14ad2ebc7c2941965d3ceb7e61ce5c65be02f7e44617762"
+        },
+        {
+          "id": "Heuristic 3",
+          "status": "imported",
+          "contentHash": "8c47e9527a5dab4699e645a9c499ac32917e986ba5af26763ec71328181551a1"
+        },
+        {
+          "id": "Heuristic 4",
+          "status": "imported",
+          "contentHash": "30e3713157a5f946e15ae1a603c4dd8effa3fecc7926ef7ec02aff9f217fbc0c"
+        },
+        {
+          "id": "Heuristic 5",
+          "status": "imported",
+          "contentHash": "2bd1aa0ebb4cdf6255aae17941f56b3536ee780b62193c15800298dcf123dbe2"
+        },
+        {
+          "id": "Heuristic 6",
+          "status": "imported",
+          "contentHash": "adeb467672d07eb3d270ecd42cc2d11bfa79672d8018d50c141078fc736aeea1"
+        },
+        {
+          "id": "Heuristic 7",
+          "status": "imported",
+          "contentHash": "fa64453486c8a66415dccc94ba0f126b555f87e9529edd3baae1ba1ea676d659"
+        },
+        {
+          "id": "Heuristic 8",
+          "status": "imported",
+          "contentHash": "20a9106b78a1dc4db21e761428751aa1e261434d5e02d2473051e5fe5261141f"
+        },
+        {
+          "id": "Heuristic 9",
+          "status": "imported",
+          "contentHash": "a8fcf156f57be7d12ce47f0da1cacc850273da8feba253aa7ab555cfa11c7101"
+        },
+        {
+          "id": "Heuristic 10",
+          "status": "imported",
+          "contentHash": "f22c9ebcf2a6b7d77faeeeb8c1a1c95e2d4aa0e146b674fd119002cc9ed69e75"
+        }
+      ],
+      "contentHash": "ac209da7c95b9987276cd6c83f280101406d674c8de4ee8d147b0201c44404cb",
+      "rights": "metadata-only",
+      "status": "published"
+    },
+    {
+      "id": "shneiderman",
+      "publisher": "Ben Shneiderman",
+      "title": "The Eight Golden Rules of Interface Design",
+      "edition": "author website snapshot",
+      "canonicalUrl": "https://www.cs.umd.edu/users/ben/goldenrules.html",
+      "snapshotUrl": "https://www.cs.umd.edu/users/ben/goldenrules.html",
+      "retrievedAt": "2026-11-13",
+      "sectionManifest": [
+        {
+          "id": "Rule 1",
+          "status": "imported",
+          "contentHash": "163713db269c69e9b14b69fc879c119ee298d6cc2f05e21e3d9de3efaa40d495"
+        },
+        {
+          "id": "Rule 2",
+          "status": "imported",
+          "contentHash": "f22b25c4e96c4351a5426a5c08fc585ae2fb3f338100fe3be49ad9d55f021886"
+        },
+        {
+          "id": "Rule 3",
+          "status": "imported",
+          "contentHash": "302fed03f9b17ea77a0891daa8a5e811e7bc1497a798fd56aa16f99ac926e823"
+        },
+        {
+          "id": "Rule 4",
+          "status": "imported",
+          "contentHash": "943f402ffc1bc29a6301e9c97c4f72e107593c9667a538fe09ebf3f841249860"
+        },
+        {
+          "id": "Rule 5",
+          "status": "imported",
+          "contentHash": "f1d7e32a2cf63b298ce8f4da6d9a4a53533f5d9b714bea7cb2d75f0fb6b854ce"
+        },
+        {
+          "id": "Rule 6",
+          "status": "imported",
+          "contentHash": "e3aab8a6fe33fbd7940493b344345daec527080a4df2d54ba6e8d96923d2b254"
+        },
+        {
+          "id": "Rule 7",
+          "status": "imported",
+          "contentHash": "f386d345799629ffdb86cccfdcb1914a4dcce46b9ba7a7decc4cc94b3e540e81"
+        },
+        {
+          "id": "Rule 8",
+          "status": "imported",
+          "contentHash": "e267cbd635316e61808ca8448668b2b21466bfce426d4b2370161911ed244be3"
+        }
+      ],
+      "contentHash": "d1722b20660a0c777ce2a730a65c82e2174787e2143c18cb32d5901800ae6bc7",
+      "rights": "metadata-only",
+      "status": "published"
+    },
+    {
+      "id": "apple-hig",
+      "publisher": "Apple",
+      "title": "Human Interface Guidelines",
+      "edition": "unverified online edition",
+      "canonicalUrl": "https://developer.apple.com/design/human-interface-guidelines/",
+      "snapshotUrl": "https://developer.apple.com/design/human-interface-guidelines/",
+      "retrievedAt": "2026-11-13",
+      "sectionManifest": [
+        {
+          "id": "platforms",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        },
+        {
+          "id": "foundations",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        },
+        {
+          "id": "components",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        },
+        {
+          "id": "patterns",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        },
+        {
+          "id": "inputs",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        }
+      ],
+      "contentHash": "7a423890a8f48db933b76ad33dba1e4d08e0033a44b3600438acd9625dc60efe",
+      "rights": "metadata-only",
+      "status": "unverified"
+    },
+    {
+      "id": "fluent-2",
+      "publisher": "Microsoft",
+      "title": "Fluent 2 Design System",
+      "edition": "Fluent 2",
+      "canonicalUrl": "https://fluent2.microsoft.design/",
+      "snapshotUrl": "https://fluent2.microsoft.design/",
+      "retrievedAt": "2026-11-13",
+      "sectionManifest": [
+        {
+          "id": "foundations",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        },
+        {
+          "id": "tokens",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        },
+        {
+          "id": "components",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        },
+        {
+          "id": "interactions",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        }
+      ],
+      "contentHash": "82ecb9d5bd63b0d5216ef17daf334f1a19cd85481fb7b4ad415f78a9a72fae11",
+      "rights": "metadata-only",
+      "status": "unverified"
+    },
+    {
+      "id": "material-3",
+      "publisher": "Google",
+      "title": "Material Design 3",
+      "edition": "Material 3",
+      "canonicalUrl": "https://m3.material.io/",
+      "snapshotUrl": "https://m3.material.io/",
+      "retrievedAt": "2026-11-13",
+      "sectionManifest": [
+        {
+          "id": "foundations",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        },
+        {
+          "id": "components",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        },
+        {
+          "id": "expressive additions",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        }
+      ],
+      "contentHash": "6f622ad6beb471566180307c1e7737f5f7e86434b506627e3f8e0855554435c3",
+      "rights": "metadata-only",
+      "status": "unverified"
+    },
+    {
+      "id": "carbon",
+      "publisher": "IBM",
+      "title": "Carbon Design System",
+      "edition": "unverified online edition",
+      "canonicalUrl": "https://carbondesignsystem.com/",
+      "snapshotUrl": "https://carbondesignsystem.com/",
+      "retrievedAt": "2026-11-13",
+      "sectionManifest": [
+        {
+          "id": "foundations",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        },
+        {
+          "id": "components",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        },
+        {
+          "id": "patterns",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        },
+        {
+          "id": "data visualization",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        }
+      ],
+      "contentHash": "42007809e5f23c49e473132ae2c09240adeebd8ed07b472427b9b41397fdfc43",
+      "rights": "metadata-only",
+      "status": "unverified"
+    },
+    {
+      "id": "atlassian",
+      "publisher": "Atlassian",
+      "title": "Atlassian Design System",
+      "edition": "unverified online edition",
+      "canonicalUrl": "https://atlassian.design/",
+      "snapshotUrl": "https://atlassian.design/",
+      "retrievedAt": "2026-11-13",
+      "sectionManifest": [
+        {
+          "id": "foundations",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        },
+        {
+          "id": "tokens",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        },
+        {
+          "id": "components",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        },
+        {
+          "id": "work-management patterns",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        }
+      ],
+      "contentHash": "849aee73ed69a1e9858ea09f9b1953c961f83333a3dd276c1352206da30744dd",
+      "rights": "metadata-only",
+      "status": "unverified"
+    },
+    {
+      "id": "cognitive",
+      "publisher": "APA, Taylor & Francis, Nielsen Norman Group",
+      "title": "Cognitive and interaction principles",
+      "edition": "original source editions pending",
+      "canonicalUrl": "https://doi.org/10.1037/h0055392",
+      "snapshotUrl": "https://doi.org/10.1037/h0055392",
+      "retrievedAt": "2026-11-13",
+      "sectionManifest": [
+        {
+          "id": "Fitts",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        },
+        {
+          "id": "Hick",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        },
+        {
+          "id": "Jakob",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        }
+      ],
+      "contentHash": "4bd96716a056727aa2980fe303c5c2654639121c5b394f56db23990b75751acf",
+      "rights": "metadata-only",
+      "status": "unverified"
+    },
+    {
+      "id": "composition",
+      "publisher": "Apple, IBM, Atlassian",
+      "title": "Composition foundations",
+      "edition": "original source editions pending",
+      "canonicalUrl": "https://carbondesignsystem.com/",
+      "snapshotUrl": "https://carbondesignsystem.com/",
+      "retrievedAt": "2026-11-13",
+      "sectionManifest": [
+        {
+          "id": "Gestalt",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        },
+        {
+          "id": "grid",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        },
+        {
+          "id": "hierarchy",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        },
+        {
+          "id": "rhythm",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        },
+        {
+          "id": "grouping",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        },
+        {
+          "id": "balance",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        },
+        {
+          "id": "contrast hierarchy",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        },
+        {
+          "id": "harmony",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        },
+        {
+          "id": "optical alignment",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        },
+        {
+          "id": "whitespace",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        },
+        {
+          "id": "density",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        },
+        {
+          "id": "consistency",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        },
+        {
+          "id": "motion",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        },
+        {
+          "id": "typography",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        },
+        {
+          "id": "spacing",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        },
+        {
+          "id": "color",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        }
+      ],
+      "contentHash": "1c48d753bd14028964384d4d8f4ecd0e8f686aa51f88772cb526676fb6ee5a19",
+      "rights": "metadata-only",
+      "status": "unverified"
+    },
+    {
+      "id": "design-schools",
+      "publisher": "Bauhaus Archive, Dieter Rams Foundation, Pearson",
+      "title": "Design schools and composition approaches",
+      "edition": "original source editions pending",
+      "canonicalUrl": "https://www.bauhaus.de/en/discover/article/the-bauhaus-idea-and-programme/",
+      "snapshotUrl": "https://www.bauhaus.de/en/discover/article/the-bauhaus-idea-and-programme/",
+      "retrievedAt": "2026-11-13",
+      "sectionManifest": [
+        {
+          "id": "Swiss typography",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        },
+        {
+          "id": "Modernism",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        },
+        {
+          "id": "Bauhaus",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        },
+        {
+          "id": "Rams",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        },
+        {
+          "id": "CRAP",
+          "status": "unavailable",
+          "reason": "Section-level edition and rights verification is pending."
+        }
+      ],
+      "contentHash": "df1fee65b1574e27ff6b960fa3902fbb733f3e357af0566e5b0517183a2e61a7",
+      "rights": "metadata-only",
+      "status": "unverified"
+    }
+  ]
+}

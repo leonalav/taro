@@ -14,7 +14,10 @@ export interface CodeHandoff {
   checklist: string[];
   files: string[];
 }
-export interface DesignVerdict { passed: boolean; findings: string[] }
+export interface DesignVerdict {
+  passed: boolean; findings: string[];
+  checks?: {rule_id:string;result:'pass'|'not-applicable';observation:string;target_selectors?:string[]}[];
+}
 export interface DesignJob {
   version: number;
   scope: ReviewScope;
@@ -72,19 +75,15 @@ export function parseDesignSubmission(stage: DesignStage, value: unknown): Desig
     return { previewId, revisionId, checklist: strings(data.checklist, 'visual checklist'), files: strings(data.files, 'changed files', 0) };
   }
   if (typeof data.passed !== 'boolean') throw Error('Supply a boolean QA verdict.');
-  return { passed: data.passed, findings: strings(data.findings, 'QA findings') };
+  const checks = data.checks;
+  if(checks!==undefined&&(!Array.isArray(checks)||checks.length>55||checks.some(item=>!item||typeof item.rule_id!=='string'||!['pass','not-applicable'].includes(item.result)||typeof item.observation!=='string'||item.observation.trim().length<12||item.target_selectors!==undefined&&(!Array.isArray(item.target_selectors)||item.target_selectors.some((selector:unknown)=>typeof selector!=='string')))))throw Error('Supply criterion IDs and concrete QA observations.');
+  return { passed: data.passed, findings: strings(data.findings, 'QA findings'), ...(checks===undefined?{}:{checks:checks as DesignVerdict['checks']}) };
 }
 
-export function approvedDesignIntent(markdown: unknown): DesignIntent {
-  if(typeof markdown!=='string')throw Error('The approved Design Plan is missing its Markdown.');
-  const blocks=[...markdown.matchAll(/^## DesignIntent[ \t]*\r?\n\s*~~~json[ \t]*\r?\n([\s\S]*?)\r?\n~~~[ \t]*(?:\r?\n|$)/gm)];
-  const payload=blocks.at(-1)?.[1];
-  if(!payload)throw Error('The approved Design Plan needs its DesignIntent JSON block.');
-  let value:unknown;
-  try{value=JSON.parse(payload);}
-  catch{throw Error('The approved DesignIntent JSON is invalid. Fix the saved plan before resuming.');}
-  return parseDesignSubmission('designer',value);
+export function publicDesignPlan(markdown: string): string {
+  return markdown.replace(/^## DesignIntent[ \t]*\r?\n\s*~~~json[ \t]*\r?\n[\s\S]*?\r?\n~~~[ \t]*(?:\r?\n|$)/gm, '').trim();
 }
+
 
 export const designJobDefinition = {
   type: 'function',
@@ -95,7 +94,8 @@ export const designJobDefinition = {
       type: 'object', additionalProperties: false, required: ['action'],
       properties: {
         action: { type: 'string', enum: ['start', 'read', 'resume'] },
-        title: { type: 'string' }, brief: { type: 'string' }, job_id: { type: 'string' },
+        brief: { type: 'string' }, job_id: { type: 'string' },
+        task_id: { type: 'string', description: 'For a new chat design job, use the existing card ID returned by TaskCreate.' },
         worktree: { type: 'boolean', description: 'Use an approved Git worktree for implementation. Defaults to true for a new job.' },
       },
     },
@@ -106,7 +106,7 @@ export function designSubmissionDefinition(stage: DesignStage) {
   const fields = {
     designer: 'design (the complete ArtifactDesign contract), layers [{id,x,y,width,height}], motion [string], accessibility [string], plan [string]',
     code: 'previewId, revisionId, checklist [string], files [string]',
-    qa: 'passed (boolean), findings [string describing the evidence or issue]',
+    qa: 'passed (boolean), findings [string describing the evidence or issue], checks [{rule_id,result,observation,target_selectors?}]',
   };
   return {
     type: 'function',

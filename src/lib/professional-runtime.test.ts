@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { ChatMessage } from "@/data/mock";
 import type { ToolCall } from "./model-stream";
+import { createTaskRepository } from "./task-store";
 import { ProfessionalToolRuntime, type RuntimeOptions } from "./professional-runtime";
 
 let serial=0;
@@ -17,37 +18,33 @@ function setup(){
 }
 
 describe("callable professional tool runtime",()=>{
-  it("starts a clear interface build with the actual relay and exposes collaboration tools without search",()=>{
+  it("leaves the board empty until the Orchestrator authors a card and records real progress",async()=>{
     const {options}=setup();
-    const agents=["Designer","Code","Type & QA"].map(role=>({id:role,name:role,role,model:"model",enabled:true,autonomy:"auto" as const,canWriteCode:true}));
-    const runtime=new ProfessionalToolRuntime({...options,agents});
-    expect(runtime.definitions().map(tool=>tool.function.name)).toEqual(expect.arrayContaining(["Agent","TaskOutput","EnterPlanMode","DesignJob","ArtifactDesign"]));
-    const brief="Build a responsive landing page for the studio using the project design tokens.";
-    expect(runtime.kickoff("Do not ask the QA agent to inspect a.ts.")).toBeUndefined();
-    expect(runtime.kickoff("Build the dashboard we discussed.")).toBeUndefined();
-    expect(runtime.kickoff("Build a dashboard and ask me before delegating.")).toBeUndefined();
-    expect(runtime.kickoff(brief,{hasReferences:true})).toBeUndefined();
-    expect(runtime.instructions()).toContain("Inspect the supplied references");
-    const kickoff=runtime.kickoff(brief);
-    expect(kickoff?.name).toBe("DesignJob");
-    expect(JSON.parse(kickoff!.arguments)).toMatchObject({action:"start",brief});
-    expect(runtime.kickoff(brief)).toBeUndefined();
+    const tasks=createTaskRepository({read:async()=>null,write:async()=>{}});
+    const runtime=new ProfessionalToolRuntime({...options,tasks,boardTasks:true});
+    const workspace="path:a:/test";
+    await runtime.prepareRun({text:"Build a responsive dashboard.",referenceIds:[]});
+    expect(tasks.snapshot(workspace).tasks).toEqual([]);
+    expect(runtime.definitions().map(tool=>tool.function.name)).toEqual(expect.arrayContaining(["Agent","DesignJob","TaskCreate","TaskUpdate","TaskComplete"]));
+    await expect(runtime.execute(call("DesignJob"),{action:"start",brief:"Build a dashboard."})).rejects.toThrow("TaskCreate");
+    const inputs={title:"Build revenue overview",description:"Show reported and net revenue",details:"Use a shared date range.",priority:"High",tags:["dashboard"],solution:["Compare totals for a known date range."]};
+    await expect(runtime.execute(call("TaskCreate"),{...inputs,details:" "})).rejects.toThrow("details");
+    const created=await runtime.execute(call("TaskCreate"),inputs);
+    expect(tasks.snapshot(workspace).tasks).toEqual([expect.objectContaining({...inputs,status:"To Do"})]);
+    const task_id=created.artifact.taskId;
+    const listing=await runtime.execute(call("TaskList"),{task_id});
+    expect(JSON.parse(listing.text)).toMatchObject({task_id,title:inputs.title,details:inputs.details});
+    await runtime.execute(call("TaskUpdate"),{task_id,status:"In Progress",details:"Matched the date-range selector."});
+    expect(tasks.snapshot(workspace).tasks[0]).toMatchObject({status:"In Progress",details:"Matched the date-range selector."});
+    await runtime.execute(call("TaskComplete"),{task_id,whatWasDone:"Compared totals for two date ranges.",finalProduct:"Revenue overview with verified totals."});
+    expect(tasks.snapshot(workspace).tasks[0]).toMatchObject({status:"Done",finalProduct:"Revenue overview with verified totals."});
   });
-  it("keeps questions and explicit opt-outs out of the relay, and loads tokens when the team is unavailable",()=>{
-    const {options}=setup();
-    const runtime=new ProfessionalToolRuntime(options);
-    expect(runtime.kickoff("How would you build a landing page?")).toBeUndefined();
-    expect(runtime.kickoff("Build a dashboard, but don't use subagents.")).toMatchObject({name:"ArtifactDesign"});
-    const next=new ProfessionalToolRuntime({...options,sessionId:"workflow-fallback"});
-    expect(next.kickoff("Implement a responsive dashboard.")).toMatchObject({name:"ArtifactDesign"});
-  });
-  it("turns an explicit delegation request into a real configured child run",async()=>{
-    const {options,emitted}=setup();
-    const runtime=new ProfessionalToolRuntime({...options,agents:[{id:"qa",name:"Theo",role:"Type & QA",model:"model",enabled:true,autonomy:"auto",canWriteCode:false}]});
-    const kickoff=runtime.kickoff("Ask the QA agent to inspect the existing layout.");
-    expect(kickoff?.name).toBe("Agent");
-    await runtime.execute(kickoff!,JSON.parse(kickoff!.arguments));
-    expect(emitted).toContainEqual(expect.objectContaining({role:"subagent",subagentType:"Type & QA"}));
+  it("honors a solo request without pre-dispatching tools",async()=>{
+    const {runtime,native}=setup();
+    await runtime.prepareRun({text:"Build a dashboard, but don't use subagents.",referenceIds:[]});
+    expect(runtime.definitions().some(tool=>tool.function.name==="Agent")).toBe(false);
+    await expect(runtime.execute(call("Agent"),{})).rejects.toThrow("without delegation");
+    expect(native).not.toHaveBeenCalled();
   });
   it('makes public web reads available without a workspace or mutation approval',async()=>{
     const {options,native,approve}=setup();const runtime=new ProfessionalToolRuntime({...options,workspaceRoot:''});
@@ -188,11 +185,10 @@ describe("configured roles and skills",()=>{
     await runtime.execute(call("Agent"),{description:"Implement",prompt:"Build",subagent_type:"Code"});
     expect(s.native.mock.calls.some(([tool])=>tool.name==="Write")).toBe(false);
   });
-  it("requires ask-role delegation approval and never skips normal approvals for auto",async()=>{
+  it("dispatches to an ask-role agent without a delegation approval",async()=>{
     const s=setup();const runtime=new ProfessionalToolRuntime({...s.options,agents:[role("planner",{autonomy:"ask"}),role("code")],models:[...s.options.models,{id:"other",label:"Other",endpoint:"https://other.invalid"}]});
-    s.approve.mockResolvedValueOnce(false);
-    await expect(runtime.execute(call("Agent"),{description:"Implement",prompt:"Build",subagent_type:"Code"})).rejects.toThrow(/denied/);
-    expect(s.stream).not.toHaveBeenCalled();
+    await expect(runtime.execute(call("Agent"),{description:"Implement",prompt:"Build",subagent_type:"Code"})).resolves.toMatchObject({text:"Completed inspection."});
+    expect(s.approve).not.toHaveBeenCalled();
   });
   it("denies disabled skills and filters them from discovery",async()=>{
     const s=setup();const runtime=new ProfessionalToolRuntime({...s.options,skills:[{id:"review",label:"Review",path:"A:/test/.taro/skills/review/SKILL.md",source:"custom",enabled:false}]});
@@ -279,4 +275,73 @@ describe("durable child responses",()=>{
     await expect(s.runtime.execute(call("Agent"),{description:"Inspect",prompt:"Inspect"})).rejects.toThrow(/empty response/i);
     expect(s.update).toHaveBeenLastCalledWith(expect.any(String),expect.objectContaining({status:"failed"}));
   });
+});
+
+it("retries a disconnected child with the same model context and does not repeat its completed tools",async()=>{
+  vi.useFakeTimers();
+  try{
+    const {runtime,stream,native}=setup();
+    stream.mockImplementationOnce(async()=>[{id:"child-read",name:"Read",arguments:'{"file_path":"a.ts"}'}])
+      .mockImplementationOnce(async(_request,delta)=>{delta("Discarded partial response.");throw Error("The connection to the model endpoint was interrupted.");})
+      .mockImplementationOnce(async(_request,delta)=>{delta("Recovered.");return [];});
+    const pending=runtime.execute(call("Agent"),{description:"Inspect",prompt:"Inspect a.ts",subagent_type:"Explore"});
+    const completed=expect(pending).resolves.toMatchObject({text:"Recovered."});
+    await vi.advanceTimersByTimeAsync(5000);
+    await completed;
+    const [,failed,retried]=stream.mock.calls.map(([{requestId,...request}])=>request);
+    expect(retried).toEqual(failed);
+    expect(native.mock.calls.filter(([tool])=>tool.name==="Read")).toHaveLength(1);
+  }finally{vi.useRealTimers();}
+});
+
+it("restores the same child and its frozen model request after reopening the runtime",async()=>{
+  const {options,stream,native}=setup();
+  let snapshot:import("./subagent-continuity").SavedChild|undefined;
+  let reachedCheckpoint!:()=>void;
+  const checkpointReached=new Promise<void>(resolve=>{reachedCheckpoint=resolve;});
+  const original=new ProfessionalToolRuntime({...options,rules:"Original workspace rules",saveChild:async child=>{
+    if(child.checkpoint.request&&child.checkpoint.round===1){snapshot=child;reachedCheckpoint();}
+  }});
+  stream.mockImplementationOnce(async()=>[{id:"child-read",name:"Read",arguments:'{"file_path":"a.ts"}'}])
+    .mockImplementationOnce(()=>new Promise(()=>{}));
+  await original.execute(call("Agent"),{description:"Inspect",prompt:"Inspect a.ts",subagent_type:"Explore",run_in_background:true});
+  await checkpointReached;
+  const expected=structuredClone(snapshot!);
+  await original.stopAll();
+
+  const reopened=setup();
+  // Simulate loading an ID absent from the in-memory registry.
+  expected.checkpoint.rootSessionId=reopened.options.sessionId;
+  expected.message.childId+=":restored";
+  expected.checkpoint.owner.childId=expected.message.childId;
+  const resumed=new ProfessionalToolRuntime({...reopened.options,rules:"Changed workspace rules"});
+  await resumed.resumeChildren([expected,expected]);
+  const output=await resumed.execute(call("TaskOutput"),{task_id:expected.message.childId});
+  expect(output.artifact.task).toMatchObject({status:"completed",output:"Completed inspection."});
+  expect(reopened.stream.mock.calls).toHaveLength(1);
+  const [{requestId,...request}]=reopened.stream.mock.calls[0];
+  expect(request).toEqual(expected.checkpoint.request);
+  expect(native.mock.calls.filter(([tool])=>tool.name==="Read")).toHaveLength(1);
+  expect(reopened.native.mock.calls.filter(([tool])=>tool.name==="Read")).toHaveLength(0);
+});
+
+it("resumes a tool batch without replaying a call whose result was lost",async()=>{
+  const {options,native,stream}=setup();
+  const childId="agent-unconfirmed-tool";
+  const calls=[{id:"uncertain",name:"Read",arguments:'{"file_path":"a.ts"}'},{id:"next",name:"Read",arguments:'{"file_path":"b.ts"}'}];
+  const runtime=new ProfessionalToolRuntime(options);
+  runtime.resumeChildren([{
+    message:{id:"saved",role:"subagent",agentId:options.agentId,childId,description:"Inspect",prompt:"Inspect both files",
+      subagentType:"Explore",runInBackground:true,status:"running",activities:[{id:"uncertain",kind:"file-read",label:"Read a.ts",status:"running"}]},
+    checkpoint:{
+      version:1,root:options.workspaceRoot,rootSessionId:options.sessionId,parentSessionId:options.sessionId,
+      owner:{childId,sessionId:options.sessionId+":"+childId,workspaceRoot:options.workspaceRoot,readOnly:true,depth:1},
+      model:{credentialId:options.model.id,endpoint:options.model.endpoint,model:options.model.label},round:0,loadedTools:["Read"],
+      messages:[{role:"user",content:"Inspect both files"},{role:"assistant",content:null,tool_calls:calls.map(({id,...fn})=>({id,type:"function",function:fn}))}],
+      pending:{calls,next:0,inFlight:true},
+    },
+  }]);
+  await runtime.execute(call("TaskOutput"),{task_id:childId});
+  expect(native.mock.calls.map(([,input])=>input.file_path)).toEqual(["b.ts"]);
+  expect(stream.mock.calls[0][0].messages).toContainEqual(expect.objectContaining({role:"tool",tool_call_id:"uncertain",content:expect.stringContaining("outcome is unknown")}));
 });

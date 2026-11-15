@@ -1,0 +1,44 @@
+#taro-startup {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  display: grid;
+  place-items: center;
+  background-color: #0b0b10;
+  background-image:
+    radial-gradient(ellipse at center, #0b0b10 0%, #0b0b10b3 28%, transparent 72%),
+    linear-gradient(180deg, #0b0b10c9, #0b0b1073 48%, #0b0b10c9),
+    url("./assets/reception-aurora.webp");
+  background-position: center;
+  background-size: cover;
+  color: #ede8f4;
+  font: 500 14px/1.5 "Geist Variable", system-ui, sans-serif;
+}
+
+#taro-startup [role="status"] {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.startup-spinner {
+  width: 14px;
+  height: 14px;
+  box-sizing: border-box;
+  border: 2px solid #c9a8ff40;
+  border-top-color: #c9a8ff;
+  border-radius: 50%;
+  animation: startup-spin 900ms linear infinite;
+}
+
+@keyframes startup-spin {
+  to { transform: rotate(1turn); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .startup-spinner { animation: none; }
+}
+
+@media (forced-colors: active) {
+  .startup-spinner { border-color: GrayText; border-top-color: CanvasText; }
+}

@@ -1,3 +1,5 @@
+import { activeElapsed } from "@/lib/agent-progress";
+import { publicToolActivity } from "@/lib/agent-tools";
 import {terminalLogText} from "@/lib/terminal-output";
 import {WebResearchRow} from './web-research-row';
 import * as React from "react";
@@ -142,6 +144,7 @@ export function MessageItem({
     case "tool-result":
       return <ToolResultRow message={message} />;
     case "plan":
+      if(message.adiContract)return null;
       return <PlanArtifact message={message} agentLabel={agentLabel(message.agentId)} onOpen={onOpenDoc ? ()=>onOpenDoc(message.id) : undefined} />;
     case "user": {
       const messageText=message.segments.filter(segment=>segment.type==="text").map(segment=>segment.text??"").join(" ").trim();
@@ -201,6 +204,8 @@ export function MessageItem({
           agentName={agentLabel(message.agentId)}
           mcp={message.mcp}
           tool={message.tool}
+          planName={message.planName}
+          confirmation={message.confirmation}
           live={message.live}
           onceOnly={message.onceOnly}
           decision={message.decision}
@@ -209,7 +214,7 @@ export function MessageItem({
       );
 
     case "activity-group":
-      return <ActivityGroup summary={message.summary} activities={message.activities} startedAt={message.startedAt} gallery={message.foundationGallery} onOpenDocument={onOpenDoc?()=>onOpenDoc(message.id):undefined} />;
+      return <ActivityGroup summary={message.summary} activities={message.activities} startedAt={message.startedAt} pausedAt={message.pausedAt} pausedMs={message.pausedMs} gallery={message.foundationGallery} onOpenDocument={onOpenDoc?()=>onOpenDoc(message.id):undefined} />;
 
     case "subagent":
       return <SubagentCard message={message}/>;
@@ -272,6 +277,8 @@ function PermissionCard({
   agentName,
   mcp,
   tool,
+  planName,
+  confirmation,
   live,
   onceOnly,
   decision,
@@ -280,12 +287,15 @@ function PermissionCard({
   agentName: string;
   mcp: string;
   tool: string;
+  planName?: string;
+  confirmation?: string;
   live?: boolean;
   onceOnly?: boolean;
   decision?: PermissionChoice;
   onDecide: (choice: PermissionChoice | null) => void;
 }) {
   const [expanded, setExpanded] = React.useState<"allow" | "deny" | null>(null);
+  const title = planName ?? (mcp === "workspace tool" ? /^Approve (.+) \((?:[A-Z]:|[/\\]).+\)$/i.exec(tool)?.[1] : undefined);
   const initials = agentName.split(/\s+/).slice(0, 2).map((p) => p[0]?.toUpperCase()).join("") || "AI";
 
   return (
@@ -294,11 +304,11 @@ function PermissionCard({
         <Avatar initials={initials} size="md" tone="taro" className="mt-0.5" />
         <div className="min-w-0 flex-1">
           <p data-permission-title="true" className="font-mono text-[13px] leading-6 text-[#e9e7ee]">
-            Allow <span className="font-semibold">{agentName}</span> to use{" "}
+            {confirmation ?? (title ? <>Approve the plan <strong>{title}</strong>?</> : <>Allow <span className="font-semibold">{agentName}</span> to use{" "}
             <span className="font-semibold">{mcp}</span>{" "}
             <span className="text-[#918b9e]">:</span>{" "}
             <code className="rounded border border-[#2b2b33] bg-[#15151a] px-1.5 py-0.5 font-mono text-[11.5px] text-[#e6dcf8]">{tool}</code>
-            <span className="text-[#918b9e]">?</span>
+            <span className="text-[#918b9e]">?</span></>)}
           </p>
           <p className="mt-1 flex items-center gap-1.5 font-mono text-[10.5px] leading-5 text-[#a8a3b3]">
             <ShieldCheck className="size-3.5 shrink-0 text-taro/80" />
@@ -331,9 +341,9 @@ function PermissionCard({
         <div className="flex flex-col gap-1.5 border-t border-[#1f1f25] p-3">
           <PermissionGroup
             tone="allow"
-            primary={mcp==="workspace tool"?"Allow once":"Allow tool"}
-            defaultChoice={permissionAllow[0]}
-            options={onceOnly?[]:mcp==="workspace tool"?permissionAllow.filter(choice=>choice.target==="tool"):permissionAllow}
+            primary={confirmation?"Confirm":title?"Approve plan":mcp==="workspace tool"?"Allow once":"Allow tool"}
+            defaultChoice={confirmation||title?{...permissionAllow[0],label:confirmation?"Confirmed":"Plan approved"}:permissionAllow[0]}
+            options={title||onceOnly?[]:mcp==="workspace tool"?permissionAllow.filter(choice=>choice.target==="tool"):permissionAllow}
             expanded={expanded === "allow"}
             onToggle={() => setExpanded((cur) => (cur === "allow" ? null : "allow"))}
             onChoose={onDecide}
@@ -342,7 +352,7 @@ function PermissionCard({
             tone="deny"
             primary={mcp==="workspace tool"?"Deny":"Deny tool"}
             defaultChoice={permissionDeny[0]}
-            options={onceOnly?[]:mcp==="workspace tool"?permissionDeny.filter(choice=>choice.target==="tool"):permissionDeny}
+            options={title||confirmation||onceOnly?[]:mcp==="workspace tool"?permissionDeny.filter(choice=>choice.target==="tool"):permissionDeny}
             expanded={expanded === "deny"}
             onToggle={() => setExpanded((cur) => (cur === "deny" ? null : "deny"))}
             onChoose={onDecide}
@@ -497,27 +507,43 @@ function SubagentCard({message}:{message:Extract<ChatMessage,{role:"subagent"}>}
     <div className="flex items-start gap-3">
       <Avatar initials={message.subagentType.slice(0,2).toUpperCase()} size="md" tone="taro"/>
       <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-2"><GitFork className="size-3.5 text-[#e9e3d6]"/><span className="font-mono text-[12px] font-semibold tracking-tight text-[#f7f5fb]">Deploy subagent</span><span className="artifact-label text-[#e9e3d6]">{message.subagentType}</span><span className={cn("ml-auto inline-flex items-center gap-1 font-mono text-[10px] tracking-wide",running?"text-[#e9e3d6]":message.status==="failed"?"text-[#ff8f9a]":message.status==="stopped"?"text-[#918b9e]":"text-[#7ee2a8]")}>{running?<LoaderCircle className="size-3 animate-spin"/>:message.status==="failed"?<CircleX className="size-3"/>:<CircleCheck className="size-3"/>}{running?"Running":message.status==="failed"?"Failed":message.status==="stopped"?"Stopped":"Completed"}</span></div>
+        <div className="flex flex-wrap items-center gap-2"><GitFork className="size-3.5 text-[#e9e3d6]"/><span className="font-mono text-[12px] font-semibold tracking-tight text-[#f7f5fb]">Deploy subagent</span><span className="artifact-label text-[#e9e3d6]">{message.subagentType}</span><span className={cn("ml-auto inline-flex items-center gap-1 font-mono text-[10px] tracking-wide",running?"text-[#e9e3d6]":message.status==="failed"?"text-[#ff8f9a]":message.status==="stopped"?"text-[#918b9e]":"text-[#7ee2a8]")}>{running?<LoaderCircle className="size-3 animate-spin"/>:message.status==="failed"?<CircleX className="size-3"/>:<CircleCheck className="size-3"/>}{running?(message.waitingForConnection?"Waiting for connection":"Running"):message.status==="failed"?"Failed":message.status==="stopped"?"Stopped":"Completed"}</span></div>
         <p className="mt-1.5 font-mono text-[11.5px] leading-6 text-[#d6d1e0]">{message.description}</p>
-        <div className="mt-2.5 flex flex-wrap gap-1.5 font-mono text-[9.5px] tracking-wide text-[#a8a3b3]"><span className="rounded border border-[#2b2b33] bg-[#15151a] px-1.5 py-0.5">{message.childId}</span>{message.runInBackground&&<span className="rounded border border-[#2b2b33] px-1.5 py-0.5">Background</span>}{message.isolation==="worktree"&&<span className="rounded border border-[#2b2b33] px-1.5 py-0.5">Worktree</span>}{message.model&&<span className="rounded border border-[#2b2b33] px-1.5 py-0.5">{message.model} model</span>}</div>
+        <div className="mt-2.5 flex flex-wrap gap-1.5 font-mono text-[9.5px] tracking-wide text-[#a8a3b3]"><span className="rounded border border-[#2b2b33] bg-[#15151a] px-1.5 py-0.5">{message.childId}</span>{message.runInBackground&&<span className="rounded border border-[#2b2b33] px-1.5 py-0.5">Background</span>}{message.isolation==="worktree"&&<span className="rounded border border-[#2b2b33] px-1.5 py-0.5">Worktree</span>}</div>
       </div>
     </div>
     <details className="mt-3 font-mono text-[11px]"><summary className="cursor-pointer rounded text-[#a8a3b3] hover:text-[#f7f5fb] focus-visible:outline-2 focus-visible:outline-[#f2eee6]">View task brief</summary><p className="mt-2 rounded-lg border border-[#1f1f25] bg-[#08080b] px-3 py-2 leading-6 text-[#c9c4d4]">{message.prompt}</p></details>
-    {message.activities.length>0&&<div className="mt-3"><ActivityGroup summary={`${message.activities.length} tool calls by ${message.subagentType}`} activities={message.activities}/></div>}
+    {message.activities.length>0&&<div className="mt-3"><ActivityGroup summary={`${message.activities.length} tool calls by ${message.subagentType}`} activities={message.activities} startedAt={message.startedAt} pausedAt={message.pausedAt} pausedMs={message.pausedMs}/></div>}
     {message.result&&<div className="mt-3 border-t border-[#1f1f25] pt-3"><p className="artifact-label">Result</p><p className="mt-1.5 font-mono text-[11px] leading-6 text-[#d6d1e0]">{message.result}</p></div>}
   </div>;
+}
+
+function ActivityElapsed({startedAt,pausedAt,pausedMs}:{startedAt:number;pausedAt?:number;pausedMs?:number}) {
+  const element=React.useRef<HTMLSpanElement>(null);
+  React.useLayoutEffect(()=>{
+    const paint=()=>{if(element.current)element.current.textContent=(activeElapsed(startedAt,Date.now(),{pausedAt,pausedMs})/1000).toFixed(1)+"s";};
+    paint();
+    if(pausedAt!==undefined)return;
+    const timer=window.setInterval(paint,100);
+    return()=>window.clearInterval(timer);
+  },[startedAt,pausedAt,pausedMs]);
+  return <span ref={element} className="shrink-0 font-mono text-[10px] tabular-nums text-muted-foreground"/>;
 }
 
 function ActivityGroup({
   summary,
   activities,
   startedAt,
+  pausedAt,
+  pausedMs,
   gallery,
   onOpenDocument,
 }: {
   summary: string;
   activities: ToolActivity[];
   startedAt?: number;
+  pausedAt?: number;
+  pausedMs?: number;
   gallery?: ToolActivity[];
   onOpenDocument?:()=>void;
 }) {
@@ -533,15 +559,15 @@ function ActivityGroup({
     previousActionable.current=group.actionable;
   },[group.actionable]);
   const bodyId=React.useId();
-  const elapsed = startedAt !== undefined && isRunning ? Date.now() - startedAt : undefined;
+  const paused=pausedAt!==undefined;
 
   return (
     <div className="artifact-sheet artifact-sheet--compact group/activity min-w-0 animate-pop">
       <button type="button" aria-expanded={open} aria-controls={bodyId} onClick={()=>{userToggled.current=true;setOpen(v=>!v);}} className="artifact-row min-h-[38px] cursor-pointer px-3 py-2.5 focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#f2eee6]">
-        <FoundationStatusIcon state={group.state} reduceMotion={reduceMotion}/>
+        <FoundationStatusIcon state={group.state} reduceMotion={reduceMotion||paused}/>
         <span className="min-w-0 flex-1 truncate text-foreground/80">{summary}</span>
         {isFoundation&&activities.length>0&&<span className="text-[10px] text-muted-foreground">{foundationStateLabels[group.state]}</span>}
-        {elapsed !== undefined && <span className="shrink-0 font-mono text-[10px] text-muted-foreground">{formatDuration(elapsed)}</span>}
+        {isRunning&&startedAt!==undefined&&<ActivityElapsed startedAt={startedAt} pausedAt={pausedAt} pausedMs={pausedMs}/> }
         {group.hasFailure&&["running","queued"].includes(group.state)&&<span className="text-[10px] text-destructive">Includes failures</span>}
         <span className="shrink-0 text-[10px] text-muted-foreground">{gallery?.length??activities.length} {isFoundation?(gallery?.length??activities.length)===1?"activity":"activities":activities.length===1?"tool":"tools"}</span>
         <ChevronDown className={cn("size-3.5 shrink-0",open&&"rotate-180")} />
@@ -549,14 +575,15 @@ function ActivityGroup({
 
       <div id={bodyId} hidden={!open} className="min-w-0 border-t border-[#1f1f25] px-3 py-1.5 font-mono text-[11px]">
         {gallery&&<FoundationGallery activities={gallery}/>}
-        {activities.map((activity) => {
+        {activities.map((storedActivity) => {
+          const activity=publicToolActivity(storedActivity);
           if(activity.web)return <WebResearchRow key={activity.id} activity={activity}/>;
           if(activity.foundation)return <FoundationRow key={activity.id} operation={activity.foundation} onOpenDocument={activity.foundation.kind==="design-plan"?onOpenDocument:undefined}/>;
           const Icon = activityIcons[activity.kind];
           return (
             <div key={activity.id} className="flex items-start gap-2.5 py-1.5 text-[11px]">
               <div className="mt-0.5 flex size-4 shrink-0 items-center justify-center">
-                <FoundationStatusIcon state={normalizeActivityState(activity.status)} reduceMotion={reduceMotion}/>
+                <FoundationStatusIcon state={normalizeActivityState(activity.status)} reduceMotion={reduceMotion||paused}/>
               </div>
               <ActivityIcon activity={activity} Icon={Icon} />
               <div className="min-w-0 flex-1">

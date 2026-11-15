@@ -2,7 +2,7 @@ import {isTauri} from '@tauri-apps/api/core';
 import {chatDb} from './chat-db';
 import {createTaskRepository} from './task-store';
 let initialized:Promise<void>|undefined;
-async function database(){const db=await chatDb();await (initialized??=db.execute('CREATE TABLE IF NOT EXISTS task_boards (workspace_id TEXT PRIMARY KEY, payload TEXT NOT NULL)').then(()=>{}));return db;}
+async function database(){const db=await chatDb();await (initialized??=db.execute('CREATE TABLE IF NOT EXISTS task_boards (workspace_id TEXT PRIMARY KEY, payload TEXT NOT NULL)').then(()=>{}).catch(error=>{initialized=undefined;throw error;}));return db;}
 export const taskRepository=createTaskRepository({
   async read(workspace){
     if(!isTauri())return localStorage.getItem(`taro-tasks-v1:${workspace}`);

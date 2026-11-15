@@ -5,16 +5,23 @@ export interface ReviewRect { x: number; y: number; width: number; height: numbe
 export interface ReviewComponent {
   selector: string; layerId?:string; tag: string; text: string; rect: ReviewRect; styles: Record<string, string>;
 }
-export interface ReviewAnchor { x: number; y: number; selector?: string; viewport?: Viewport; percent?: boolean }
+export interface ReviewAnchor { x: number; y: number; selector?: string; viewport?: Viewport; percent?: boolean; version?: 2; kind?: import('./review-anchors').ReviewAnchorV2['kind'] }
 export interface ReviewMessage { id: string; body: string; author: string; role: string; createdAt: number }
-export interface ReviewThread { id: string; revisionId: string; anchor: ReviewAnchor; messages: ReviewMessage[]; resolved: boolean }
-export interface ReviewObservation { url:string;title:string;viewport:Viewport;document:{width:number;height:number;scrollX:number;scrollY:number};components:ReviewComponent[];componentsTruncated?:boolean;selection?:ReviewComponent;anchors:Record<string,ReviewRect> }
+export interface ReviewThread { id: string; revisionId: string; anchor: ReviewAnchor; messages: ReviewMessage[]; resolved: boolean; generation?: number; ruleIds?: string[]; resolution?: import("./review-resolution").VerifiedResolution }
+export interface ReviewObservation { captureId?:string; navigationId?:string; capturedAt?:number; resourceFingerprint?:string; url:string;title:string;viewport:Viewport;document:{width:number;height:number;scrollX:number;scrollY:number};components:ReviewComponent[];componentsTruncated?:boolean;selection?:ReviewComponent;anchors:Record<string,ReviewRect> }
 export interface ReviewRevision { id: string; createdAt: number; url?: string; html?: string; capture?: string; source?: string; observation?:ReviewObservation; audits?:ArtifactAuditReport[]; layout?: import('./layout-designer').SavedLayout }
 export interface ReviewPreview {
   id: string; title: string; kind: 'nike' | 'html' | 'url'; revisions: ReviewRevision[]; revisionId: string;
   viewport: Viewport; threads: ReviewThread[];
 }
-export interface ReviewState { version: 1; previews: ReviewPreview[]; activeId?: string }
+export interface ReviewProjection { mutationId: string; previewId: string; threadId: string; operation: 'post' | 'reply' | 'status'; attempts: number; lastError?: string }
+export interface ReviewState {
+  version: 1;
+  previews: ReviewPreview[];
+  activeId?: string;
+  commentMutations?: { mutationId: string; signature: string; threadId: string }[];
+  projectionOutbox?: ReviewProjection[];
+}
 export interface ReviewSnapshot { state: ReviewState; loaded: boolean; error?: string; unsaved?: boolean }
 export interface ReviewStorage { read(key: string): Promise<string | null>; write(key: string, value: string): Promise<void> }
 let seq = 0;
@@ -76,9 +83,18 @@ function updateThread(state:ReviewState,id:string,threadId:string,update:(thread
 }
 export function replyToComment(state:ReviewState,id:string,threadId:string,input:{body:string;author:string;role:string}):ReviewState {
   if(!input.body.trim())throw Error('Reply text is required.');
-  return updateThread(state,id,threadId,t=>({...t,messages:[...t.messages,{...input,id:reviewId(),createdAt:Date.now()}]}));
+  return updateThread(state,id,threadId,t=>({...t,resolution:undefined,generation:(t.generation??0)+1,messages:[...t.messages,{...input,id:reviewId(),createdAt:Date.now()}]}));
 }
-export const resolveComment=(state:ReviewState,id:string,threadId:string,resolved:boolean)=>updateThread(state,id,threadId,t=>({...t,resolved}));
+export const resolveComment=(state:ReviewState,id:string,threadId:string,resolved:boolean)=>updateThread(state,id,threadId,t=>({...t,resolved,resolution:undefined,generation:(t.generation??0)+1}));
+
+export function applyReviewResolution(state:ReviewState,resolution:import("./review-resolution").VerifiedResolution):ReviewState {
+  const preview=previewById(state,resolution.target.previewId);
+  if(preview.revisions.at(-1)?.id!==resolution.verifiedRevisionId)throw Error("The verified Review revision changed.");
+  return updateThread(state,preview.id,resolution.sourceThreadId,thread=>{
+    if(thread.resolved||thread.revisionId!==resolution.originalRevisionId||(thread.generation??0)!==resolution.sourceThreadGeneration)throw Error("The Review thread changed.");
+    return {...thread,resolved:true,generation:(thread.generation??0)+1,resolution};
+  });
+}
 
 function restore(raw:string|null):ReviewState {
   if(raw===null)return {version:1,previews:[]};
@@ -103,12 +119,13 @@ export function createReviewRepository(storage:ReviewStorage) {
   const publish=(scope:ReviewScope,value:ReviewSnapshot)=>{snapshots.set(reviewScopeKey(scope),value);listeners.forEach(fn=>fn());};
   const load=(scope:ReviewScope)=>{const key=reviewScopeKey(scope);const previous=loads.get(key);if(previous)return previous;
     const promise=(async()=>{try{publish(scope,{state:restore(await storage.read(key)),loaded:true});}catch(error){publish(scope,{...snapshot(scope),loaded:false,error:`Could not read saved review data: ${String(error)}. Existing data is preserved.`});loads.delete(key);}})();loads.set(key,promise);return promise;};
-  const change=(scope:ReviewScope,update:(state:ReviewState)=>ReviewState):Promise<void>=>{
+  const change=(scope:ReviewScope,update:(state:ReviewState)=>ReviewState,options:{atomic?:boolean}={}):Promise<void>=>{
     const key=reviewScopeKey(scope),work=(queues.get(key)??Promise.resolve()).catch(()=>{}).then(async()=>{
       await load(scope);const current=snapshot(scope);if(!current.loaded)throw Error(current.error??'Saved review data is unavailable.');
       const state=update(current.state);
+      if(options.atomic&&state===current.state&&!current.unsaved)return;
       try{await storage.write(key,JSON.stringify(state));publish(scope,{state,loaded:true});}
-      catch(error){publish(scope,{state,loaded:true,unsaved:true,error:`Review changes could not be saved: ${String(error)}. Keep this session open and retry saving.`});throw error;}
+      catch(error){publish(scope,{state:options.atomic?current.state:state,loaded:true,unsaved:options.atomic?current.unsaved:true,error:`Review changes could not be saved: ${String(error)}. Keep this session open and retry saving.`});throw error;}
     });queues.set(key,work);return work;
   };
   return {snapshot,load,change,retrySave:(scope:ReviewScope)=>change(scope,state=>state),subscribe:(fn:()=>void)=>{listeners.add(fn);return()=>{listeners.delete(fn);};}};

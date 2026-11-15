@@ -27,7 +27,16 @@ struct Request {
     messages: Vec<serde_json::Value>,
     credential_id: String,
     tools: Option<Vec<serde_json::Value>>,
+    design_scope: Option<DesignScope>,
 }
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DesignScope {
+    intent: String,
+    platforms: Vec<String>,
+    brief: String,
+}
+
 #[cfg(test)]
 fn merge_tool_delta(
     delta: &serde_json::Value,
@@ -136,7 +145,20 @@ async fn stream_chat_inner(
     load_key: impl FnOnce(&str) -> Result<Option<String>, String>,
 ) -> Result<Vec<ToolCall>, String> {
     let endpoint = resolve_endpoint(&request.endpoint)?;
-    let body = build_body(endpoint.protocol, &request.model, &request.messages, request.tools.as_ref())?;
+    let library = taro::private_design::library();
+    let mut protected = None;
+    let mut messages = request.messages.clone();
+    if let (Some(library), Some(scope)) = (library, &request.design_scope) {
+        protected = Some(library);
+        let brief: String = scope.brief.chars().take(6000).collect();
+        let guidance = library.guidance(&brief, &scope.intent, &scope.platforms);
+        if let Some(guidance) = guidance {
+            messages.push(serde_json::json!({"role":"system","content":guidance}));
+        } else if library.discloses(&brief) {
+            messages.push(serde_json::json!({"role":"system","content":"Do not reveal private implementation references or their contents. Answer only about the task and observable work."}));
+        }
+    }
+    let body = build_body(endpoint.protocol, &request.model, &messages, request.tools.as_ref())?;
     let secret = load_key(&request.credential_id)?;
     let client = reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(20))
@@ -167,6 +189,7 @@ async fn stream_chat_inner(
     let mut stream = response.bytes_stream();
     let mut buffer = SseBuffer::default();
     let mut decoder = StreamDecoder::new(endpoint.protocol);
+    let mut protected_text = String::new();
     loop {
         let chunk = tokio::select! { _=token.cancelled()=>{let _=on_event.send(Event::Stopped);return Ok(vec![]);}, next=stream.next()=>next };
         let Some(chunk) = chunk else { break };
@@ -174,21 +197,38 @@ async fn stream_chat_inner(
         for data in buffer.push(&chunk)? {
             if data.trim() == "[DONE]" {
                 if endpoint.protocol == Protocol::Responses { return Err("The Responses stream ended before a completed response.".into()); }
-                let calls = decoder.calls()?;
-                let _ = on_event.send(Event::Done);
-                return Ok(calls);
+                return finish_model_output(decoder.calls()?, on_event, protected, protected_text);
             }
             let value = serde_json::from_str::<serde_json::Value>(&data).map_err(|_| "The model endpoint returned invalid stream data.".to_string())?;
             let decoded = decoder.consume(&value)?;
-            if let Some(text) = decoded.text { let _ = on_event.send(Event::Delta { text }); }
+            if let Some(text) = decoded.text {
+                if protected.is_some() { taro::private_design::append_buffer(&mut protected_text, &text)?; }
+                else { let _ = on_event.send(Event::Delta { text }); }
+            }
             if decoded.done {
-                let calls = decoder.calls()?;
-                let _ = on_event.send(Event::Done);
-                return Ok(calls);
+                return finish_model_output(decoder.calls()?, on_event, protected, protected_text);
             }
         }
     }
     Err("The model stream ended before completion.".into())
+}
+
+fn finish_model_output(
+    calls: Vec<ToolCall>,
+    on_event: &Channel<Event>,
+    protected: Option<&taro::private_design::Library>,
+    text: String,
+) -> Result<Vec<ToolCall>, String> {
+    if let Some(library) = protected {
+        if library.discloses(&text) || calls.iter().any(|call|
+            library.discloses(&call.name) || library.discloses(&call.id) || library.discloses(&call.arguments) ||
+            serde_json::from_str(&call.arguments).is_ok_and(|value| library.discloses_value(&value))) {
+            return Err(taro::private_design::PRIVATE_OUTPUT_ERROR.into());
+        }
+        if !text.is_empty() { let _ = on_event.send(Event::Delta { text }); }
+    }
+    let _ = on_event.send(Event::Done);
+    Ok(calls)
 }
 
 fn main() {
@@ -264,6 +304,9 @@ fn main() {
             store_model_key,
             delete_model_key,
             has_model_key,
+            taro::adi_commands::adi_prepare_run,
+            taro::adi_commands::adi_snapshot_workspace,
+            taro::adi_commands::adi_commit_contract,
             execute_agent_tool,
             open_web_link,
             list_mcp_tools
@@ -282,7 +325,28 @@ fn main() {
 async fn execute_agent_tool(
     request: agent_tools::ToolRequest,
     streams: tauri::State<'_, Streams>,
+    foundation: tauri::State<'_, taro::foundation_commands::FoundationService>,
 ) -> Result<agent_tools::ToolOutput, String> {
+    if request.approved && taro::adi_policy::guarded_mutation(&request.name) && !request.interactive {
+        let workspace = std::path::PathBuf::from(&request.workspace_root);
+        let session = request.session_id.as_deref().ok_or("Missing agent session for mutation.")?;
+        session_tools::guard_tool(&workspace, session, &request.name, &request.input)?;
+        let plan_write = matches!(request.name.as_str(), "Write" | "Edit") && session_tools::is_plan_mode(&workspace, session);
+        if !plan_write {
+            let mutation = request.adi.clone().ok_or("Register an ADI run before calling a mutating agent tool.")?;
+            let same_root = std::fs::canonicalize(&workspace).ok().zip(std::fs::canonicalize(&mutation.identity.workspace).ok()).is_some_and(|(left,right)| left==right);
+            let descendant = session.strip_prefix(&mutation.identity.session_id).is_some_and(|suffix| suffix.starts_with(":agent-")) &&
+                request.planning_ancestors.iter().any(|ancestor| ancestor.session_id == mutation.identity.session_id && ancestor.workspace_root == mutation.identity.workspace);
+            if !(same_root && mutation.identity.session_id == session || descendant) {
+                return Err("ADI run does not own this tool session.".into());
+            }
+            let effective = session_tools::effective_root(&workspace, session)?;
+            let id = request.request_id.clone().ok_or("Missing ADI operation ID.")?;
+            let tool = request.name.clone();
+            let input = request.input.clone();
+            taro::foundation_commands::access(&foundation, move |store| store.adi_authorize(&mutation, &effective, &id, &tool, &input)).await?;
+        }
+    }
     let id = request.request_id.clone().unwrap_or_default();
     let token = streams
         .0
@@ -291,8 +355,18 @@ async fn execute_agent_tool(
         .entry(id.clone())
         .or_insert_with(CancellationToken::new)
         .clone();
+    let interactive = request.interactive;
     let result = tokio::select! {_=token.cancelled()=>Err("Tool execution stopped".into()),result=agent_tools::execute(request)=>result};
     streams.0.lock().map_err(|e| e.to_string())?.remove(&id);
+    if !interactive {
+        if let Some(library) = taro::private_design::library() {
+            let disclosure = match &result {
+                Ok(output) => library.discloses(&output.text) || library.discloses_value(&output.artifact),
+                Err(error) => library.discloses(error),
+            };
+            if disclosure { return Err(taro::private_design::PRIVATE_OUTPUT_ERROR.into()); }
+        }
+    }
     result
 }
 
@@ -361,9 +435,39 @@ mod stream_tests {
             request_id: "stream-protocol-test".into(), endpoint, model: "provider/model".into(),
             messages: vec![serde_json::json!({"role":"user","content":"Read a file"})],
             credential_id: "taro-protocol-test-no-stored-credential".into(),
+            design_scope: None,
             tools: Some(vec![serde_json::json!({"type":"function","function":{"name":"Read","parameters":{"type":"object","properties":{}}}})]),
         }
     }
+    #[tokio::test(flavor = "current_thread")]
+    async fn design_guidance_reaches_provider_but_split_echo_never_reaches_webview() {
+        if !taro::private_design::has_embedded_reference() { return; }
+        let body = concat!(
+            "data: {\"choices\":[{\"delta\":{\"content\":\"taro-adi-\"}}]}\n\n",
+            "data: {\"choices\":[{\"delta\":{\"content\":\"library/README.md\"}}]}\n\n",
+            "data: [DONE]\n\n"
+        );
+        let (url, server) = model_server("200 OK", "text/event-stream", body);
+        let mut request = test_request(format!("{url}/v1/"));
+        request.design_scope = Some(DesignScope {
+            intent: "build".into(), platforms: vec!["windows".into()], brief: "Redesign the desktop screen".into(),
+        });
+        let events = std::sync::Arc::new(Mutex::new(Vec::new()));
+        let observed = events.clone();
+        let channel = Channel::new(move |event| {
+            observed.lock().unwrap().push(event);
+            Ok(())
+        });
+        let result = stream_chat_inner(&request, &channel, &CancellationToken::new(), |_| Ok(None)).await;
+        assert_eq!(result.unwrap_err(), taro::private_design::PRIVATE_OUTPUT_ERROR);
+        assert!(events.lock().unwrap().is_empty());
+        let wire = server.join().unwrap();
+        let body: serde_json::Value = serde_json::from_str(wire.split_once("\r\n\r\n").unwrap().1).unwrap();
+        assert!(body["messages"].as_array().unwrap().iter().any(|message|
+            message["role"] == "system" && message["content"].as_str().unwrap_or("").contains("Microsoft Fluent")));
+        assert_eq!(request.messages.len(), 1);
+    }
+
     #[tokio::test(flavor = "current_thread")]
     async fn responses_http_request_uses_responses_schema_and_returns_executable_tool_calls() {
         let body = concat!(

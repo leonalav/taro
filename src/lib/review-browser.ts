@@ -1,7 +1,7 @@
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import type { ReviewObservation, Viewport } from './review-store';
 import type { ArtifactAuditReport } from './artifact-audit';
-export interface BrowserCapture extends ReviewObservation { screenshot:string;source?:string;audit?:ArtifactAuditReport }
+export interface BrowserCapture extends ReviewObservation { screenshot:string;captureId?:string;source?:string;audit?:ArtifactAuditReport }
 export interface BrowserRequest {
   key:string;action:'open'|'inspect'|'capture'|'save'|'viewport'|'input'|'back'|'forward'|'reload'|'close'|'audit';
   spacing?:number[];

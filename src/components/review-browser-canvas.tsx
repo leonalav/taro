@@ -3,6 +3,8 @@ import { ArrowLeft, ArrowRight, Check, Code2, Download, Eye, History, LayoutGrid
 import { reviewRepository } from '@/lib/review-persistence';
 import { activeRevision, revisePreview, reviewId, reviewScopeKey, selectPreview, setReviewViewport, validateViewport, type ReviewAnchor, type ReviewPreview, type ReviewScope, type Viewport } from '@/lib/review-store';
 import { browserPreviewKey, publishReviewCapture, requestReviewBrowser, reviewCapture, subscribeReviewCaptures, type BrowserCapture, type BrowserRequest } from '@/lib/review-browser';
+import { capturedComponentAt, createReviewAnchor, documentPointToCanvas, resolveReviewAnchor, viewportPointToDocument, type Point, type ReviewAnchorV2 } from '@/lib/review-anchors';
+import type { ReviewReference } from '@/lib/review-feedback';
 import { executeReviewTool } from '@/lib/review-tools';
 import { CommentComposer, ReviewThreadCard } from './review-comments';
 import { useReviewComments } from './review-state';
@@ -11,7 +13,7 @@ import { useSettings } from './settings/settings-context';
 const presets=[{label:'Responsive',width:920,height:720},{label:'Mobile · 393 × 852',width:393,height:852},{label:'Tablet · 768 × 1024',width:768,height:1024},{label:'Desktop · 1440 × 900',width:1440,height:900}];
 function download(name:string,content:string,type:string){const url=URL.createObjectURL(new Blob([content],{type})),anchor=document.createElement('a');anchor.href=url;anchor.download=name;anchor.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}
 
-export function ReviewBrowserCanvas({scope,preview,onComments}:{scope:ReviewScope;preview:ReviewPreview;onComments:()=>void}) {
+export function ReviewBrowserCanvas({scope,preview,onComments,onHandoff}:{scope:ReviewScope;preview:ReviewPreview;onComments:()=>void;onHandoff?:(reference:ReviewReference,target:'composer'|'task')=>Promise<void>}) {
   const revision=activeRevision(preview),key=browserPreviewKey(reviewScopeKey(scope),preview.id,revision.id),settings=useSettings(),comments=useReviewComments(scope,preview.id,preview.revisionId);
   const observed=React.useSyncExternalStore(subscribeReviewCaptures,()=>reviewCapture(key),()=>reviewCapture(key));
   const [saved,setSaved]=React.useState(()=>revision.id!==preview.revisions.at(-1)?.id),[mode,setMode]=React.useState<'inspect'|'prototype'>('inspect'),[tool,setTool]=React.useState<'inspect'|'annotate'>('inspect');
@@ -19,8 +21,21 @@ export function ReviewBrowserCanvas({scope,preview,onComments}:{scope:ReviewScop
   const [busy,setBusy]=React.useState(false),[error,setError]=React.useState(''),[address,setAddress]=React.useState(revision.url??'Saved HTML artifact'),[viewport,setViewport]=React.useState(preview.viewport);
   const [draft,setDraft]=React.useState<ReviewAnchor|null>(null),[openThread,setOpenThread]=React.useState<string|null>(null),[available,setAvailable]=React.useState(800);
   const stage=React.useRef<HTMLDivElement>(null),canvas=React.useRef<HTMLDivElement>(null),alive=React.useRef(true),pending=React.useRef(0),queue=React.useRef<Promise<unknown>>(Promise.resolve()),selected=React.useRef<string|undefined>(undefined);
+  const draftBubble=React.useRef<HTMLDivElement>(null);
   const fallback:BrowserCapture|undefined=revision.observation&&revision.capture?{...revision.observation,screenshot:revision.capture,source:revision.source}:undefined;
   const capture=saved?fallback:observed??fallback;
+  const [savedSelection,setSavedSelection]=React.useState<string>();
+  const annotationGeneration=React.useRef(0);
+  const returnFocus=React.useRef<HTMLElement|null>(null);
+  const closeDraft=()=>{annotationGeneration.current++;setDraft(null);returnFocus.current?.focus({preventScroll:true});};
+  const selectMode=(next:'inspect'|'prototype',nextTool:'inspect'|'annotate'=tool)=>{
+    closeDraft();setMode(next);setTool(nextTool);setOpenThread(null);
+  };
+  const showSaved=(next:boolean)=>{selectMode('inspect');setSaved(next);};
+  const beginDraft=(result:BrowserCapture,point:Point,component?:BrowserCapture['selection'])=>{
+    setOpenThread(null);
+    setDraft(createReviewAnchor({point,capture:result,component,revisionId:revision.id,kind:saved?'saved':'live'}));
+  };
   const size=capture?.viewport??preview.viewport,scale=zoom==='fit'?Math.max(.08,Math.min(1,(available-72)/size.width)):zoom;
   const threads=preview.threads.filter(t=>t.revisionId===revision.id&&!t.resolved),thread=preview.threads.find(t=>t.id===openThread);
   const anchors=threads.flatMap(t=>t.anchor.selector?[t.anchor.selector]:[]);
@@ -28,6 +43,7 @@ export function ReviewBrowserCanvas({scope,preview,onComments}:{scope:ReviewScop
   const run=React.useCallback((action:BrowserRequest['action'],extra:Partial<BrowserRequest>={},quiet=false):Promise<BrowserCapture|undefined>=>{
     const work=queue.current.catch(()=>{}).then(async()=>{
       if(!alive.current)return;
+      if(action!=='capture'&&action!=='inspect')annotationGeneration.current++;
       pending.current++;if(!quiet)setBusy(true);
       try{
         const data=latest.current;
@@ -58,19 +74,33 @@ export function ReviewBrowserCanvas({scope,preview,onComments}:{scope:ReviewScop
   React.useEffect(()=>{const element=stage.current;if(!element)return;const observer=new ResizeObserver(()=>setAvailable(element.clientWidth));observer.observe(element);setAvailable(element.clientWidth);return()=>observer.disconnect();},[]);
   React.useEffect(()=>{if(capture?.url&&capture.url!=='about:blank')setAddress(capture.url);},[capture?.url]);
   React.useEffect(()=>{
-    const element=canvas.current;if(!element||saved)return;
+    const element=canvas.current;if(!element||saved||draft||openThread)return;
     let timer:ReturnType<typeof setTimeout>|undefined,deltaX=0,deltaY=0,x=0,y=0;
-    const wheel=(event:WheelEvent)=>{event.preventDefault();const rect=element.getBoundingClientRect();x=(event.clientX-rect.left)/scale;y=(event.clientY-rect.top)/scale;deltaX+=event.deltaX;deltaY+=event.deltaY;if(timer)return;timer=setTimeout(()=>{const input={type:'scroll' as const,deltaX,deltaY,x,y};deltaX=0;deltaY=0;timer=undefined;void run('input',{input}).catch(()=>{});},90);};
+    const wheel=(event:WheelEvent)=>{if((event.target as Element).closest('button, .review-floating-comment'))return;annotationGeneration.current++;event.preventDefault();const rect=element.getBoundingClientRect();x=(event.clientX-rect.left)/scale;y=(event.clientY-rect.top)/scale;deltaX+=event.deltaX;deltaY+=event.deltaY;if(timer)return;timer=setTimeout(()=>{const input={type:'scroll' as const,deltaX,deltaY,x,y};deltaX=0;deltaY=0;timer=undefined;void run('input',{input}).catch(()=>{});},90);};
     element.addEventListener('wheel',wheel,{passive:false});return()=>{element.removeEventListener('wheel',wheel);if(timer)clearTimeout(timer);};
-  },[run,saved,capture?.screenshot!==undefined,scale]);
+  },[run,saved,capture?.screenshot!==undefined,scale,draft,openThread]);
   const resize=async(value:Viewport)=>{try{validateViewport(value);await run('viewport',{viewport:value});await reviewRepository.change(scope,state=>setReviewViewport(state,preview.id,value));}catch(error){setError(String(error));}};
   const pointFor=(event:React.MouseEvent)=>{const rect=event.currentTarget.getBoundingClientRect();return {x:(event.clientX-rect.left)/scale,y:(event.clientY-rect.top)/scale};};
   const click=async(event:React.MouseEvent)=>{
-    if(saved)return;const point=pointFor(event);canvas.current?.focus();
+    if(!capture||draft)return;
+    const point=pointFor(event);
+    returnFocus.current=canvas.current;
+    canvas.current?.focus({preventScroll:true});
+    const generation=++annotationGeneration.current;
+    if(saved){
+      const documentPoint={x:point.x+capture.document.scrollX,y:point.y+capture.document.scrollY};
+      const component=capturedComponentAt(capture,documentPoint);
+      setSavedSelection(component?.selector);
+      if(tool==='annotate')beginDraft(capture,documentPoint,component);
+      return;
+    }
     try{
       if(mode==='prototype'){await run('input',{input:{type:'click',...point}});return;}
       const result=await run('inspect',{point});
-      if(tool==='annotate'&&result){const component=result.selection,rect=component?.rect;setOpenThread(null);setDraft({x:rect?rect.x+rect.width/2:point.x+result.document.scrollX,y:rect?rect.y+rect.height/2:point.y+result.document.scrollY,selector:component?.selector,viewport:result.viewport});}
+      if(tool==='annotate'&&result&&alive.current&&generation===annotationGeneration.current){
+        if(result.url!==capture.url)return;
+        beginDraft(result,{x:point.x+result.document.scrollX,y:point.y+result.document.scrollY},result.selection);
+      }
     }catch{ /* run reports the error in the browser chrome */ }
   };
   const saveRevision=async()=>{
@@ -80,18 +110,53 @@ export function ReviewBrowserCanvas({scope,preview,onComments}:{scope:ReviewScop
   };
   const navigate=async()=>{setError('');try{await executeReviewTool('BrowserPreview',{url:address,preview_id:preview.id,title:preview.title},{scope,author:settings.account.name||'You',role:'Reviewer'});}catch(error){setError(String(error));}};
   const position=(anchor:ReviewAnchor)=>{
-    const rect=anchor.selector?capture?.anchors[anchor.selector]:undefined;
-    const x=rect?rect.x+rect.width/2:anchor.percent?anchor.x/100*size.width:anchor.x,y=rect?rect.y+rect.height/2:anchor.percent?anchor.y/100*(capture?.document.height??size.height):anchor.y;
-    return {left:(x-(capture?.document.scrollX??0))*scale,top:(y-(capture?.document.scrollY??0))*scale};
+    const current=anchor.version===2?anchor as ReviewAnchorV2:undefined;
+    const resolution=current&&capture?resolveReviewAnchor(current,capture,revision.id):undefined;
+    const rect=resolution?.status==='exact'?resolution.rect:!current&&anchor.selector?capture?.anchors[anchor.selector]:undefined;
+    const x=rect?rect.x+rect.width*(current?.normalizedPoint?.x??0.5):anchor.percent?anchor.x/100*size.width:anchor.x;
+    const y=rect?rect.y+rect.height*(current?.normalizedPoint?.y??0.5):anchor.percent?anchor.y/100*(capture?.document.height??size.height):anchor.y;
+    const point=documentPointToCanvas({x,y},{scale,scrollX:capture?.document.scrollX??0,scrollY:capture?.document.scrollY??0,canvasOffset:{x:0,y:0}});
+    return {left:point.x,top:point.y};
   };
-  const selection=capture?.selection,selectionPosition=selection?{left:(selection.rect.x-(capture?.document.scrollX??0))*scale,top:(selection.rect.y-(capture?.document.scrollY??0))*scale,width:selection.rect.width*scale,height:selection.rect.height*scale}:undefined;
+  const selection=saved&&savedSelection?capture?.components.find(component=>component.selector===savedSelection):capture?.selection;
+  const commentOnSelection=(trigger:HTMLElement)=>{
+    if(!capture||draft)return;
+    returnFocus.current=trigger;
+    const rect=selection?.rect;
+    const point=rect?{x:rect.x+rect.width/2,y:rect.y+rect.height/2}:viewportPointToDocument(
+      {x:size.width/2,y:size.height/2},
+      {scale:1,scrollX:capture.document.scrollX,scrollY:capture.document.scrollY,canvasOffset:{x:0,y:0}},
+    );
+    beginDraft(capture,point,selection);
+  };
+  const selectionPosition=selection?{left:(selection.rect.x-(capture?.document.scrollX??0))*scale,top:(selection.rect.y-(capture?.document.scrollY??0))*scale,width:selection.rect.width*scale,height:selection.rect.height*scale}:undefined;
+  const draftPosition=draft?position(draft):null;
+  const draftLeft=draftPosition?.left,draftTop=draftPosition?.top;
+  React.useLayoutEffect(()=>{
+    const bubble=draftBubble.current,viewport=canvas.current,scroller=stage.current;
+    if(!bubble||!viewport||!scroller||draftLeft===undefined||draftTop===undefined)return;
+    const place=()=>{
+      const bounds=scroller.getBoundingClientRect(),frame=viewport.getBoundingClientRect();
+      const x=frame.left-bounds.left+draftLeft,y=frame.top-bounds.top+draftTop;
+      bubble.style.maxWidth=`${Math.max(0,scroller.clientWidth-16)}px`;
+      const width=bubble.offsetWidth,height=bubble.offsetHeight;
+      const clamp=(value:number,limit:number)=>Math.max(8,Math.min(value,limit-8));
+      bubble.style.left=`${clamp(x+12,scroller.clientWidth-width)}px`;
+      bubble.style.top=`${clamp(y+12+height<=scroller.clientHeight?y+12:y-height-12,scroller.clientHeight-height)}px`;
+    };
+    place();
+    const observer=new ResizeObserver(place);
+    observer.observe(bubble);observer.observe(scroller);observer.observe(viewport);
+    scroller.addEventListener('scroll',place,{passive:true});
+    return()=>{observer.disconnect();scroller.removeEventListener('scroll',place);};
+  },[draftLeft,draftTop,componentsOpen,scale]);
   const zoomSteps=[.25,.5,.75,1,1.25,1.5,2];
   return <div className="review-workbench">
     <div className="review-toolbar">
-      <div className="review-tool-group"><button type="button" aria-label="Select component" aria-pressed={tool==='inspect'} onClick={()=>{setMode('inspect');setTool('inspect');}}><MousePointer2/></button><button type="button" aria-label="Annotate component" title="Annotate component" aria-pressed={tool==='annotate'} onClick={()=>{setMode('inspect');setTool('annotate');}}><MessageSquarePlus/></button><button type="button" aria-label="Toggle column guides" aria-pressed={guides} onClick={()=>setGuides(value=>!value)}><LayoutGrid/></button><button type="button" aria-label="Toggle selection overlays" aria-pressed={overlays} onClick={()=>setOverlays(value=>!value)}><Eye/></button></div>
+      <div className="review-tool-group"><button type="button" aria-label="Select component" aria-pressed={tool==='inspect'} onClick={()=>selectMode('inspect','inspect')}><MousePointer2/></button><button type="button" aria-label="Annotate component" title="Annotate component" aria-pressed={tool==='annotate'} onClick={()=>selectMode('inspect','annotate')}><MessageSquarePlus/></button><button type="button" aria-label="Toggle column guides" aria-pressed={guides} onClick={()=>setGuides(value=>!value)}><LayoutGrid/></button><button type="button" aria-label="Toggle selection overlays" aria-pressed={overlays} onClick={()=>setOverlays(value=>!value)}><Eye/></button></div>
       <button type="button" aria-label="Zoom out" onClick={()=>setZoom(zoomSteps.filter(v=>v<(zoom==='fit'?scale:zoom)).at(-1)??.25)}><Minus/></button><span className="tabular-nums text-[11px] text-muted-foreground">{zoom==='fit'?'Fit':`${Math.round(zoom*100)}%`}</span><button type="button" aria-label="Zoom in" onClick={()=>setZoom(zoomSteps.find(v=>v>(zoom==='fit'?scale:zoom))??2)}><Plus/></button>
       <button type="button" aria-label="Inspect component list" aria-pressed={componentsOpen} onClick={()=>setComponentsOpen(value=>!value)}><Layers/><span className="review-tool-label">Components</span></button><button type="button" aria-label="Review comments" onClick={onComments}><MessageSquare/><span>{threads.length}</span></button>
-      <div className="review-tool-group review-mode-group"><button type="button" aria-pressed={mode==='inspect'} onClick={()=>setMode('inspect')}><Scan/>Inspect</button><button type="button" aria-pressed={mode==='prototype'} disabled={saved} onClick={()=>setMode('prototype')}><Play/>Prototype</button></div>
+      <div className="review-tool-group review-mode-group"><button type="button" aria-pressed={mode==='inspect'} onClick={()=>selectMode('inspect')}><Scan/>Inspect</button><button type="button" aria-pressed={mode==='prototype'} disabled={saved} onClick={()=>selectMode('prototype')}><Play/>Prototype</button></div>
     </div>
     <div className="review-toolbar">
       <button type="button" aria-label="Back" title="Back" disabled={saved||busy} onClick={()=>{void run('back').catch(()=>{});}}><ArrowLeft/></button><button type="button" aria-label="Forward" title="Forward" disabled={saved||busy} onClick={()=>{void run('forward').catch(()=>{});}}><ArrowRight/></button><button type="button" aria-label="Reload preview" disabled={saved||busy} onClick={()=>{void run('reload').catch(()=>{});}}><RotateCw className={busy?'animate-spin':''}/></button>
@@ -103,29 +168,34 @@ export function ReviewBrowserCanvas({scope,preview,onComments}:{scope:ReviewScop
     </div>
     <div className="review-meta"><Code2 className="size-3.5 shrink-0"/><span>{preview.title}</span><span className="review-status">{saved?'Saved capture':'Live browser'}</span><select aria-label="Artifact revision" value={preview.revisionId} className="min-w-0 max-w-36 bg-transparent text-[10px]" onChange={event=>{const revisionId=event.target.value;void reviewRepository.change(scope,state=>selectPreview(state,preview.id,revisionId)).catch(error=>setError(String(error)));}}>{preview.revisions.map((r,i)=><option key={r.id} value={r.id} className="bg-card">Revision {i+1} · {new Date(r.createdAt).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}</option>)}</select><span className="review-meta-right">{capture?.components.length??0}{capture?.componentsTruncated?'+':''} components · {Math.round(scale*100)}%</span></div>
     {error&&<div role="alert" className="review-error">{error}<button type="button" onClick={()=>{void run('capture').catch(()=>{});}}>Retry</button></div>}
-    {saved&&<div className="review-saved-notice"><History className="size-3.5"/>Preserved capture. Comments stay attached to this revision.<button type="button" onClick={()=>setSaved(false)}>Resume live preview</button></div>}
+    {saved&&<div className="review-saved-notice"><History className="size-3.5"/>Preserved capture. Comments stay attached to this revision.<button type="button" onClick={()=>showSaved(false)}>Resume live preview</button></div>}
     <div className="review-body">
       <div ref={stage} className="review-stage" data-grid={settings.appearance.canvasGrid}>
         {capture?<div ref={canvas} className="review-viewport" data-tool={mode==='prototype'?'prototype':tool} style={{width:size.width*scale,height:size.height*scale}} tabIndex={0} aria-label="Browser preview viewport" role="application" onClick={click} onKeyDown={event=>{
-          if(saved||mode!=='prototype')return;event.preventDefault();if(event.ctrlKey||event.metaKey||event.altKey)return;
+          if(event.target!==event.currentTarget)return;
+          if(mode==='inspect'&&tool==='annotate'&&(event.key==='Enter'||event.key===' ')){
+            event.preventDefault();commentOnSelection(event.currentTarget);return;
+          }
+          if(saved||mode!=='prototype'||event.ctrlKey||event.metaKey||event.altKey||event.nativeEvent.isComposing||event.key==='Tab')return;
+          event.preventDefault();
           const input=event.key.length===1?{type:'text' as const,text:event.key}:{type:'key' as const,key:event.key};void run('input',{input}).catch(()=>{});
-        }} onPaste={event=>{if(mode==='prototype'&&!saved){event.preventDefault();void run('input',{input:{type:'text',text:event.clipboardData.getData('text/plain')}}).catch(()=>{});}}}>
+        }} onPaste={event=>{if(event.target===event.currentTarget&&mode==='prototype'&&!saved){event.preventDefault();void run('input',{input:{type:'text',text:event.clipboardData.getData('text/plain')}}).catch(()=>{});}}}>
           <img src={capture.screenshot} alt={`Rendered browser preview of ${preview.title}`} draggable={false}/>
           {mode==='inspect'&&guides&&<div className="review-guides">{Array.from({length:12},(_,i)=><i key={i}/>)}</div>}
           {mode==='inspect'&&overlays&&selectionPosition&&<div className="review-selection" style={selectionPosition}><span className="review-measure">{selection!.tag} · {Math.round(selection!.rect.width)} × {Math.round(selection!.rect.height)}</span></div>}
           {mode==='inspect'&&overlays&&threads.map((item,index)=>{const pos=position(item.anchor);if(pos.left<0||pos.top<0||pos.left>size.width*scale||pos.top>size.height*scale)return null;return <button type="button" key={item.id} className="review-pin" aria-label={`Comment ${index+1} by ${item.messages[0].author}`} aria-pressed={openThread===item.id} style={pos} onClick={event=>{event.stopPropagation();setDraft(null);setOpenThread(value=>value===item.id?null:item.id);}}>{index+1}</button>;})}
-          {mode==='inspect'&&thread&&!thread.resolved&&thread.revisionId===revision.id&&<div className="review-floating-comment" style={{left:Math.max(8,Math.min(position(thread.anchor).left+18,size.width*scale-300)),top:Math.max(8,Math.min(position(thread.anchor).top,size.height*scale-260))}} onClick={event=>event.stopPropagation()} onKeyDown={event=>event.stopPropagation()}><ReviewThreadCard thread={thread} onClose={()=>setOpenThread(null)} onReply={body=>comments.reply(thread.id,body)} onResolve={resolved=>comments.resolve(thread.id,resolved)}/></div>}
-          {draft&&<div className="review-floating-comment" style={{right:12,bottom:12}} onClick={event=>event.stopPropagation()} onKeyDown={event=>event.stopPropagation()}><div className="review-thread"><strong>New comment</strong>{draft.selector&&<code className="review-anchor-label">{draft.selector}</code>}<CommentComposer onCancel={()=>setDraft(null)} onSubmit={async body=>{await comments.add(body,draft);setDraft(null);}}/></div></div>}
+          {mode==='inspect'&&thread&&!thread.resolved&&thread.revisionId===revision.id&&<div className="review-floating-comment" style={{left:Math.max(8,Math.min(position(thread.anchor).left+18,size.width*scale-300)),top:Math.max(8,Math.min(position(thread.anchor).top,size.height*scale-260))}} onClick={event=>event.stopPropagation()} onKeyDown={event=>event.stopPropagation()}><ReviewThreadCard thread={thread} onClose={()=>setOpenThread(null)} onReply={body=>comments.reply(thread.id,body)} onResolve={resolved=>comments.resolve(thread.id,resolved)} onHandoff={onHandoff?target=>onHandoff({scope,previewId:preview.id,revisionId:thread.revisionId,threadIds:[thread.id]},target):undefined} canOpenTask={!!scope.workspace}/></div>}
           {busy&&<div className="review-loading"><Loader2/></div>}
         </div>:<div className="review-empty">{busy?<Loader2 className="animate-spin"/>:<Scan/>}<h2>{busy?'Opening browser…':'Preview is ready to open'}</h2><p>{busy?'Rendering the page and measuring its components.':'Your artifact is saved. Retry the browser connection to continue reviewing.'}</p>{!busy&&<button type="button" className="review-primary" onClick={()=>{void run('capture').catch(()=>{});}}>Connect browser</button>}</div>}
       </div>
-      {componentsOpen&&<aside className="review-side-panel" aria-label="Measured components"><header><strong>Components</strong><button type="button" aria-label="Close components" onClick={()=>setComponentsOpen(false)}><X/></button></header><div className="review-component-list">{capture?.components.map((component,index)=><button type="button" key={`${component.selector}:${index}`} aria-pressed={selection?.selector===component.selector} onClick={()=>{void run('inspect',{selector:component.selector}).catch(()=>{});}}><code>{component.tag}</code><span>{component.text||component.selector}</span></button>)}</div>
-        {selection&&<div className="review-component-details"><h3>Selected component</h3><code>{selection.selector}</code><dl><dt>Dimensions</dt><dd>{Math.round(selection.rect.width)} × {Math.round(selection.rect.height)} px</dd><dt>Position</dt><dd>{Math.round(selection.rect.x)}, {Math.round(selection.rect.y)}</dd>{Object.entries(selection.styles).map(([property,value])=><React.Fragment key={property}><dt>{property}</dt><dd>{value}</dd></React.Fragment>)}</dl><button type="button" className="review-primary" onClick={()=>{setDraft({x:selection.rect.x+selection.rect.width/2,y:selection.rect.y+selection.rect.height/2,selector:selection.selector,viewport:size});setComponentsOpen(false);}}><MessageSquarePlus className="size-3.5"/>Comment on component</button></div>}
+      {draft&&<div ref={draftBubble} className="review-comment-bubble" role="group" aria-label="New comment"><CommentComposer compact autoFocus onCancel={closeDraft} onSubmit={async body=>{await comments.add(body,draft);closeDraft();}}/></div>}
+      {componentsOpen&&<aside className="review-side-panel" aria-label="Measured components"><header><strong>Components</strong><button type="button" aria-label="Close components" onClick={()=>setComponentsOpen(false)}><X/></button></header><div className="review-component-list">{capture?.components.map((component,index)=><button type="button" key={`${component.selector}:${index}`} aria-pressed={selection?.selector===component.selector} onClick={()=>{if(saved)setSavedSelection(component.selector);else void run('inspect',{selector:component.selector}).catch(()=>{});}}><code>{component.tag}</code><span>{component.text||component.selector}</span></button>)}</div>
+        {selection&&<div className="review-component-details"><h3>Selected component</h3><code>{selection.selector}</code><dl><dt>Dimensions</dt><dd>{Math.round(selection.rect.width)} × {Math.round(selection.rect.height)} px</dd><dt>Position</dt><dd>{Math.round(selection.rect.x)}, {Math.round(selection.rect.y)}</dd>{Object.entries(selection.styles).map(([property,value])=><React.Fragment key={property}><dt>{property}</dt><dd>{value}</dd></React.Fragment>)}</dl><button type="button" className="review-primary" onClick={event=>{commentOnSelection(event.currentTarget);returnFocus.current=canvas.current;setComponentsOpen(false);}}><MessageSquarePlus className="size-3.5"/>Comment on component</button></div>}
       </aside>}
     </div>
     <div className="review-footer">{selection?<><code>{selection.tag}</code><span>{Math.round(selection.rect.width)} × {Math.round(selection.rect.height)} px</span><span>{selection.styles.fontSize} · {selection.styles.fontWeight}</span></>:<span>{size.width} × {size.height} CSS pixels · {mode==='prototype'?'Click, type or scroll to interact':'Click to inspect a component'}</span>}
       <button type="button" title="Download preserved HTML" aria-label="Download artifact HTML" disabled={!revision.html&&!revision.source} onClick={()=>download(`${preview.title.replace(/[^a-z0-9_-]/gi,'-')}.html`,revision.html??revision.source??'','text/html;charset=utf-8')}><Download className="size-3.5"/></button>
-      <button type="button" aria-label="View saved capture" title="View the preserved capture" disabled={!revision.capture} onClick={()=>setSaved(value=>!value)}><Check className="size-3.5"/></button><button type="button" aria-label="Save artifact revision" disabled={busy||saved} onClick={()=>{void saveRevision();}} className="flex items-center gap-1.5"><Save className="size-3.5"/>Save revision</button>
+      <button type="button" aria-label="View saved capture" title="View the preserved capture" disabled={!revision.capture} onClick={()=>showSaved(!saved)}><Check className="size-3.5"/></button><button type="button" aria-label="Save artifact revision" disabled={busy||saved} onClick={()=>{void saveRevision();}} className="flex items-center gap-1.5"><Save className="size-3.5"/>Save revision</button>
     </div>
   </div>;
 }

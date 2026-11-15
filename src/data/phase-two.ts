@@ -1,7 +1,7 @@
 /** Reference-only presentations, informed by refs/claude-code/src/tools. */
 import type { ChatMessage, ToolActivity } from "./mock";
 
-export type PlanMessage = { id: string; role: "plan"; agentId: string; kind: "Design Plan" | "Plan"; name: string; path: string; markdown: string; workspaceRoot?:string; sessionId?:string };
+export type PlanMessage = { id: string; role: "plan"; agentId: string; kind: "Design Plan" | "Plan"; name: string; path: string; markdown: string; workspaceRoot?:string; sessionId?:string; adiContract?: import("@/lib/adi/types").AdiContract };
 export type ToolResultMessage = { id: string; role: "tool-result"; tool: "LSP" | "TaskOutput" | "TaskStop" | "Worktree" | "ToolSearch"; action: string; subject: string; status: string; failed?: boolean; output: string };
 type Base = { id: string; role: "professional-tool"; title: string; description: string };
 export type SourceLocation = { file: string; line: number; character: number; preview: string };

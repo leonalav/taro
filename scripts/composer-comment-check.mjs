@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { chromium } from "playwright";
 
-const browser = await chromium.launch({ headless: true, args: ["--no-sandbox"] });
+const browser = await chromium.launch({ headless: true, channel: process.env.TARO_BROWSER_CHANNEL || undefined, args: ["--no-sandbox"] });
 const ctx = await browser.newContext({ viewport: { width: 1600, height: 1000 } });
 const page = await ctx.newPage();
 const errors = [];
@@ -28,7 +28,7 @@ async function makeComment(frac, text) {
 }
 
 try {
-  await page.goto("http://localhost:5173", { waitUntil: "domcontentloaded" });
+  await page.goto((process.env.TARO_BASE_URL||'http://127.0.0.1:1427'), { waitUntil: "domcontentloaded" });
   await page.locator("[data-tokens-card]").scrollIntoViewIfNeeded();
   await page.locator("[data-tokens-card]").getByRole("button", { name: "Open", exact: true }).click();
   await page.waitForTimeout(300);

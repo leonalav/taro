@@ -19,3 +19,24 @@ describe("live workspace permission request",()=>{
     await act(async()=>root.unmount());host.remove();
   });
 });
+
+it("uses the plan name without the workspace path and preserves one-time approval", async () => {
+  const host=document.createElement("div");const root=createRoot(host);const onDecide=vi.fn();
+  await act(async()=>root.render(<MessageItem message={{id:"plan",role:"permission",agentId:"planner",mcp:"workspace tool",tool:"Approve Portable Preview (A:/demo/.taro/plans/preview.md)",live:true}} agentLabel={()=>"Kai"} onRevert={()=>{}} onDecide={onDecide}/>));
+  expect(host.querySelector("[data-permission-title]")?.textContent).toBe("Approve the plan Portable Preview?");
+  expect(host.textContent).not.toContain(".taro");
+  await act(async()=>[...host.querySelectorAll("button")].find(button=>button.textContent==="Approve plan")!.click());
+  expect(onDecide).toHaveBeenCalledWith("plan",expect.objectContaining({allowed:true,duration:"once"}));
+  await act(async()=>root.unmount());
+});
+
+it("renders legacy private design calls as a label and status only", async () => {
+  const host=document.createElement("div");const root=createRoot(host);
+  await act(async()=>root.render(<MessageItem message={{id:"tools",role:"activity-group",summary:"Using tools",activities:[{id:"export",kind:"mcp",label:"Export design tokens",status:"done",detail:"private css",output:"private css",errorTrace:"private css"}]}} agentLabel={()=>"Kai"} onRevert={()=>{}}/>));
+  await act(async()=>host.querySelector("button")!.click());
+  expect(host.textContent).toContain("Export design tokens");
+  expect(host.textContent).toContain("Done");
+  expect(host.textContent).not.toContain("private css");
+  expect(host.textContent).not.toContain("View result");
+  await act(async()=>root.unmount());
+});

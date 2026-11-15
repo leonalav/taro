@@ -27,6 +27,8 @@ const coreWorkflowTools=["Agent","TaskOutput","TaskStop","TaskTakeover","EnterPl
 export class DeferredToolCatalog {
   private loaded=new Set([...agentToolDefinitions.map(tool=>tool.function.name),...coreWorkflowTools,"ToolSearch","Skill"]);
   constructor(private readonly readOnly=false,private readonly allowedTools?:ReadonlySet<string>){ }
+  snapshot(){return [...this.loaded];}
+  restore(names:string[]){this.loaded=new Set(names);}
   allowed(name:string){return allDefinitions.some(tool=>tool.function.name===name)&&(!this.readOnly||readOnlyTools.has(name)||name==="Agent")&&(!this.allowedTools||this.allowedTools.has(name)||name==="ToolSearch");}
   definitions(){return allDefinitions.filter(tool=>(this.loaded.has(tool.function.name)||this.allowedTools?.has(tool.function.name))&&this.allowed(tool.function.name));}
   search(query:string,maxResults=5){

@@ -12,6 +12,7 @@ describe("Nike subagent reference artifact",()=>{
     expect(html).toContain("Explore");
     expect(html).toContain("Background");
     expect(html).toContain("Worktree");
+    expect(html).not.toContain("model</span>");
     expect(html).toContain("Read src/index.css");
     expect(html).toContain("Contrast");
   });

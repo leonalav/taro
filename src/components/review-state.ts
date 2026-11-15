@@ -1,9 +1,11 @@
 import * as React from 'react';
 import { reviewRepository } from '@/lib/review-persistence';
-import { addPreview, addReviewComment, replyToComment, resolveComment, reviewScopeKey, type ReviewScope, type ReviewAnchor } from '@/lib/review-store';
+import { addPreview, addReviewComment, reviewScopeKey, type ReviewScope, type ReviewAnchor } from '@/lib/review-store';
 import { useSettings } from './settings/settings-context';
 import { syncReviewWorkItem } from '@/lib/review-work-items';
 import { previewById, reviewId } from '@/lib/review-store';
+import { createReviewCommentService } from '@/lib/review-comment-service';
+export const reviewCommentService=createReviewCommentService(reviewRepository,syncReviewWorkItem);
 export const nikePins=[
   {id:'pin-1',x:11,y:33,author:'Aria',role:'Designer agent',time:'09:42',text:'Tracking at −0.045em keeps the serif calm against the bold sans. Ship it?'},
   {id:'pin-2',x:23,y:66,author:'Aria',role:'Designer agent',time:'09:44',text:'Ember CTA now passes AA — contrast fixed 3.1:1 → 4.8:1.'},
@@ -13,6 +15,7 @@ export function useReviewState(scope:ReviewScope){
   const key=reviewScopeKey(scope),stable=React.useMemo(()=>scope,[key]); // Scope identity is its serialized workspace/session key.
   const value=React.useSyncExternalStore(reviewRepository.subscribe,()=>reviewRepository.snapshot(stable),()=>reviewRepository.snapshot(stable));
   React.useEffect(()=>{void reviewRepository.load(stable).then(()=>{
+    void reviewCommentService.retrySync(stable).catch(()=>{});
     if(stable.sessionId==='brand'&&reviewRepository.snapshot(stable).loaded&&!reviewRepository.snapshot(stable).state.previews.some(p=>p.id==='nike-discovery')){
       void reviewRepository.change(stable,state=>{
         if(state.previews.some(p=>p.id==='nike-discovery'))return state;
@@ -27,18 +30,26 @@ export function useReviewState(scope:ReviewScope){
 }
 export function useReviewComments(scope:ReviewScope,previewId:string,revisionId?:string){
   const author=useSettings().account.name||'You';
-  const update=async(threadId:string,change:Parameters<typeof reviewRepository.change>[1])=>{
-    await reviewRepository.change(scope,change);
-    const preview=previewById(reviewRepository.snapshot(scope).state,previewId);
-    const thread=preview.threads.find(item=>item.id===threadId);
-    if(thread)await syncReviewWorkItem(scope,preview,thread);
+  const pending=React.useRef(new Map<string,string>());
+  const preview=()=>previewById(reviewRepository.snapshot(scope).state,previewId);
+  const threadRequest=(threadId:string)=>{
+    const thread=preview().threads.find(item=>item.id===threadId);
+    if(!thread)throw Error('Comment thread was not found.');
+    return {previewId,threadId,expectedGeneration:thread.generation??0};
+  };
+  const save=async(key:string,request:(clientMutationId:string)=>Promise<unknown>)=>{
+    const id=pending.current.get(key)??reviewId();
+    pending.current.set(key,id);
+    const result=await request(id);
+    pending.current.delete(key);
+    return result;
   };
   return {
-    add:(body:string,anchor:ReviewAnchor)=>{
-      const id=reviewId();
-      return update(id,state=>addReviewComment(state,previewId,{id,body,anchor,revisionId,author,role:'Reviewer'}));
-    },
-    reply:(threadId:string,body:string)=>update(threadId,state=>replyToComment(state,previewId,threadId,{body,author,role:'Reviewer'})),
-    resolve:(threadId:string,resolved:boolean)=>update(threadId,state=>resolveComment(state,previewId,threadId,resolved)),
+    add:(body:string,anchor:ReviewAnchor)=>save(JSON.stringify(['post',reviewScopeKey(scope),previewId,revisionId,anchor,body]),clientMutationId=>
+      reviewCommentService.post(scope,{previewId,revisionId:revisionId??preview().revisionId,clientMutationId,body,anchor,author,role:'Reviewer'})),
+    reply:(threadId:string,body:string)=>save(JSON.stringify(['reply',threadId,body]),clientMutationId=>
+      reviewCommentService.reply(scope,{...threadRequest(threadId),clientMutationId,body,author,role:'Reviewer'})),
+    resolve:(threadId:string,resolved:boolean)=>save(JSON.stringify(['status',threadId,resolved]),clientMutationId=>
+      reviewCommentService.setStatus(scope,{...threadRequest(threadId),clientMutationId,resolved})),
   };
 }

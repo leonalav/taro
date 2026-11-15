@@ -174,6 +174,8 @@ export type ChatMessage =
   | {
       id: string;
       role: "permission";
+      planName?: string;
+      confirmation?: string;
       agentId: string;
       mcp: string;
       tool: string;
@@ -181,17 +183,21 @@ export type ChatMessage =
       onceOnly?: boolean;
       decision?: PermissionChoice;
     }
-  | { id: string; role: "activity-group"; agentId?: string; summary: string; activities: ToolActivity[]; startedAt?: number; foundationGallery?: ToolActivity[] }
+  | { id: string; role: "activity-group"; agentId?: string; summary: string; activities: ToolActivity[]; startedAt?: number; pausedAt?: number; pausedMs?: number; foundationGallery?: ToolActivity[] }
   | {
       id: string;
       role: "subagent";
       agentId: string;
       childId: string;
+      startedAt?: number;
+      pausedAt?: number;
+      pausedMs?: number;
       subagentType: string;
       description: string;
       prompt: string;
       model?: string;
       runInBackground: boolean;
+      waitingForConnection?: boolean;
       isolation?: "worktree";
       status: "running" | "completed" | "failed" | "stopped";
       activities: ToolActivity[];

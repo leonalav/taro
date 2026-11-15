@@ -3,28 +3,46 @@ import {isTauri} from "@tauri-apps/api/core";
 import type { AgentConfig, SkillConfig, CustomModel } from "@/data/settings";
 import type { McpConfig, ToolOutput } from "./agent-tools";
 import { activityFromTool, approvalRequired, isInspectionBash, toolKind, toolLabel } from "./agent-tools";
-import type { ToolCall } from "./model-stream";
+import type { ModelDesignScope, ToolCall } from "./model-stream";
 import { DeferredToolCatalog, readOnlyTools } from "./phase-two-catalog";
 import {boundedModelContext} from "./model-context";
 import {defaultReviewServices,executeReviewTool,type ReviewServices} from './review-tools';
+import {createReviewAnchor} from "./review-anchors";
+import {proposeReviewResolution,validateReviewResolution} from "./review-resolution";
+import { createReviewCommentService } from './review-comment-service';
 import {activeRevision,previewById,type ReviewScope} from './review-store';
 import {taskRepository} from './task-persistence';
-import {completeTask,createTask,type TaskRepository} from './task-store';
+import {completeTask,type TaskRepository} from './task-store';
+import {boardTaskTools,boardTaskToolNames,executeBoardTask} from "./task-board-tools";
 import {workspaceRuleKey} from './workspace-preferences';
 import {NativeRunLedger} from './foundation-native';
-import {approvedDesignIntent,designJobDefinition,designSubmissionDefinition,parseDesignSubmission,type CodeHandoff,type DesignIntent,type DesignJob,type DesignStage,type DesignSubmission,type DesignVerdict} from './design-job';
+import {publicDesignPlan,designJobDefinition,designSubmissionDefinition,parseDesignSubmission,type CodeHandoff,type DesignIntent,type DesignJob,type DesignStage,type DesignSubmission,type DesignVerdict} from './design-job';
 import {reviewToolNames} from './review-tool-definitions';
 import {artifactToolNames,artifactDesignInstructions} from './artifact-tool-definitions';
 import {createArtifactDesign} from './artifact-design';
-import {roleKey,specialistPlaybook,workflowIntent,type Specialist} from './agent-workflow';
+import {roleKey,specialistPlaybook,workflowIntent} from './agent-workflow';
 import {executeArtifactTool,type ArtifactServices} from './artifact-tools';
+import { validateArtifactAudit } from "./artifact-audit";
+import { adiToolDefinitions, adiToolNames } from './adi/tool-definitions';
+import { loadBundledRegistry } from './adi/bundled-registry';
+import { prepareNativeAdi, commitNativeAdi, snapshotNativeAdi, type NativeAdiIdentity, type NativeAdiMutation } from './adi/native';
+import { createAdiRuntime, designTargetPath } from './adi/runtime';
+import { adiRepository } from './adi/persistence';
+import { classifyDesignContext, detectFrontendImpact, type RunRequest } from './adi/context';
+import type { AdiRepository } from './adi/store';
+import type { CompletionDecision } from './adi/types';
 import {webActivity,webLabel,markWebReads,readUrls,settleWebActivities,toolResultText,webInstructions,webToolNames} from './web-research';
+import {isModelDisconnect,waitForModelReconnect,type ChildCheckpoint,type FrozenModelRequest,type SavedChild} from "./subagent-continuity";
 
 type SubagentMessage=Extract<ChatMessage,{role:"subagent"}>;
-export interface ToolOwner {sessionId:string;workspaceRoot:string;readOnly:boolean;depth:number;childId?:string;roleId?:string;groupId?:string;signal:AbortSignal;reviewScope?:ReviewScope;ancestors?:{workspaceRoot:string;sessionId:string}[]}
-export interface ToolApproval {owner:ToolOwner;force?:boolean;plan?:{name:string;path:string;markdown:string}}
+export interface ToolOwner {sessionId:string;workspaceRoot:string;readOnly:boolean;depth:number;childId?:string;roleId?:string;groupId?:string;signal:AbortSignal;adi?:NativeAdiMutation;reviewScope?:ReviewScope;ancestors?:{workspaceRoot:string;sessionId:string}[]}
+export interface ToolApproval {owner:ToolOwner;force?:boolean;plan?:{name:string;path:string;markdown:string};confirmation?:string}
 export interface RuntimeOptions {
   tasks?:TaskRepository;
+  boardTasks?:boolean;
+  boardTaskId?:string;
+  taskWorkspace?:string;
+  adi?:boolean | AdiRepository;
   reviewScope?:ReviewScope;
   artifactServices?:ArtifactServices;
   reviewServices?:ReviewServices;
@@ -32,11 +50,12 @@ export interface RuntimeOptions {
   rules?:string;
   agents?:AgentConfig[];skills?:SkillConfig[];
   native:(call:ToolCall,input:Record<string,unknown>,owner:ToolOwner,approved:boolean,requestId:string)=>Promise<ToolOutput>;
-  stream:(request:{requestId:string;endpoint:string;model:string;credentialId:string;messages:unknown[];tools?:unknown[]},onDelta:(text:string)=>void)=>Promise<ToolCall[]>;
+  stream:(request:{requestId:string;endpoint:string;model:string;credentialId:string;messages:unknown[];tools?:unknown[];designScope?:ModelDesignScope},onDelta:(text:string)=>void)=>Promise<ToolCall[]>;
   stopRequest:(requestId:string)=>Promise<unknown>;
   approve:(call:ToolCall,input:Record<string,unknown>,request:ToolApproval)=>Promise<boolean>;
   emit:(message:ChatMessage)=>void;
   updateChild:(childId:string,patch:Partial<SubagentMessage>)=>void;
+  saveChild?:(child:SavedChild)=>Promise<void>;
   observeWorkflowTool?:(call:ToolCall,input:Record<string,unknown>,execute:()=>Promise<ToolOutput>)=>Promise<ToolOutput>;
 }
 interface SessionState {catalog:DeferredToolCatalog;allowedTools?:ReadonlySet<string>;planPath?:string;worktreeRoot?:string}
@@ -45,6 +64,7 @@ interface ChildTask {
   description:string;prompt:string;status:"running"|"completed"|"failed"|"stopped";output:string;error?:string;
   requests:Set<string>;done:Promise<void>;activities:ToolActivity[];model:string;
   stopping?:Promise<void>;
+  saved?:SavedChild;
   handoff?:{stage:DesignStage; jobId:string; design?:DesignIntent["design"]; submission?:DesignSubmission; edits?:Map<string,string>; preview?:{previewId:string;revisionId:string}; expectedPreview?:CodeHandoff; auditId?:string; inspected?:boolean; sawAudit?:boolean; assertCurrent?:()=>void};
 }
 interface NativeTaskScope {owner:ToolOwner;root:string;rootSessionId:string}
@@ -72,6 +92,13 @@ async function abortable<T>(promise:Promise<T>,signal:AbortSignal):Promise<T>{
 /** The model-facing orchestration layer; native code still enforces OS boundaries. */
 export class ProfessionalToolRuntime {
   private controller=new AbortController();
+  private adi?:ReturnType<typeof createAdiRuntime>;
+  private adiRequest?:RunRequest;
+  private adiPreparing?:Promise<void>;
+  private readonly adiRunId=uid('adi');
+  private nativeAdiReady?:Promise<void>;
+  private activeAdiWrites=0;
+  private adiPreview?:{previewId:string;revisionId:string;generation:number;scope:ReviewScope;sourceFingerprint?:string;workspaceRoot?:string};
   private rootOwner:ToolOwner;
   private foreground=new Set<ChildTask>();
   private launched=new Set<ChildTask>();
@@ -79,10 +106,9 @@ export class ProfessionalToolRuntime {
   private mcpCatalog:string[]=[];
   private remainingRequests=128;
   private designLedger?:NativeRunLedger;
-  private workflowStarted=false;
   private delegationDisabled=false;
-  private delegationApprovalRequired=false;
-  private workflowNote?:string;
+  private reconnected=false;
+  markReconnected(){this.reconnected=true;}
   constructor(private readonly options:RuntimeOptions){
     const role=options.agents?.find(agent=>agent.id===options.agentId);
     this.rootOwner={sessionId:options.sessionId,workspaceRoot:options.workspaceRoot,roleId:role?.id,readOnly:!!role&&(!role.canWriteCode||role.autonomy==="suggest"),depth:0,signal:this.controller.signal,reviewScope:options.reviewScope};
@@ -92,74 +118,75 @@ export class ProfessionalToolRuntime {
     const key=stateKey(owner);let state=sessions.get(key);
     if(!state){state={catalog:new DeferredToolCatalog(owner.readOnly)};sessions.set(key,state);}return state;
   }
+  private adiIdentity():NativeAdiIdentity{return {runId:this.adiRunId,workspace:this.options.workspaceRoot,sessionId:this.options.sessionId};}
+  async prepareRun(request:RunRequest, force=false):Promise<void>{
+    if(!force)this.delegationDisabled=workflowIntent(request.text).solo;
+    if(!this.options.adi||!this.options.workspaceRoot)return;
+    this.adiRequest=request;
+    const project={files:[],componentKinds:[],platformEvidence:[],fingerprint:this.options.workspaceRoot};
+    const context=classifyDesignContext({request,workspace:project});
+    if(!force&&(context.intent==="discussion"||context.intent==="non-ui"))return;
+    if(this.adiPreparing)return this.adiPreparing;
+    this.adiPreparing=(async()=>{
+      const registry=await loadBundledRegistry();
+      const repository=this.options.adi===true?adiRepository:this.options.adi;
+      if(!repository)return;
+      const runtime=createAdiRuntime({registry,repository,commit:this.options.adi===true&&isTauri()?contract=>commitNativeAdi(this.adiIdentity(),contract):undefined},{scope:{workspace:this.options.workspaceRoot,sessionId:this.options.sessionId},runId:this.adiRunId});
+      await runtime.prepare(request,project);
+      if(this.options.adi===true&&isTauri())await prepareNativeAdi(this.adiIdentity(),context.intent!=="discussion"&&context.intent!=="non-ui");
+      this.adi=runtime;
+    })().catch(error=>{this.adiPreparing=undefined;throw error;});
+    return this.adiPreparing;
+  }
+  async finalizeRun(settle=true):Promise<CompletionDecision>{
+    if(settle)await this.settleChildren();
+    if(this.activeAdiWrites)return {status:"needs-work",missing:["Wait for active workspace mutations before verifying."]};
+    const verification=this.adi?.verification();
+    if(verification&&this.adiPreview){
+      const {scope,previewId,revisionId}=this.adiPreview;
+      const repo=(this.options.reviewServices??defaultReviewServices).repository;
+      await repo.load(scope);
+      const latest=repo.snapshot(scope).state.previews.find(item=>item.id===previewId)?.revisions.at(-1);
+      if(latest?.id!==revisionId||!latest.audits?.some(audit=>audit.id===verification.auditId))return {status:"needs-work",missing:["The reviewed preview revision or audit changed. Render and verify the current revision."]};
+    }
+    if(verification&&this.options.adi===true&&isTauri()){
+      const root=this.adiPreview?.workspaceRoot??this.state(this.rootOwner).worktreeRoot??this.options.workspaceRoot;
+      if(await snapshotNativeAdi(root)!==verification.sourceFingerprint)return {status:"needs-work",missing:["Workspace source changed after the audit. Run BrowserAudit again."]};
+    }
+    if(settle&&this.adi&&this.adiRequest?.reviewItem){
+      const assignment=this.adiRequest.reviewItem;
+      const items=Array.isArray(assignment)?assignment:[assignment];
+      for(const item of items){
+        const reference=item.reference??(item.scope&&item.previewId&&item.threadId?{scope:item.scope,previewId:item.previewId,threadIds:[item.threadId]}:undefined);
+        if(!reference)continue;
+        const repo=(this.options.reviewServices??defaultReviewServices).repository;
+        await repo.load(reference.scope);
+        const preview=repo.snapshot(reference.scope).state.previews.find(entry=>entry.id===reference.previewId);
+        const latest=preview?.revisions.at(-1)?.id;
+        if(!preview||reference.threadIds.some((id:string)=>{const thread=preview.threads.find(entry=>entry.id===id);return !thread?.resolved||thread.resolution?.verifiedRevisionId!==latest||thread.resolution?.contractDigest!==this.adi?.contract()?.digest;}))return {status:"needs-work",missing:["Record a current verified resolution for each assigned Review thread."]};
+      }
+    }
+    return (settle?this.adi?.sealCompletion():this.adi?.evaluateCompletion())??{status:"ready",missing:[]};
+  }
+  modelDesignScope(fallback="",stage?:string):ModelDesignScope {
+    const request=this.adiRequest??{text:fallback,referenceIds:[]};
+    const context=this.adi?.designContext()??classifyDesignContext({request,workspace:{files:[],componentKinds:[],platformEvidence:[],fingerprint:""}});
+    return {intent:stage?"build":context.intent,platforms:context.platforms,brief:[request.text,fallback].filter((text,index,items)=>text&&items.indexOf(text)===index).join("\n").slice(0,6000)};
+  }
   definitions(){
     if(this.role(this.rootOwner)?.enabled===false)return [];
-    const definitions=this.state(this.rootOwner).catalog.definitions();
+    const definitions=[...this.state(this.rootOwner).catalog.definitions(),...(this.adi?adiToolDefinitions:[])];
     if(!this.options.workspaceRoot)return definitions.filter(tool=>reviewToolNames.has(tool.function.name)||webToolNames.has(tool.function.name)||artifactToolNames.has(tool.function.name));
-    if(this.delegationDisabled)return definitions.filter(tool=>tool.function.name!=="Agent");
-    return [...definitions,designJobDefinition];
+    return [
+      ...definitions.filter(tool=>!this.delegationDisabled||tool.function.name!=="Agent"),
+      ...(this.delegationDisabled?[]:[designJobDefinition]),
+      ...(this.options.boardTasks?boardTaskTools:[]),
+    ];
   }
   private specialist(type:string){
     const key=roleKey(type);
     return this.options.agents?.find(agent=>[agent.id,agent.name,agent.role].some(value=>roleKey(value)===key));
   }
-  private specialistReady(type:Specialist,requiresWrite=false){
-    const agent=this.specialist(type);
-    return !!agent?.enabled&&this.options.models.some(model=>model.id===agent.model||model.label===agent.model)&&
-      (!requiresWrite||agent.canWriteCode&&agent.autonomy!=="suggest");
-  }
-  kickoff(brief:string,options:{hasReferences?:boolean;taskTitle?:string;inspectBuild?:boolean}={}):ToolCall|undefined{
-    if(this.workflowStarted||this.rootOwner.signal.aborted)return;
-    const intent=workflowIntent(brief);
-    this.delegationDisabled=intent.solo;
-    this.delegationApprovalRequired=intent.askBeforeDelegating;
-    const titleIntent=options.taskTitle?workflowIntent(options.taskTitle):undefined;
-    const designBuild=intent.designBuild||Boolean(titleIntent?.designBuild&&!intent.discussion&&!intent.proposalRequested);
-    if(intent.discussion&&!designBuild)return;
-    if(intent.askBeforeDelegating){
-      this.workflowNote="The user asked to approve delegation before it starts. Ask for that decision before involving a specialist.";
-      return;
-    }
-    if(options.hasReferences||intent.references){
-      this.workflowNote="Inspect the supplied references and invoke explicitly requested skills before delegation. Carry their relevant decisions, file paths and constraints into the child or DesignJob brief.";
-      return;
-    }
-    const ready=this.options.workspaceRoot&&!this.rootOwner.readOnly&&!this.state(this.rootOwner).planPath&&
-      (["Designer","Code","Type & QA"] as const).every(role=>this.specialistReady(role,role==="Code"));
-    const schedule=(name:string,args:Record<string,unknown>,note:string)=>{
-      if(!this.definitions().some(tool=>tool.function.name===name))return;
-      this.workflowStarted=true;
-      this.workflowNote=note;
-      return {id:uid("workflow"),name,arguments:JSON.stringify(args)};
-    };
-    if(intent.delegation&&intent.specialist&&!intent.solo){
-      if(!this.options.workspaceRoot||!this.specialistReady(intent.specialist)){
-        this.workflowNote=`The requested ${intent.specialist} specialist is unavailable. Explain the missing workspace, permissions or model configuration instead of claiming delegation.`;
-      }else return schedule("Agent",{description:`${intent.specialist} handoff`,prompt:brief,subagent_type:intent.specialist,read_only:intent.specialist==="Designer"||intent.specialist==="Type & QA"},"The runtime delegated the explicitly requested specialist. Use the returned evidence to finish the request.");
-    }
-    if(designBuild&&!intent.solo&&!intent.specialist&&ready){
-      const title=(options.taskTitle??brief.trim().split(/\r?\n/,1)[0]).slice(0,160);
-      if(brief.length<=6000)return schedule("DesignJob",{action:"start",title,brief,...(intent.inPlace?{worktree:false}:{})},"The runtime started the Designer → Code → QA relay. Report its actual result. If blocked or interrupted, surface the blocker and retained job instead of bypassing approval or repeating work.");
-      this.workflowNote="The visual brief exceeds the DesignJob input limit. Condense it into a faithful brief with all constraints, then call DesignJob.";
-    }
-    if(intent.designDraft&&!intent.solo&&!intent.specialist&&this.options.workspaceRoot&&this.specialistReady("Designer")&&roleKey(this.role(this.rootOwner)?.role??"")!=="designer"){
-      return schedule("Agent",{description:"Designer proposal",prompt:`Produce a design proposal using ArtifactDesign and incumbent workspace styles. Include semantic token roles, component states, breakpoints and verification criteria. User request: ${brief}`,subagent_type:"Designer",read_only:true},"The runtime started a Designer proposal. Present the actual design decisions and retain the user's scope.");
-    }
-    if((intent.delegation||options.inspectBuild)&&!intent.solo&&!intent.specialist&&this.options.workspaceRoot){
-      const specialist:Specialist[]=intent.visual?["Designer","Type & QA","Code","Orchestrator"]:["Type & QA","Designer","Code","Orchestrator"];
-      const role=specialist.find(type=>this.specialistReady(type));
-      if(role||!this.options.agents)return schedule("Agent",{description:"Independent workspace inspection",prompt:`Use ListFiles, Glob or Grep to locate the relevant files, then Read the files and tests needed to ground your findings. Return concrete file paths, constraints and verification steps for the parent. User request: ${brief}`,subagent_type:role??"Explore",read_only:true},"Use the independent inspection result to plan the work and delegate further where it advances the request.");
-      this.workflowNote="No enabled specialist has a configured model. Report the configuration gap when explaining why delegation did not run.";
-    }
-    if(intent.visual){
-      return schedule("ArtifactDesign",{action:"read"},this.workflowNote??(
-        designBuild&&!intent.solo&&!ready
-          ?"The full design relay needs a writable workspace, no active plan and enabled Designer, Code and Type & QA models. Use the loaded project contract within the current permissions and report any unavailable stage."
-          :"The runtime loaded the project design contract. Use its semantic tokens, components and responsive rules for the requested visual work."
-      ));
-    }
-  }
-  kickoffStatus(){return this.workflowNote;}
   async reserveModelRequest(requestId:string,kind:"model"|"child"="model"){
     if(this.controller.signal.aborted)throw stopped();
     if(this.remainingRequests<=0)throw Error("The parent and its agents exhausted their shared 128-request budget.");
@@ -189,9 +216,90 @@ export class ProfessionalToolRuntime {
   private mcpIndex(){return this.mcpCatalog.slice(0,40).map(item=>item.split(" Arguments:")[0].slice(0,160)).join("\n").slice(0,4000);}
   instructions(){
     const state=this.state(this.rootOwner);
-    const agents=[...childTasks.values()].filter(task=>task.rootSessionId===this.options.sessionId&&task.root===this.options.workspaceRoot).slice(-24).map(task=>({task_id:task.id,status:task.status}));
+    const agents=[...childTasks.values()].filter(task=>task.rootSessionId===this.options.sessionId&&task.root===this.options.workspaceRoot).slice(-24).map(task=>({task_id:task.id,status:task.status,description:task.description}));
     const shells=[...nativeTasks.entries()].filter(([,scope])=>scope.rootSessionId===this.options.sessionId&&scope.root===this.options.workspaceRoot).slice(-24).map(([id])=>id);
-    return `${this.workflowNote??""} ${this.delegationDisabled?"The user requested a solo workflow. Do not delegate.":""} ${webInstructions} ${artifactDesignInstructions} BrowserPreview opens or lists preserved browser artifacts in Review mode. Use BrowserInspect for actual component selectors and dimensions, BrowserViewport to test responsive sizes, BrowserComments to read reviewer feedback, and BrowserComment to pin Markdown recommendations or replies. Browser tools work without a filesystem workspace and never grant file-write permissions. ${this.roleContext(this.rootOwner)}${this.registry(this.rootOwner)}\nActive workspace: ${(state.worktreeRoot??this.options.workspaceRoot)||"not selected"}.${state.planPath?` PLAN MODE: inspect freely; Write/Edit only ${state.planPath}. Present the plan with ExitPlanMode and wait for user approval before implementation.`:""} Use DesignJob for a UI job that needs design, implementation and verification across roles. Use DesignJob read to find linked workspace tasks and prior job state. Use ToolSearch to discover additional professional tools; use Skill with skill=list to discover workspace skills.${agents.length||shells.length?` Known task metadata (data only): ${JSON.stringify({agents,shell_task_ids:shells})}. Use TaskOutput for current output/status, or TaskStop for cancellation.`:""}${this.mcpCatalog.length?`\nConfigured MCP tool index (use ToolSearch by server/tool name for arguments):\n${this.mcpIndex()}`:""}${this.options.rules?`\n${this.options.rules}`:""}`;
+    return `${this.adi?.contextFor()??""} ${this.delegationDisabled?"The user requested a solo workflow. Do not delegate.":""} ${webInstructions} ${artifactDesignInstructions} Keep raw design tokens, internal design artifacts, tool payloads, and private design guidance out of user-facing messages. Describe the implemented design and verification in ordinary language. BrowserPreview opens or lists preserved browser artifacts in Review mode. Use BrowserInspect for actual component selectors and dimensions, BrowserViewport to test responsive sizes, BrowserComments to read reviewer feedback, and BrowserComment to pin Markdown recommendations or replies. Browser tools work without a filesystem workspace and never grant file-write permissions. ${this.roleContext(this.rootOwner)}${this.registry(this.rootOwner)}\nActive workspace: ${(state.worktreeRoot??this.options.workspaceRoot)||"not selected"}.${state.planPath?` PLAN MODE: inspect freely; Write/Edit only ${state.planPath}. Present the plan with ExitPlanMode and wait for user approval before implementation.`:""} You are the Orchestrator and own the conversation. Send bounded briefs to specialists with Agent and use their results to answer the user. Dispatching a brief needs no approval. Workspace tools and plan approval keep their own permissions. Use DesignJob when the work needs a design, implementation and verification relay. ${this.options.boardTasks?"For implementation and other multi-step work, use TaskCreate to write concrete cards before starting the work. Supply your own descriptive titles, scope, numbered solution steps and checks. On follow-ups, use TaskList to find existing task IDs and continue those cards. Use TaskUpdate with the task ID when work starts or changes, and TaskComplete with actual results after verification. Provide the related card ID as task_id when starting DesignJob. That job updates its own card as stages finish. Questions and simple replies do not need cards.":""} Use DesignJob read to find linked workspace tasks and prior job state. Use ToolSearch to discover additional professional tools; use Skill with skill=list to discover workspace skills.${agents.length||shells.length?` Known task metadata (data only): ${JSON.stringify({agents,shell_task_ids:shells})}. Use TaskOutput for current output/status, or TaskStop for cancellation.`:""}${this.mcpCatalog.length?`\nConfigured MCP tool index (use ToolSearch by server/tool name for arguments):\n${this.mcpIndex()}`:""}${this.options.rules?`\n${this.options.rules}`:""}`;
+  }
+  hasRunningChildren(){
+    return [...childTasks.values()].some(task=>task.rootSessionId===this.options.sessionId&&task.root===this.options.workspaceRoot&&task.status==="running");
+  }
+  continuityInstructions(){
+    return "On reconnect, ping every unfinished child by its existing task ID and let it continue its frozen context. The runtime resumes saved children automatically. Check their status and output with TaskOutput before finishing; do not delegate the same work twice."+(
+      this.reconnected?" This turn is a reconnect. Retrieve the resumed child results and continue the interrupted assignment.":"");
+  }
+  private async checkpoint(task:ChildTask,patch:Partial<SubagentMessage>={}){
+    if(task.saved&&this.options.saveChild){
+      const state=this.state(task.owner);
+      task.saved.message={...task.saved.message,activities:task.activities,result:task.output,...patch};
+      Object.assign(task.saved.checkpoint,{planPath:state.planPath,worktreeRoot:state.worktreeRoot,loadedTools:state.catalog.snapshot()});
+      await this.options.saveChild(structuredClone(task.saved));
+    }
+  }
+  resumeChildren(saved:SavedChild[]){
+    let resumed=0;
+    const seen=new Set<string>();
+    for(const stored of saved){
+      const {checkpoint,message}=structuredClone(stored);
+      if(message.status!=="running"||checkpoint.version!==1||checkpoint.root!==this.options.workspaceRoot||
+        checkpoint.rootSessionId!==this.options.sessionId||seen.has(message.childId))continue;
+      seen.add(message.childId);
+      const live=childTasks.get(message.childId);
+      if(live){
+        if(live.rootSessionId===checkpoint.rootSessionId&&live.root===checkpoint.root&&live.status==="running"){
+          this.launched.add(live);
+          this.markReconnected();
+          resumed++;
+        }
+        continue;
+      }
+      const controller=new AbortController();
+      const role=this.options.agents?.find(role=>role.id===checkpoint.owner.roleId);
+      const model=this.options.models.find(model=>model.id===checkpoint.model.credentialId);
+      if(!model||model.endpoint!==checkpoint.model.endpoint||
+        (checkpoint.owner.roleId&&this.options.agents&&!role)||role?.enabled===false){
+        const result="Restore the original model endpoint and enable the assigned agent to resume this child.";
+        this.options.updateChild(message.childId,{result});
+        continue;
+      }
+      const owner={...checkpoint.owner,signal:controller.signal,readOnly:checkpoint.owner.readOnly||!!checkpoint.planPath||
+        this.rootOwner.readOnly||!!role&&(!role.canWriteCode||role.autonomy==="suggest")||
+        !!checkpoint.owner.ancestors?.some(ancestor=>sessions.get(stateKey(ancestor))?.planPath)};
+      if(checkpoint.worktreeRoot&&owner.readOnly){
+        this.options.updateChild(message.childId,{result:"The current agent permissions do not allow reopening the saved child worktree."});
+        continue;
+      }
+      const allowedTools=checkpoint.allowedTools?new Set(checkpoint.allowedTools):undefined;
+      const catalog=new DeferredToolCatalog(owner.readOnly,allowedTools);
+      catalog.restore(checkpoint.loadedTools);
+      sessions.set(stateKey(owner),{catalog,allowedTools,planPath:checkpoint.planPath,worktreeRoot:checkpoint.worktreeRoot});
+      const task:ChildTask={id:message.childId,root:checkpoint.root,rootSessionId:checkpoint.rootSessionId,parentSessionId:checkpoint.parentSessionId,
+        owner,controller,description:message.description,prompt:message.prompt,status:"running",output:message.result??"",
+        requests:new Set(),done:Promise.resolve(),activities:message.activities,model:message.model??model.label,saved:{checkpoint,message}};
+      childTasks.set(task.id,task);
+      this.launched.add(task);
+      this.markReconnected();
+      task.done=this.finishChild(task,this.childLoop(task,false,checkpoint,true));
+      resumed++;
+    }
+    return resumed;
+  }
+  private async finishChild(task:ChildTask,work:Promise<void>){
+    try{await work;}
+    catch(error){
+      if(task.controller.signal.aborted||this.controller.signal.aborted)task.status="stopped";
+      else task.status="failed";
+      task.error=String(error);
+    }
+    const result=task.handoff?(task.status==="completed"?"Handoff completed.":task.error):task.output||task.error;
+    const patch={status:task.status,result,activities:task.activities,waitingForConnection:false};
+    try{await this.checkpoint(task,patch);}
+    catch(error){
+      task.status="failed";
+      task.error=`Child checkpoint could not be saved: ${String(error)}`;
+      this.options.updateChild(task.id,{...patch,status:"failed",result:task.error});
+      return;
+    }
+    this.options.updateChild(task.id,patch);
   }
   stop(){this.controller.abort();for(const task of childTasks.values())if(task.rootSessionId===this.options.sessionId&&task.root===this.options.workspaceRoot&&task.status==="running")void this.stopChild(task).catch(()=>{});}
   async stopAll():Promise<void>{
@@ -208,6 +316,7 @@ export class ProfessionalToolRuntime {
     const finish=async()=>{
       // Children may spawn other children while settling; re-read after every completion.
       while(true){const running=[...this.launched].filter(task=>task.status==="running");if(!running.length)break;await Promise.all(running.map(task=>task.done));}
+      await Promise.all([...this.launched].map(task=>task.done));
       const failed=[...this.launched].find(task=>task.status==="failed"||task.status==="stopped");
       if(failed)throw Error(failed.error??`Child ${failed.description} ${failed.status}`);
       for(const [id,scope] of nativeTasks){
@@ -232,12 +341,13 @@ export class ProfessionalToolRuntime {
       task.controller.abort();task.status="stopped";
       task.activities=settleWebActivities(task.activities);
       for(const id of task.requests)void this.options.stopRequest(id).catch(()=>{});
-      this.options.updateChild(task.id,{status:"stopped",result:task.output||"Child agent stopped.",activities:[...task.activities]});
+      this.options.updateChild(task.id,{status:"stopped",waitingForConnection:false,result:task.handoff?"Child agent stopped.":task.output||"Child agent stopped.",activities:[...task.activities]});
     }
     const owner={...task.owner,signal:new AbortController().signal,readOnly:false,ancestors:[],childId:undefined};
     // Native scope cancellation also catches a detached job whose launch result
     // raced cancellation and never reached the frontend task registry.
     await Promise.all([...descendants.map(child=>this.stopChild(child)),this.native({id:uid("stop-child-tasks"),name:"StopChildTasks",arguments:"{}"},{},owner,false)]);
+    if(task.saved)await task.done;
   }
   async execute(call:ToolCall,input:Record<string,unknown>,groupId?:string,requestId=uid("tool")):Promise<ToolOutput>{
     return this.executeFor(call,input,{...this.rootOwner,groupId},requestId);
@@ -248,9 +358,19 @@ export class ProfessionalToolRuntime {
     if(owner.ancestors?.some(ancestor=>sessions.get(stateKey(ancestor))?.planPath)&&!readOnlyTools.has(call.name)&&!readOnlyAgent)throw Error("This operation is blocked because an ancestor agent is in plan mode");
     const task=owner.childId?childTasks.get(owner.childId):undefined;task?.requests.add(requestId);
     const cancel=()=>{void this.options.stopRequest(requestId).catch(()=>{});};owner.signal.addEventListener("abort",cancel,{once:true});
+    const mutation=!!this.adi&&approved&&["Write","Edit","NotebookEdit","Bash","PowerShell","MCP"].includes(call.name)&&!this.state(owner).planPath;
+    if(mutation)this.activeAdiWrites++;
     try{
       if(!readOnlyTools.has(call.name)&&call.name!=="StopChildTasks")task?.handoff?.assertCurrent?.();
-      const operation=this.options.native(call,input,owner,approved,requestId);
+      let dispatchOwner=owner;
+      if(this.options.adi===true&&isTauri()&&["Write","Edit","NotebookEdit","Bash","PowerShell","MCP"].includes(call.name)&&!this.state(owner).planPath){
+        if(!this.adi){
+          this.nativeAdiReady??=prepareNativeAdi(this.adiIdentity(),false).catch(error=>{this.nativeAdiReady=undefined;throw error;});
+          await this.nativeAdiReady;
+        }
+        dispatchOwner={...owner,adi:owner.adi??{identity:this.adiIdentity(),contractDigest:this.adi?.contract()?.digest}};
+      }
+      const operation=this.options.native(call,input,dispatchOwner,approved,requestId);
       // Worktree creation can commit after cancellation; retain its native receipt.
       const output=await (call.name==="EnterWorktree"?operation:abortable(operation,owner.signal));
       if(task?.handoff?.stage==="code"&&!readOnlyTools.has(call.name)&&call.name!=="StopChildTasks"){
@@ -261,13 +381,58 @@ export class ProfessionalToolRuntime {
       }
       if(output.artifact.kind==="terminal"&&typeof output.artifact.backgroundTaskId==="string"){nativeTasks.set(output.artifact.backgroundTaskId,{owner,root:task?.root??owner.workspaceRoot,rootSessionId:task?.rootSessionId??owner.sessionId});this.launchedShells.add(output.artifact.backgroundTaskId);}
       return output;
-    }finally{task?.requests.delete(requestId);owner.signal.removeEventListener("abort",cancel);}
+    }finally{if(mutation)this.activeAdiWrites--;task?.requests.delete(requestId);owner.signal.removeEventListener("abort",cancel);}
   }
   private async executeFor(call:ToolCall,input:Record<string,unknown>,owner:ToolOwner,requestId=uid("tool")):Promise<ToolOutput>{
     if(owner.signal.aborted)throw stopped();
     const state=this.state(owner);
     if(this.role(owner)?.enabled===false)throw Error("This agent is disabled");
+    if(boardTaskToolNames.has(call.name)){
+      if(owner.depth||!this.options.boardTasks||!this.options.workspaceRoot)throw Error("Only the Orchestrator can update the workspace task board.");
+      if(call.name==="TaskComplete"){
+        if(this.hasRunningChildren())throw Error("Collect the active child results before completing tasks.");
+        const gate=await this.finalizeRun(false);
+        if(gate.status!=="ready")throw Error(gate.missing.slice(0,12).join(" "));
+      }
+      const workspace=workspaceRuleKey(this.options.workspaceRoot,"taro");
+      const task=await executeBoardTask(this.options.tasks??taskRepository,workspace,call.name,input);
+      if(Array.isArray(task)||"task_id" in task)return result(JSON.stringify(task),{kind:"task-list"});
+      return result(JSON.stringify({task_id:task.id,title:task.title,status:task.status}),{kind:"task",taskId:task.id});
+    }
     if(this.delegationDisabled&&(call.name==="Agent"||call.name==="DesignJob"&&input.action!=="read"))throw Error("The user asked to work without delegation.");
+    if(this.options.adi&&this.adiRequest&&!this.adi&&["Write","Edit","NotebookEdit","PowerShell","Bash","MCP"].includes(call.name)){
+      const effect=["Write","Edit","NotebookEdit"].includes(call.name)?"workspace-write":"external-unknown";
+      if(detectFrontendImpact({tool:call.name,input,effect},{files:[String(input.file_path??"")],componentKinds:[],platformEvidence:[],fingerprint:""})!=="non-ui"||
+        typeof input.file_path==="string"&&!/\.(?:ts|js|rs|go|sql|md|txt|toml)$/i.test(input.file_path))await this.prepareRun(this.adiRequest,true);
+    }
+    if(this.adiPreparing)await this.adiPreparing;
+    if(this.adi){
+      const adiOwner={id:owner.sessionId,readOnly:owner.readOnly,planPath:state.planPath};
+      if(adiToolNames.has(call.name)){
+        if(call.name==="DesignChecks"&&input.action==="request_review"){
+          const contract=this.adi.contract(),verification=this.adi.verification();
+          if(owner.readOnly||owner.depth)throw Error("Only the parent agent can request human verification.");
+          if(!contract||!verification||!Array.isArray(input.checks)||!input.checks.length||input.checks.length>55)throw Error("Collect the current audit and provide criterion observations first.");
+          const markdown=["# Confirm design verification","Review the rendered evidence and confirm only the observations you checked.","Preview "+verification.previewId+" · revision "+verification.revisionId+" · audit "+verification.auditId,...input.checks.flatMap(check=>{
+            if(!check||typeof check!=="object"||typeof check.observation!=="string")return [];
+            return ["- "+check.observation];
+          })].join("\n\n");
+          const name="Confirm design checks";
+          this.options.emit({id:uid("adi-review"),role:"plan",agentId:this.options.agentId,kind:"Design Plan",name,path:"",markdown});
+          const approved=await abortable(this.options.approve(call,input,{owner,force:true,confirmation:"Confirm the design checks?"}),owner.signal);
+          if(!approved)throw Error("Reviewer confirmation was not granted.");
+          if(this.options.adi===true&&isTauri()){
+            const workspace=this.adiPreview?.workspaceRoot??this.state(this.rootOwner).worktreeRoot??this.options.workspaceRoot;
+            if(await snapshotNativeAdi(workspace)!==verification.sourceFingerprint)throw Error("Workspace changed after the audit.");
+          }
+          return this.adi.attest({...input,generation:verification.mutationGeneration,contract_digest:contract.digest,audit_id:verification.auditId},adiOwner);
+        }
+        return this.adi.execute(call.name,input,adiOwner);
+      }
+      const gate=await this.adi.beforeTool(call.name,input,adiOwner);
+      if(!gate.allowed)throw Error([gate.reason,gate.nextTool&&"Use "+gate.nextTool+"."].filter(Boolean).join(" "));
+      if(gate.contractDigest)owner={...owner,adi:{identity:this.adiIdentity(),contractDigest:gate.contractDigest}};
+    }
     if(call.name==="DesignJob")return this.designJob(input,owner);
     const child=owner.childId?childTasks.get(owner.childId):undefined;
     if(call.name==="SubmitDesignHandoff"){
@@ -291,10 +456,47 @@ export class ProfessionalToolRuntime {
       const expected=child?.handoff?.expectedPreview;
       if(expected&&call.name==="BrowserPreview")throw Error("QA must inspect the assigned saved revision.");
       const scope=owner.reviewScope??{workspace:this.options.workspaceRoot,sessionId:this.options.sessionId};
+      if(this.adi&&call.name==="BrowserComment"&&input.verified_resolution===true){
+        if(owner.readOnly)throw Error("A read-only agent cannot resolve a verified fix.");
+        const contract=this.adi.contract(),verification=this.adi.verification();
+        if(!contract||!verification||!verification.previewId||!verification.revisionId)throw Error("Audit the current revision before resolving a Review thread.");
+        const gate=await this.finalizeRun(false);
+        if(gate.status!=="ready")throw Error("Complete the assigned design checks before resolving the thread.");
+        const reviews=(this.options.reviewServices??defaultReviewServices).repository;
+        await reviews.load(scope);
+        const preview=previewById(reviews.snapshot(scope).state,verification.previewId);
+        if(input.preview_id!==preview.id)throw Error("The audit belongs to a different Review preview.");
+        const thread=preview.threads.find(item=>item.id===input.thread_id);
+        const latest=preview.revisions.at(-1);
+        if(!thread||!latest?.observation||!latest.capture||typeof input.selector!=="string"||!Array.isArray(input.evidence_ids))throw Error("Supply the assigned thread, inspected component selector and current evidence IDs.");
+        const component=latest.observation.components.find(item=>item.selector===input.selector);
+        if(!component)throw Error("The resolution target was not captured on the current revision.");
+        const capture={...latest.observation,screenshot:latest.capture};
+        const anchor=createReviewAnchor({point:{x:component.rect.x+component.rect.width/2,y:component.rect.y+component.rect.height/2},capture,component,revisionId:latest.id,kind:"saved"});
+        const evidenceIds=input.evidence_ids.map(String);
+        const records=evidenceIds.map(id=>this.adi!.evidence(id));
+        const rules=thread.ruleIds??[...new Set(records.flatMap(record=>record?.ruleIds??[]))];
+        const assigned=this.adiRequest?.reviewItem;
+        const feedback=Array.isArray(assigned)?assigned:assigned?[assigned]:[];
+        if(!feedback.some(item=>item?.threadId===thread.id&&item?.previewId===preview.id||item?.reference?.previewId===preview.id&&Array.isArray(item.reference.threadIds)&&item.reference.threadIds.includes(thread.id)))throw Error("This Review thread was not assigned to the active run.");
+        const proposal=proposeReviewResolution(thread,{previewId:preview.id,revisionId:latest.id,anchor,sourceFingerprint:verification.sourceFingerprint},
+          evidenceIds,String(input.explanation??""),input.disposition==="no-change"?"no-change":"fixed");
+        const verified=await validateReviewResolution(proposal,{scope,reviews,evidence:id=>this.adi!.evidence(id),contractDigest:contract.digest,requiredRuleIds:rules});
+        const services=this.options.reviewServices??defaultReviewServices;
+        const save=await createReviewCommentService(reviews,async (...args)=>{await services.syncWorkItem?.(...args);}).resolveVerified(scope,verified);
+        return result(JSON.stringify({...verified,sync:save.sync}),{kind:"browser",reviewResolution:verified});
+      }
+
       if(expected&&call.name==="BrowserAudit"&&input.run!==false)throw Error("Read the assigned audit using run=false.");
       let reviewInput=expected?{...input,preview_id:expected.previewId,expected_revision_id:expected.revisionId,expected_audit_id:child?.handoff?.auditId}:input;
       const implementsPreview=child?.handoff?.stage==="code"&&call.name==="BrowserPreview"&&(input.url||input.html!==undefined||input.file_path!==undefined);
-      if(call.name==="BrowserPreview"&&input.file_path!==undefined&&!implementsPreview)throw Error("file_path is available for the Code stage of a design job.");
+      if(call.name==="BrowserPreview"&&input.file_path!==undefined&&!implementsPreview){
+        const contract=this.adi?.contract();
+        if(typeof input.file_path!=="string"||!contract?.decisions.some(decision=>decision.targetFiles.some(file=>designTargetPath(file,owner.workspaceRoot)===designTargetPath(String(input.file_path),owner.workspaceRoot)))||input.url||input.html!==undefined)throw Error("Supply a planned HTML file_path or a loopback development URL.");
+        const read=await this.native({name:"Read",id:uid("preview-source"),arguments:"{}"},{file_path:input.file_path,raw:true},owner,false);
+        if(typeof read.artifact.content!=="string")throw Error("The planned HTML source could not be read.");
+        reviewInput={...input,html:read.artifact.content};
+      }
       if(implementsPreview){
         if(!child?.handoff?.edits?.size)throw Error("Implement the approved plan with Write or Edit before rendering its preview.");
         if(input.file_path!==undefined){
@@ -308,7 +510,29 @@ export class ProfessionalToolRuntime {
           if(!["localhost","127.0.0.1","[::1]"].includes(url.hostname))throw Error("Implementation previews must point to the local development server.");
         }
       }
+      const mutationGeneration=this.adi?.mutationGeneration()??0;
+      const recordsPreview=!!this.adi&&call.name==="BrowserPreview"&&(input.file_path!==undefined||typeof input.url==="string"&&(()=>{try{return ["localhost","127.0.0.1","[::1]"].includes(new URL(input.url).hostname);}catch{return false;}})());
+      const runsAudit=!!this.adi&&call.name==="BrowserAudit"&&input.run!==false;
+      const auditRoot=(recordsPreview||runsAudit)&&this.options.adi===true&&isTauri()?(runsAudit?this.adiPreview?.workspaceRoot??state.worktreeRoot??owner.workspaceRoot:state.worktreeRoot??owner.workspaceRoot):undefined;
+      if(this.adi&&call.name==="BrowserAudit"&&input.run!==false){
+        if(this.activeAdiWrites)throw Error("Wait for active workspace mutations before auditing.");
+        const preview=this.adiPreview;
+        if(!preview||preview.generation!==mutationGeneration||(input.preview_id!==undefined&&input.preview_id!==preview.previewId))throw Error("Render a fresh implementation preview before collecting ADI evidence.");
+        reviewInput={...reviewInput,preview_id:preview.previewId,expected_revision_id:preview.revisionId};
+      }
+      const before=auditRoot?await snapshotNativeAdi(auditRoot):undefined;
+      if(runsAudit&&before!==this.adiPreview?.sourceFingerprint)throw Error("The workspace changed after the preview was rendered. Render a new revision.");
       const output=await executeReviewTool(call.name,reviewInput,{scope,author:this.role(owner)?.name??this.options.agentId,role:this.role(owner)?.role??'Agent',signal:owner.signal},this.options.reviewServices);
+      if(recordsPreview&&typeof output.artifact.previewId==="string"&&typeof output.artifact.revisionId==="string"){
+        if(auditRoot&&await snapshotNativeAdi(auditRoot)!==before)throw Error("Workspace source changed while rendering. Save a fresh revision.");
+        this.adiPreview={previewId:output.artifact.previewId,revisionId:output.artifact.revisionId,generation:mutationGeneration,scope,sourceFingerprint:before,workspaceRoot:auditRoot};
+      }
+      if(this.adi&&call.name==="BrowserAudit"&&input.run!==false&&typeof output.artifact.previewId==="string"&&typeof output.artifact.revisionId==="string"){
+        const report=validateArtifactAudit(output.artifact.audit);
+        const after=auditRoot?await snapshotNativeAdi(auditRoot):undefined;
+        if(before!==after||this.activeAdiWrites)throw Error("Workspace source changed during the audit. Retry against a stable revision.");
+        await this.adi.recordBrowserAudit(output.artifact.previewId,output.artifact.revisionId,report,mutationGeneration,after);
+      }
       if(child?.handoff?.stage==="qa"&&output.artifact.kind==="image"){
         if(call.name==="BrowserInspect")child.handoff.inspected=true;
         if(call.name==="BrowserAudit"&&input.run===false&&input.case_index!==undefined)child.handoff.sawAudit=true;
@@ -380,20 +604,24 @@ export class ProfessionalToolRuntime {
   private emitPlan(output:ToolOutput,owner:ToolOwner){
     const artifact=output.artifact;
     if(typeof artifact.markdown!=="string"||!artifact.markdown.trim())throw Error("The plan file is empty or unavailable");
-    this.options.emit({id:uid("plan"),role:"plan",agentId:this.options.agentId,kind:artifact.planKind==="Design Plan"?"Design Plan":"Plan",name:String(artifact.name??"Plan"),path:String(artifact.path??""),markdown:artifact.markdown,workspaceRoot:owner.workspaceRoot,sessionId:owner.sessionId});
+    this.options.emit({id:uid("plan"),role:"plan",agentId:this.options.agentId,kind:artifact.planKind==="Design Plan"?"Design Plan":"Plan",name:String(artifact.name??"Plan"),path:String(artifact.path??""),markdown:artifact.planKind==="Design Plan"?publicDesignPlan(artifact.markdown):artifact.markdown,workspaceRoot:owner.workspaceRoot,sessionId:owner.sessionId});
   }
   private async designJob(input:Record<string,unknown>,owner:ToolOwner):Promise<ToolOutput>{
     if(owner.depth)throw Error("Only the parent can orchestrate a design job.");
     if(!this.options.workspaceRoot)throw Error("Select a workspace for the design job.");
     const repository=this.options.tasks??taskRepository;
-    const workspace=workspaceRuleKey(this.options.workspaceRoot,"taro");
+    const workspace=this.options.taskWorkspace??workspaceRuleKey(this.options.workspaceRoot,"taro");
     const action=input.action;
     if(!["start","read","resume"].includes(String(action)))throw Error("Choose start, read or resume.");
     if(action==="start"&&input.job_id!==undefined)throw Error("Use resume to continue an existing job.");
     await repository.load(workspace);
     const snapshot=repository.snapshot(workspace);
     if(!snapshot.loaded)throw Error(snapshot.error??"Workspace tasks are unavailable.");
-    const existing=snapshot.tasks.find(task=>task.id===input.job_id);
+    const taskId=input.task_id??this.options.boardTaskId;
+    if(action==="start"&&typeof taskId!=="string")throw Error("Use TaskCreate to write the design task, then pass its ID as task_id.");
+    const existing=snapshot.tasks.find(task=>task.id===(action==="start"?taskId:input.job_id));
+    if(action==="start"&&taskId!==undefined&&(!existing||existing.designJob||existing.status==="Done"||existing.reviewItem||
+      existing.runId&&existing.status==="In Progress"&&existing.id!==this.options.boardTaskId))throw Error("Choose an unfinished task without a dedicated workflow.");
     if(action==="read"){
       const entries=input.job_id?snapshot.tasks.filter(task=>task.id===input.job_id):snapshot.tasks.slice(0,30);
       if(input.job_id&&!entries.length)throw Error("Task not found in this workspace.");
@@ -414,13 +642,14 @@ export class ProfessionalToolRuntime {
     }
     if(input.worktree!==undefined&&typeof input.worktree!=="boolean")throw Error("worktree must be a boolean.");
     if(action==="resume"&&(!existing?.designJob||existing.designJob.phase==="verified"))throw Error("Only unfinished workspace design jobs can resume.");
-    if(action==="start"&&(typeof input.title!=="string"||!input.title.trim()||input.title.length>180||typeof input.brief!=="string"||!input.brief.trim()||input.brief.length>6000))throw Error("Supply a title and a brief up to 6,000 characters.");
+    if(action==="start"&&(typeof input.brief!=="string"||!input.brief.trim()||input.brief.length>6000))throw Error("Supply a brief up to 6,000 characters.");
     const state=this.state(owner);
     if(state.planPath&&state.planPath!==existing?.designJob?.planPath)throw Error("Finish the active plan before running a design job.");
-    const task=existing??createTask(String(input.title));
+    const task=existing!;
     const scope=existing?.designJob?.scope??owner.reviewScope??{workspace:this.options.workspaceRoot,sessionId:this.options.sessionId};
     if(workspaceRuleKey(scope.workspace,"taro")!==workspace)throw Error("The linked review belongs to another workspace.");
     let job:DesignJob=existing?.designJob??{version:0,scope,brief:String(input.brief),phase:"design",isolate:input.worktree!==false};
+    await this.prepareRun({text:job.brief,referenceIds:[],explicitScope:"frontend"},true);
     if(activeDesignJobs.has(workspace))throw Error("This workspace already has an active design job.");
     activeDesignJobs.set(workspace,{id:task.id,stop:()=>this.stopAll()});
     const parent={...owner,reviewScope:scope};
@@ -435,14 +664,14 @@ export class ProfessionalToolRuntime {
     const persist=async(patch:Partial<DesignJob>,error?:string)=>{
       const next={...job,...patch,version:job.version+1};
       await repository.mutate(workspace,task.id,current=>{
-        if(current.designJob?.version!==job.version)throw Error("Design job changed. Read its latest version before resuming.");
+        if((current.designJob?.version??0)!==job.version)throw Error("Design job changed. Read its latest version before resuming.");
         if(next.phase!=="interrupted"&&owner.signal.aborted)throw stopped();
         if(next.phase==="verified"&&next.code){
           const revision=assertRevision(next.code);
           if(!revision.audits?.some(report=>report.id===next.auditId&&report.status==="measured-clear"))throw Error("The assigned audit evidence is no longer available.");
           assertLayout();
         }
-        const updated={...current,designJob:next,status:(error?"Failed":"In Progress") as typeof current.status,error,details:`Design job · ${next.phase}`};
+        const updated={...current,designJob:next,status:(error?"Failed":"In Progress") as typeof current.status,error};
         return next.phase==="verified"?completeTask(updated,"Designer intent, implementation and QA handoffs verified.",`Preview ${next.code?.previewId} · revision ${next.code?.revisionId}`):updated;
       });
       job=next;
@@ -463,6 +692,7 @@ export class ProfessionalToolRuntime {
     const runStage=async(stage:DesignStage,prompt:unknown,expectedPreview?:CodeHandoff,auditId?:string)=>{
       const types={designer:"Designer",code:"Code",qa:"Type & QA"};
       const toolNames=[...readOnlyTools].filter(name=>name!=="TaskOutput");
+      if(stage==="code")toolNames.push(...adiToolNames);
       if(stage==="code")toolNames.push("Write","Edit","Bash","PowerShell");
       const output=await this.runAgent({
         description:`${task.title} · ${types[stage]}`,
@@ -479,7 +709,6 @@ export class ProfessionalToolRuntime {
       }
     };
     try{
-      if(!existing)await repository.add(workspace,{...task,description:job.brief,tags:["Design"],designJob:job});
       if(isTauri()){
         if(this.remainingRequests<=0)throw Error("The parent has no model requests left for this job.");
         const runId=crypto.randomUUID();
@@ -494,17 +723,18 @@ export class ProfessionalToolRuntime {
         const intent=await runStage("designer",{brief:job.brief,layout,projectStyle:projectStyle??{revision:0,design:createArtifactDesign()},requirement:"Consume the supplied contract and inspect incumbent styles. Preserve the saved identity unless the brief requests a change. Use ArtifactDesign for CSS exports or starter templates. Return the complete DesignIntent, with an actionable plan and stable layout layer IDs."}) as DesignIntent;
         await persist({intent,phase:"approval"});
       }
-      let intent=job.intent!;
-      const title=`Design job ${task.id}`;
+      const intent=job.intent!;
+      const legacyTitle=`Design job ${task.id}`;
+      const title=task.title;
       const entered=await call("EnterPlanMode",{name:title,kind:"Design Plan"});
       const planPath=String(entered.artifact.path??"");
-      if(!planPath||entered.artifact.name!==title)throw Error("A different native plan is active. Finish it before resuming the design job.");
-      let markdown=[`# ${task.title}`,job.brief,"## Implementation",...intent.plan.map((line,i)=>`${i+1}. ${line}`),"## Accessibility",...intent.accessibility.map(line=>`- ${line}`),"## Motion",...intent.motion.map(line=>`- ${line}`),"## DesignIntent","~~~json",JSON.stringify(intent,null,2),"~~~"].join("\n\n");
+      if(!planPath||entered.artifact.name!==title&&entered.artifact.name!==legacyTitle)throw Error("A different native plan is active. Finish it before resuming the design job.");
+      let markdown=[`# ${task.title}`,job.brief,"## Implementation",...intent.plan.map((line,i)=>`${i+1}. ${line}`),"## Accessibility",...intent.accessibility.map(line=>`- ${line}`),"## Motion",...intent.motion.map(line=>`- ${line}`)].join("\n\n");
       const alreadyWritten=job.planWritten===true&&job.planPath===planPath;
       if(job.planWritten&&job.planPath&&!alreadyWritten){
         const prior=await call("Read",{file_path:job.planPath,raw:true});
         if(typeof prior.artifact.content!=="string"||!prior.artifact.content.trim())throw Error("The saved plan could not be recovered. Review the prior plan before resuming.");
-        markdown=prior.artifact.content;
+        markdown=publicDesignPlan(prior.artifact.content);
       }
       await persist({phase:"approval",planPath,planWritten:alreadyWritten});
       if(!alreadyWritten){
@@ -517,7 +747,8 @@ export class ProfessionalToolRuntime {
         if(!String(error).includes("preview of the current file"))throw error;
         approvedPlan=await call("ExitPlanMode",{});
       }
-      intent=approvedDesignIntent(approvedPlan.artifact.markdown);
+      const approvedMarkdown=publicDesignPlan(String(approvedPlan.artifact.markdown??""));
+      if(!approvedMarkdown.trim())throw Error("The approved design plan is missing its Markdown.");
       assertLayout();
       if(job.worktree&&state.worktreeRoot&&state.worktreeRoot!==job.worktree)throw Error("Exit the current worktree before resuming this job.");
       if((job.worktree||(input.worktree??job.isolate)===true)&&!state.worktreeRoot){
@@ -527,7 +758,7 @@ export class ProfessionalToolRuntime {
       await persist({phase:"code",intent,worktree:state.worktreeRoot??job.worktree});
       let feedback:unknown=job.verdict;
       for(let attempt=0;attempt<2;attempt++){
-        const code=await runStage("code",{intent,planPath,approvedPlan:approvedPlan.artifact.markdown,brief:job.brief,priorPreview:job.code,feedback,previousWorktree:job.worktree,requirement:"Implement the approved plan with Write or Edit. Open the actual result with BrowserPreview file_path for edited standalone HTML or url for a local development server. Submit its returned IDs, changed files using their original file_path values, and checklist."}) as CodeHandoff;
+        const code=await runStage("code",{intent,planPath,approvedPlan:approvedMarkdown,brief:job.brief,priorPreview:job.code,feedback,previousWorktree:job.worktree,requirement:"Implement the approved plan with Write or Edit. Open the actual result with BrowserPreview file_path for edited standalone HTML or url for a local development server. Submit its returned IDs, changed files using their original file_path values, and checklist."}) as CodeHandoff;
         await services.repository.load(scope);
         assertRevision(code);
         const previousPreviews=job.code?[...job.previousPreviews??[],job.code].slice(-12):job.previousPreviews;
@@ -536,7 +767,7 @@ export class ProfessionalToolRuntime {
           const input={...args,preview_id:code.previewId,expected_revision_id:code.revisionId};
           const tool={name,id:uid("design-review"),arguments:JSON.stringify(input)};
           const execute=async()=>{
-            const output=await executeReviewTool(name,input,{scope,author:"Taro",role:"QA",signal:owner.signal},services);
+            const output=await this.executeFor(tool,input,parent);
             assertRevision(code);
             return output;
           };
@@ -552,10 +783,14 @@ export class ProfessionalToolRuntime {
         const inspected=await review("BrowserInspect",{});
         const audit=await review("BrowserAudit",{});
         await persist({auditId:audit.id});
-        const verdict=await runStage("qa",{intent,code,viewports,audit:{id:audit.id,status:audit.status,cases:audit.cases.map((item:{mode:string;scheme:string;findings:unknown[];unmeasured:unknown[]})=>({mode:item.mode,scheme:item.scheme,findings:item.findings.slice(0,12),unmeasured:item.unmeasured.slice(0,8)}))},components:inspected.components?.slice(0,12),requirement:"Inspect the assigned preview and stored audit screenshots with BrowserAudit run=false. Pin actionable feedback with BrowserComment. Submit pass or fail with evidence."},code,audit.id) as DesignVerdict;
+        const verdict=await runStage("qa",{intent,code,viewports,audit:{id:audit.id,status:audit.status,cases:audit.cases.map((item:{mode:string;scheme:string;findings:unknown[];unmeasured:unknown[]})=>({mode:item.mode,scheme:item.scheme,findings:item.findings.slice(0,12),unmeasured:item.unmeasured.slice(0,8)}))},components:inspected.components?.slice(0,12),requirement:"Inspect the assigned preview and stored audit screenshots with BrowserAudit run=false. Pin actionable feedback with BrowserComment. Submit pass or fail with findings and rule-level checks with original observations. If all checks pass, Taro will present them for human confirmation."},code,audit.id) as DesignVerdict;
         const overflow=viewports.some(item=>item.document.width>item.viewport.width+1);
-        const passed=verdict.passed&&!overflow&&audit.status==="measured-clear";
-        const verified={passed,findings:[...verdict.findings,...(overflow?["Horizontal overflow in the viewport sweep."]:[]),...(audit.status!=="measured-clear"?[`Browser audit returned ${audit.status}.`]:[])]};
+        if(this.adi&&verdict.passed&&verdict.checks?.length&&audit.status==="measured-clear"){
+          await call("DesignChecks",{action:"request_review",checks:verdict.checks});
+        }
+        const adiCompletion=await this.finalizeRun(false);
+        const passed=verdict.passed&&!overflow&&audit.status==="measured-clear"&&adiCompletion.status==="ready";
+        const verified={passed,findings:[...verdict.findings,...adiCompletion.missing,...(overflow?["Horizontal overflow in the viewport sweep."]:[]),...(audit.status!=="measured-clear"?[`Browser audit returned ${audit.status}.`]:[])]};
         if(passed)await stopStageProcesses();
         if(passed&&designs&&!projectStyle){
           assertRevision(code);assertLayout();
@@ -598,6 +833,7 @@ export class ProfessionalToolRuntime {
   }
   private async runAgent(input:Record<string,unknown>,parent:ToolOwner,allowedTools?:string[],handoff?:ChildTask['handoff']):Promise<ToolOutput>{
     if(this.delegationDisabled)throw Error("The user asked to work without delegation.");
+    if(parent.depth&&(this.options.boardTasks||this.options.boardTaskId))throw Error("Return the delegation request to the Orchestrator.");
     if(parent.depth>=2)throw Error("Child-agent nesting limit reached");
     const prompt=String(input.prompt??"").trim(),description=String(input.description??"").trim();
     if(!prompt||!description)throw Error("Agent requires description and prompt");
@@ -606,16 +842,12 @@ export class ProfessionalToolRuntime {
     if(input.read_only!==undefined&&typeof input.read_only!=="boolean")throw Error("read_only must be a boolean");
     const type=String(input.subagent_type??"general-purpose");
     const requestedRole={"general-purpose":"code",Explore:"typeqa",Plan:"designer"}[type];
+    if(roleKey(type)==="orchestrator")throw Error("The Orchestrator owns the current run. Choose a specialist.");
     const role=this.specialist(type)??(requestedRole?this.options.agents?.find(agent=>roleKey(agent.role)===requestedRole):undefined);
     if(this.options.agents&&!role)throw Error("Requested agent role is not configured");
     if(!["Explore","Plan","general-purpose"].includes(type)&&!role)throw Error("Unknown or unconfigured subagent_type");
     if(role&&!role.enabled)throw Error("Requested agent is disabled");
     if(role&&input.model&&input.model!==role.model)throw Error("Configured role model cannot be overridden");
-    const parentRole=this.role(parent);
-    if(this.delegationApprovalRequired||parentRole?.autonomy==="ask"||role?.autonomy==="ask"){
-      const approved=await abortable(this.options.approve({id:uid("agent-approval"),name:"Agent",arguments:JSON.stringify(input)},input,{owner:parent,force:true}),parent.signal);
-      if(!approved)throw Error("User denied delegation");
-    }
     const inheritedReadOnly=parent.readOnly||input.read_only===true||!!handoff&&handoff.stage!=="code"||!!role&&(!role.canWriteCode||role.autonomy==="suggest");
     if(inheritedReadOnly&&input.isolation)throw Error("Read-only agents cannot create worktrees");
     const nativeInput={...input,subagent_type:inheritedReadOnly?"Explore":["Explore","Plan"].includes(type)?type:"general-purpose"};
@@ -636,23 +868,32 @@ export class ProfessionalToolRuntime {
     const inherited=this.state(parent).allowedTools;
     const permitted=allowedTools?.length?new Set(allowedTools.filter(tool=>!inherited||inherited.has(tool))):inherited;
     sessions.set(stateKey(owner),{catalog:new DeferredToolCatalog(owner.readOnly,permitted),allowedTools:permitted});
-    this.options.emit({id:uid("subagent"),role:"subagent",agentId:this.options.agentId,childId:id,subagentType:type,description,prompt,model:model.label,runInBackground:input.run_in_background===true,isolation:input.isolation==="worktree"?"worktree":undefined,status:"running",activities:[]});
+    const message:SubagentMessage={id:uid("subagent"),role:"subagent",agentId:this.options.agentId,childId:id,subagentType:type,description,prompt:handoff?"":prompt,startedAt:Date.now(),model:model.label,runInBackground:input.run_in_background===true,isolation:input.isolation==="worktree"?"worktree":undefined,status:"running",activities:[]};
+    this.options.emit(message);
     const background=input.run_in_background===true;
     const abort=()=>{void this.stopChild(task).catch(()=>{});};
     if(!background){this.foreground.add(task);parent.signal.addEventListener("abort",abort,{once:true});}
-    task.done=this.childLoop(task,model,input.isolation==="worktree").catch(error=>{
-      task.status=controller.signal.aborted?"stopped":"failed";task.error=String(error);
-      this.options.updateChild(id,{status:task.status,result:task.output||task.error});
-    }).finally(()=>{this.foreground.delete(task);parent.signal.removeEventListener("abort",abort);});
+    const {signal: _signal, adi: _adi, ...savedOwner}=owner;
+    const checkpoint:ChildCheckpoint={version:1,root:task.root,rootSessionId,parentSessionId:task.parentSessionId,owner:savedOwner,
+      model:{endpoint:model.endpoint,model:model.model||model.label,credentialId:model.id},messages:[],round:0,
+      allowedTools:permitted?[...permitted]:undefined,loadedTools:[]};
+    if(!handoff&&this.options.saveChild)task.saved={checkpoint,message};
+    task.done=this.finishChild(task,this.childLoop(task,input.isolation==="worktree",checkpoint)).finally(()=>{this.foreground.delete(task);parent.signal.removeEventListener("abort",abort);});
     if(background)return result(`Started child agent ${id}. Use TaskOutput or TaskStop with task_id=${id}.`,{kind:"agent",task_id:id,agentId:id,status:"async_launched"});
     await abortable(task.done,parent.signal);
     if(task.status==="failed")throw Error(task.error??"Child agent failed");
     if(task.status==="stopped")throw stopped();
     return result(task.output,{kind:"agent",task_id:id,agentId:id,status:task.status,result:task.output,submission:handoff?.submission});
   }
-  private async childLoop(task:ChildTask,model:CustomModel,isolation:boolean){
+  private async childLoop(task:ChildTask,isolation:boolean,checkpoint:ChildCheckpoint,recovered=false){
     const owner=task.owner;
-    if(isolation){
+    if(recovered&&checkpoint.worktreeRoot){
+      const input={resume_path:checkpoint.worktreeRoot};
+      const call={id:uid("reopen-worktree"),name:"EnterWorktree",arguments:JSON.stringify(input)};
+      const approved=await abortable(this.options.approve(call,input,{owner}),owner.signal);
+      if(!approved)throw Error("Reopening the child worktree was denied.");
+      await this.native(call,input,owner,true);
+    }else if(isolation){
       const call:ToolCall={id:uid("isolate"),name:"EnterWorktree",arguments:"{}"};
       const input={name:task.id};
       const approved=await abortable(this.options.approve(call,input,{owner}),owner.signal);
@@ -664,12 +905,15 @@ export class ProfessionalToolRuntime {
     const stageRules=stage==="designer"
       ?"Inspect incumbent files, then submit the validated DesignIntent with SubmitDesignHandoff."
       :stage==="code"
-        ?"ArtifactDesign read, export and template use the approved job contract. Apply it with Write or Edit, render the actual result and submit the implementation handoff."
+        ?"ArtifactDesign uses the approved job design. Before Write or Edit, submit the ADI contract for the actual files you will change. Then render the result and submit the implementation handoff."
         :stage==="qa"
           ?"Use BrowserInspect and BrowserAudit with run=false and case_index to inspect the assigned revision and audit. Submit the evidence-based verdict with SubmitDesignHandoff."
           :"Return concrete findings or actual changes, paths, and verification to the parent.";
-    const messages:unknown[]=[{role:"system",content:`You are a Taro child agent. ${webInstructions} ${artifactDesignInstructions} ${this.roleContext(owner)} ${stageRules}${this.registry(owner)} Complete only the assigned task. Workspace: ${this.state(owner).worktreeRoot??owner.workspaceRoot}. Use ToolSearch for additional tools and Skill with skill=list for workspace skills.${this.options.rules?`\n${this.options.rules}`:""}${this.mcpCatalog.length?`\nConfigured MCP tool index (use ToolSearch for arguments):\n${this.mcpIndex()}`:""}`},{role:"user",content:task.prompt}];
-    if(!stage&&workflowIntent(task.prompt).visual){
+    const hasContext=checkpoint.messages.length>0;
+    const messages=checkpoint.messages;
+    if(!hasContext)messages.push({role:"system",content:`You are a Taro child agent. ${webInstructions} ${artifactDesignInstructions} Keep the token code and internal design payloads in tools. Report findings and changes in ordinary language. ${this.roleContext(owner)} ${stageRules}${this.registry(owner)} Complete only the assigned task. Workspace: ${this.state(owner).worktreeRoot??owner.workspaceRoot}. Use ToolSearch for additional tools and Skill with skill=list for workspace skills.${this.options.rules?`\n${this.options.rules}`:""}${this.mcpCatalog.length?`\nConfigured MCP tool index (use ToolSearch for arguments):\n${this.mcpIndex()}`:""}`},{role:"user",content:task.prompt});
+    if(task.saved&&!hasContext)await this.checkpoint(task);
+    if(!hasContext&&!stage&&workflowIntent(task.prompt).visual){
       try{
         const contract=await executeArtifactTool({action:"read"},{workspace:this.options.workspaceRoot,readOnly:true,planning:false,signal:owner.signal},this.options.artifactServices);
         const id=uid("design-reference");
@@ -683,33 +927,43 @@ export class ProfessionalToolRuntime {
       }
     }
     let requestedHandoff=false;
-    for(let round=0;round<32;round++){
+    for(;checkpoint.round<32;checkpoint.round++){
       if(owner.signal.aborted)throw stopped();
-      const requestId=uid("child-request");
-      await this.reserveModelRequest(requestId,"child");
-      if(owner.signal.aborted)throw stopped();
-      task.requests.add(requestId);let received="",lastPublished=-Infinity;
-      const previousOutput=task.output;
-      const publish=()=>{task.output=previousOutput+(previousOutput&&received?"\n\n":"")+received;this.options.updateChild(task.id,{result:task.output});};
-      let calls:ToolCall[];
-      const tools=this.state(owner).catalog.definitions();
-      if(task.handoff)tools.push(designSubmissionDefinition(task.handoff.stage));
-      try{calls=await abortable(this.options.stream({requestId,endpoint:model.endpoint,model:model.model||model.label,credentialId:model.id,messages:boundedModelContext(messages),tools},delta=>{if(!task.handoff&&!owner.signal.aborted){received+=delta;task.output=previousOutput+(previousOutput&&received?"\n\n":"")+received;if(Date.now()-lastPublished>=120){lastPublished=Date.now();publish();}}}),owner.signal);}finally{task.requests.delete(requestId);if(received)publish();}
-      if(!calls.length&&!task.handoff){if(!received.trim())throw Error("The child agent returned an empty response without a result.");task.status="completed";this.options.updateChild(task.id,{status:"completed",result:task.output});return;}
-      if(!calls.length&&task.handoff){
-        if(requestedHandoff)throw Error("Design stage ended without its required structured handoff.");
-        requestedHandoff=true;
-        messages.push({role:"system",content:`The ${task.handoff.stage} stage is still open. Use the required evidence tools and SubmitDesignHandoff with the requested artifact schema.`});
-        continue;
+      if(!checkpoint.pending){
+        const tools=[...this.state(owner).catalog.definitions(),...(this.adi?adiToolDefinitions:[])].filter(tool=>
+          tool.function.name!=="Agent"||!(this.options.boardTasks||this.options.boardTaskId));
+        if(task.handoff)tools.push(designSubmissionDefinition(task.handoff.stage));
+        checkpoint.request??={...checkpoint.model,messages:boundedModelContext([...messages,{role:"system",content:this.adi?.contextFor()??""}]),tools,designScope:this.modelDesignScope(task.prompt,stage)};
+        if(task.saved)await this.checkpoint(task);
+        const {calls,received}=await this.streamChild(task,checkpoint.request);
+        checkpoint.request=undefined;
+        if(!calls.length&&!task.handoff){
+          if(!received.trim())throw Error("The child agent returned an empty response without a result.");
+          task.status="completed";
+          return;
+        }
+        if(!calls.length&&task.handoff){
+          if(requestedHandoff)throw Error("Design stage ended without its required structured handoff.");
+          requestedHandoff=true;
+          messages.push({role:"system",content:`The ${task.handoff.stage} stage is still open. Use the required evidence tools and SubmitDesignHandoff with the requested artifact schema.`});
+          continue;
+        }
+        messages.push({role:"assistant",content:received||null,tool_calls:calls.map(call=>({id:call.id,type:"function",function:{name:call.name,arguments:call.arguments}}))});
+        checkpoint.pending={calls,next:0,inFlight:false};
+        await this.checkpoint(task);
       }
-      messages.push({role:"assistant",content:received||null,tool_calls:calls.map(call=>({id:call.id,type:"function",function:{name:call.name,arguments:call.arguments}}))});
-      for(const call of calls){
+      const pending=checkpoint.pending;
+      while(pending.next<pending.calls.length){
         if(owner.signal.aborted)throw stopped();
+        const call=pending.calls[pending.next];
         let input:Record<string,unknown>={};let output:ToolOutput|undefined,error:unknown;const started=Date.now();
+        if(pending.inFlight)error=Error("Disconnected before this tool returned. The outcome is unknown. Inspect current state before retrying.");
         try{const parsed=JSON.parse(call.arguments||"{}");if(!parsed||Array.isArray(parsed)||typeof parsed!=="object")throw Error("Tool arguments must be an object");input=parsed;}catch(caught){error=caught;}
         const web=webActivity(call.name,input);
-        task.activities.push({id:call.id,kind:toolKind(call.name),...web,label:web?webLabel(web.web,'running'):toolLabel(call.name,input),status:"running"});
+        if(!pending.inFlight)task.activities.push({id:call.id,kind:toolKind(call.name),...web,label:web?webLabel(web.web,'running'):toolLabel(call.name,input),status:"running"});
         this.options.updateChild(task.id,{activities:[...task.activities]});
+        pending.inFlight=true;
+        await this.checkpoint(task);
         if(!error)try{output=await this.executeFor(call,input,owner);}catch(caught){error=caught;}
         if(owner.signal.aborted)throw stopped();
         const activity=activityFromTool(call,input,output,error,Date.now()-started);
@@ -718,15 +972,52 @@ export class ProfessionalToolRuntime {
         this.options.updateChild(task.id,{activities:[...task.activities]});
         messages.push({role:"tool",tool_call_id:call.id,content:error?String(error):toolResultText(call.name,output?.text??"Completed")});
         if(!error&&output?.artifact.kind==="image"&&output.artifact.dataUrl)messages.push({role:"user",content:[{type:"text",text:`Image read from ${String(output.artifact.path)}`},{type:"image_url",image_url:{url:output.artifact.dataUrl}}]});
+        pending.inFlight=false;
+        pending.next++;
+        await this.checkpoint(task);
         if(!error&&call.name==="SubmitDesignHandoff"&&task.handoff?.submission){
           task.output=JSON.stringify(task.handoff.submission);
           task.status="completed";
-          this.options.updateChild(task.id,{status:"completed",result:task.output});
+          this.options.updateChild(task.id,{status:"completed",result:"Handoff completed."});
           return;
         }
       }
+      checkpoint.pending=undefined;
     }
     throw Error("Child agent reached the 32-round tool limit");
+  }
+  private async streamChild(task:ChildTask,request:FrozenModelRequest){
+    const {signal}=task.owner;
+    const previous=task.output;
+    for(let delay=1000;;delay=Math.min(delay*2,30000)){
+      if(signal.aborted)throw stopped();
+      const requestId=uid("child-request");
+      await this.reserveModelRequest(requestId,"child");
+      if(signal.aborted)throw stopped();
+      task.requests.add(requestId);
+      let received="",lastPublished=-Infinity;
+      const publish=()=>{
+        task.output=previous+(previous&&received?"\n\n":"")+received;
+        this.options.updateChild(task.id,{result:task.output});
+      };
+      try{
+        const calls=await abortable(this.options.stream({requestId,...request},delta=>{
+          if(task.handoff||signal.aborted)return;
+          received+=delta;
+          if(Date.now()-lastPublished>=120){lastPublished=Date.now();publish();}
+        }),signal);
+        this.options.updateChild(task.id,{waitingForConnection:false});
+        publish();
+        return {calls,received};
+      }catch(error){
+        if(signal.aborted||!isModelDisconnect(error))throw error;
+        task.output=previous;
+        this.markReconnected();
+        this.options.updateChild(task.id,{result:previous,waitingForConnection:true});
+      }finally{task.requests.delete(requestId);}
+      await waitForModelReconnect(signal,delay);
+      this.options.updateChild(task.id,{waitingForConnection:false});
+    }
   }
   private async agentTask(name:string,input:Record<string,unknown>,owner:ToolOwner):Promise<ToolOutput>{
     const id=String(input.task_id??input.shell_id??""),task=childTasks.get(id);
@@ -734,7 +1025,7 @@ export class ProfessionalToolRuntime {
     if(!task||task.root!==workspace||!((task.parentSessionId===owner.sessionId)||(owner.depth===0&&task.rootSessionId===owner.sessionId)))throw Error(`No task found with ID: ${id}`);
     if(name==="TaskStop"){
       if(task.status!=="running")throw Error(`Task ${id} is not running (status: ${task.status})`);
-      await this.stopChild(task);return result(`Stopped child agent ${id}`,{kind:"task-stop",task_id:id,task_type:"local_agent",status:"stopped",output:task.output});
+      await this.stopChild(task);return result(`Stopped child agent ${id}`,{kind:"task-stop",task_id:id,task_type:"local_agent",status:"stopped",output:task.handoff?undefined:task.output});
     }
     if(name==="TaskTakeover"){
       await this.stopChild(task);
@@ -749,14 +1040,15 @@ export class ProfessionalToolRuntime {
       for(const [id,scope] of nativeTasks){
         if(scope.owner.childId===task.id||scope.owner.ancestors?.some(ancestor=>ancestor.sessionId===task.owner.sessionId))this.launchedShells.delete(id);
       }
-      const handoff={taskId:id,description:task.description,worktree,workspace:task.owner.workspaceRoot,output:task.output,submission:task.handoff?.submission,status:task.status};
+      const handoff={taskId:id,description:task.description,worktree,workspace:task.owner.workspaceRoot,output:task.handoff?undefined:task.output,status:task.status};
       return result(JSON.stringify(handoff),{kind:"agent-takeover",...handoff});
     }
     const timeout=input.timeout===undefined?30000:Number(input.timeout);
     if(!Number.isInteger(timeout)||timeout<0||timeout>600000)throw Error("timeout must be between 0 and 600000 ms");
     if(input.block!==false&&task.status==="running"&&timeout>0){let timer:ReturnType<typeof setTimeout>|undefined;try{await abortable(Promise.race([task.done,new Promise<void>(resolve=>{timer=setTimeout(resolve,timeout);})]),owner.signal);}finally{if(timer)clearTimeout(timer);}}
     const retrieval=task.status==="running"?(input.block===false?"not_ready":"timeout"):"success";
-    const value={task_id:id,task_type:"local_agent",status:task.status,description:task.description,prompt:task.prompt,output:task.output,result:task.output,error:task.error};
+    const publicResult=task.handoff?undefined:task.output;
+    const value={task_id:id,task_type:"local_agent",status:task.status,description:task.description,prompt:task.handoff?undefined:task.prompt,output:publicResult,result:publicResult,error:task.error};
     return result(JSON.stringify({retrieval_status:retrieval,task:value}),{kind:"task-output",retrieval_status:retrieval,task:value});
   }
 }

@@ -12,7 +12,7 @@ import {
  * Inline chips: files & MCP servers for "@", skills for "/"
  * ------------------------------------------------------------------ */
 
-export type ChipKind = "file" | "mcp" | "skill" | "artifact" | "comment";
+export type ChipKind = "file" | "mcp" | "skill" | "artifact" | "comment" | "review";
 
 export interface CommentReference {
   /** "single" chips read "Comment · L11-17"; groups read "Comments · Design Plan". */
@@ -47,6 +47,7 @@ export interface ChipRef {
   description?: string;
   artifact?: ArtifactReference;
   comment?: CommentReference;
+  review?: import("@/lib/review-feedback").ReviewReference;
 }
 
 export interface ChipInsertion {
@@ -61,6 +62,7 @@ export const chipIcon: Record<ChipKind, LucideIcon> = {
   skill: Layers,
   artifact: Layers,
   comment: MessageSquare,
+  review: MessageSquare,
 };
 
 export const mcpIcon: Record<string, LucideIcon> = {

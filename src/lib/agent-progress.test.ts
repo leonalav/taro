@@ -1,9 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { advanceThought, recoverThoughts, settleThought, startThought } from "./agent-progress";
+import { activeElapsed, advanceThought, pauseRunClocks, recoverThoughts, settleThought, startThought } from "./agent-progress";
 import { beginToolRound } from "./tool-transcript";
 import type { ChatMessage } from "@/data/mock";
 
 describe("observable generation progress",()=>{
+  it("excludes approval time when resuming or settling a live clock", () => {
+    const initial = startThought("turn", "planner", 100);
+    const [paused] = pauseRunClocks([initial], true, 600);
+    if (paused.role !== "thought") throw Error("Expected a thought");
+    expect(activeElapsed(paused.startedAt, 6600, paused)).toBe(500);
+    const [resumed] = pauseRunClocks([paused], false, 6600);
+    if (resumed.role !== "thought") throw Error("Expected a thought");
+    expect(settleThought(resumed, "completed", 7100).durationMs).toBe(1000);
+  });
   it('settles persisted running web rows after restart',()=>{
     const result=recoverThoughts([{id:'g',role:'activity-group',summary:'Using tools',activities:[{id:'s',kind:'web-search',label:'Searching the web…',status:'running',web:{kind:'web-search',query:'css',provider:'DuckDuckGo',sources:[]}}]}]);
     expect((result[0] as Extract<ChatMessage,{role:'activity-group'}>).activities[0].status).toBe('interrupted');

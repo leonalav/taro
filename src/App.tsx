@@ -8,6 +8,7 @@ import { CommandPalette } from "@/components/command-palette";
 import { GitPanel } from "@/components/git-panel";
 import { saveLayoutRevision, undoLayoutRevision } from "@/lib/layout-revisions";
 import { reviewRepository } from "@/lib/review-persistence";
+import { loadReviewFeedback, queueReviewFix, type ReviewReference } from "@/lib/review-feedback";
 import { activeRevision, type ReviewRevision } from "@/lib/review-store";
 import { createTask } from "@/lib/task-store";
 import { taskRepository } from "@/lib/task-persistence";
@@ -41,8 +42,9 @@ import {githubImportTarget,recentReceptionProjects} from "@/lib/reception-projec
 import { DocsPanel, type DocSelection } from "@/components/markdown-doc";
 import { SEED_DESIGN_DOC } from "@/data/design-doc";
 import { artifactDocument } from "@/lib/artifact-documents";
-import { advanceThought, recoverThoughts, settleThought, startThought } from "@/lib/agent-progress";
-import { loadChat, persistChat, persistWorkspaceSettings, persistPermissionRules, persistWorkspaceRules } from "@/lib/chat-db";
+import { advanceThought, pauseRunClocks, recoverThoughts, settleThought, startThought } from "@/lib/agent-progress";
+import { loadChat, loadChildCheckpoints, saveChildCheckpoint, persistChat, persistWorkspaceSettings, persistPermissionRules, persistWorkspaceRules } from "@/lib/chat-db";
+import { isModelDisconnect, waitForModelReconnect, type SavedChild } from "@/lib/subagent-continuity";
 import {restoreSettings,settingsForStorage,migrateLegacyModelKeys} from '@/lib/settings-store';
 import {recordActivity,recordDesignActivity,getActivityStorageStatus,subscribeActivityStorageStatus,retryActivityPersistence} from '@/lib/activity-store';
 import {compileWorkspaceRules} from "@/lib/workspace-rules";
@@ -57,6 +59,7 @@ import {historyBeforeMessage,retryFromMessage,revertToEdit} from "@/lib/chat-his
 import {canApplyAiTitle,generateChatTitle} from "@/lib/chat-title";
 import { executeAgentTool, activityFromTool, toolKind, toolLabel, listMcpTools } from "@/lib/agent-tools";
 import {webActivity,webLabel,reconcileWebReads,toolResultText} from '@/lib/web-research';
+import { orchestratorRole } from "@/lib/agent-workflow";
 import { ProfessionalToolRuntime } from "@/lib/professional-runtime";
 import {runToolCallsInBatches} from "@/lib/tool-orchestration";
 import {boundedModelContext} from "@/lib/model-context";
@@ -83,7 +86,7 @@ const toTitle = (text: string, max: number) => {
 };
 
 function modelContent(segments: Segment[]): ModelContent {
-  const chipText=(chip:NonNullable<Segment['chip']>)=>chip.kind==='skill'?`Use the workspace skill ${JSON.stringify(chip.label)} by invoking the Skill tool. `:chip.label;
+  const chipText=(chip:NonNullable<Segment['chip']>)=>chip.kind==='skill'?`Use the workspace skill ${JSON.stringify(chip.label)} by invoking the Skill tool. `:chip.review?`Review reference: ${JSON.stringify(chip.review)} `:chip.label;
   if(!segments.some(s=>s.type==="attachment")) return segments.map(s=>s.type==="chip"&&s.chip?chipText(s.chip):s.text??"").join("");
   const parts: Exclude<ModelContent,string> = [];
   for(const segment of segments) {
@@ -137,6 +140,11 @@ export default function App() {
       setNativeStorageReady(true);
     }).catch(error=>{setNativeStorageReady(false);setStorageLoadError(`Saved data could not be loaded: ${String(error)}. Existing data will not be overwritten.`);}).finally(()=>setChatLoaded(true));
   }, [loadAttempt]);
+  React.useEffect(() => {
+    if (!chatLoaded) return;
+    document.getElementById("taro-startup")?.remove();
+    document.getElementById("root")?.removeAttribute("inert");
+  }, [chatLoaded]);
   React.useEffect(() => { if(!isTauri()) try { localStorage.setItem("taro-chat-v1", JSON.stringify({ folders, threads, activeThreadId })); } catch(consoleError) { console.error(consoleError); } }, [folders, threads, activeThreadId]);
   React.useEffect(() => { if(!chatLoaded || !nativeStorageReady || !isTauri()) return; const timer=window.setTimeout(()=>{void persistChat(folders, threads, activeThreadId).catch(console.error);},200); return ()=>window.clearTimeout(timer); }, [chatLoaded,nativeStorageReady, folders, threads, activeThreadId]);
   const [sidebarCollapsed, setSidebarCollapsed] = React.useState<boolean>(
@@ -163,11 +171,12 @@ export default function App() {
   const [focusComment, setFocusComment] = React.useState<DocComment | null>(null);
   const [editingSkeletal, setEditingSkeletal] = React.useState<Extract<ChatMessage, { role: "skeletal" }> | null>(null);
   const [linkedReviewScope, setLinkedReviewScope] = React.useState<ReviewScope>();
+  const [linkedReviewTask,setLinkedReviewTask]=React.useState<string>();
   const library = useLibrary();
-  const [activeAgentId, setActiveAgentId] = React.useState('planner');
   const [thinking, setThinking] = React.useState(false);
   const [runningThreadId,setRunningThreadId] = React.useState<string|null>(null);
   const activeGeneration = React.useRef<{requestId:string;toolRequestIds:Set<string>;stopRequested:boolean;stopLocal?:()=>void;cancelPending?:()=>void}|null>(null);
+  const attemptedChildRecovery = React.useRef(new Set<string>());
   const titleRequestVersion = React.useRef(new Map<string,number>());
   const persistentPermissions = React.useRef<PermissionRule[]>([]);
   const sessionPermissions = React.useRef<PermissionRule[]>([]);
@@ -265,7 +274,7 @@ export default function App() {
     window.addEventListener('taro:source-control-success',onGitSuccess);return()=>window.removeEventListener('taro:source-control-success',onGitSuccess);
   },[]);
   const folderThreads = threads.filter((t) => t.folderId === activeFolder.id && !t.archived);
-  const configuredAgent=settings.agents.find(a=>a.id===activeAgentId)??settings.agents.find(a=>a.enabled)??settings.agents[0];
+  const configuredAgent=orchestratorRole(settings.agents);
   const activeAgent={id:configuredAgent?.id??'planner',name:configuredAgent?.name??'Orchestrator',status:thinking?'running' as const:'idle' as const};
 
   // ⌘B toggles the sidebar, ⌘, opens Settings — like a native desktop app.
@@ -328,7 +337,7 @@ export default function App() {
     const parent=await openDirectory({directory:true,multiple:false,title:"Choose where to clone the repository"});if(typeof parent!=="string")return false;
     const requestId=uid("import");importRequest.current=requestId;
     const quote=(text:string)=>`'${text.replace(/'/g,"''")}'`;
-    try{const output=await executeAgentTool({id:requestId,name:"PowerShell",arguments:"{}"},{command:`git clone -- ${quote(target.url)} ${quote(target.name)}`,timeout:600000},parent,true,undefined,requestId,{sessionId:requestId});
+    try{const output=await executeAgentTool({id:requestId,name:"PowerShell",arguments:"{}"},{command:`git clone -- ${quote(target.url)} ${quote(target.name)}`,timeout:600000},parent,true,undefined,requestId,{sessionId:requestId,interactive:true});
       if(importRequest.current!==requestId)return false;
       if(output.artifact.exitCode!==0||output.artifact.status!=="completed")throw Error(output.text||"The repository could not be cloned.");
       const path=`${parent.replace(/[\\/]+$/,"")}${parent.includes("\\")?"\\":"/"}${target.name}`;addFilesystemFolder(path);setPanel("explorer");enterEditor();return true;
@@ -450,7 +459,7 @@ export default function App() {
     setPermissionRevision(value => value + 1);
   };
 
-  const handleSend = (segments: Segment[], history?: ChatMessage[]) => {
+  const handleSend = (segments: Segment[], history?: ChatMessage[], recovery?: SavedChild[]) => {
     const compiledRules=compileWorkspaceRules(workspaceRules);
     if(!compiledRules.valid){openSettings("rules");return;}
     const threadId = activeThread.id;
@@ -458,15 +467,16 @@ export default function App() {
     const contextMessages=history??activeThread.messages;
 
     const startTurn=(...messages:ChatMessage[])=>{
+      if(recovery){pushMessages(threadId,...messages.filter(message=>message.role!=="user"));return;}
       if(!history){pushMessages(threadId,...messages);return;}
       setThreads(prev=>prev.map(thread=>thread.id===threadId?{...thread,updated:"now",messages:[...history,...messages]}:thread));
     };
     const text = plainText(segments);
-    const selectedRole=settings.agents.find(config=>config.id===agent.id);
-    if(selectedRole&&!selectedRole.enabled){startTurn({id:uid('u'),role:'user',segments},{id:uid('a'),role:'agent',agentId:agent.id,text:'This agent is disabled. Enable it in Settings → Agents before sending a request.'});return;}
+    const selectedRole=configuredAgent;
+    if(selectedRole&&!selectedRole.enabled){startTurn({id:uid('u'),role:'user',segments},{id:uid('a'),role:'agent',agentId:agent.id,text:'The Orchestrator is disabled. Enable it in Settings → Agents before sending a request.'});return;}
     const chosen = selectedRole?settings.models.customModels.find(m=>m.id===selectedRole.model||m.label===selectedRole.model):settings.models.customModels.find(m => m.id === settings.models.defaultModel);
-    if(isTauri()&&!chosen){startTurn({id:uid('u'),role:'user',segments},{id:uid('a'),role:'agent',agentId:agent.id,text:'The selected agent needs a configured model. Add an endpoint in Settings → Models, then choose it for this role in Settings → Agents.'});openSettings('agents');return;}
-    const firstTurn=contextMessages.length===0 && threadId!=="brand";
+    if(isTauri()&&!chosen){startTurn({id:uid('u'),role:'user',segments},{id:uid('a'),role:'agent',agentId:agent.id,text:'The Orchestrator needs a configured model. Add an endpoint in Settings → Models, then assign it in Settings → Agents.'});openSettings('agents');return;}
+    const firstTurn=!recovery&&contextMessages.length===0 && threadId!=="brand";
     const titleInput=text || segments.find(segment=>segment.attachment)?.attachment?.name || "";
     const fallbackTitle=toTitle(titleInput,40);
     if(firstTurn && titleInput && activeThread.titleSource!=="manual") {
@@ -486,6 +496,7 @@ export default function App() {
       let responseId=uid("a");
       const run:{requestId:string;toolRequestIds:Set<string>;stopRequested:boolean;stopLocal?:()=>void;cancelPending?:()=>void}={requestId:uid("request"),toolRequestIds:new Set(),stopRequested:false};
       activeGeneration.current=run;
+      const reconnect=new AbortController();
       const context=contextMessages.flatMap(m=>m.role==="user"?[{role:"user",content:modelContent(m.segments)}]:m.role==="agent"&&m.text?[{role:"assistant",content:m.text}]:[]);
       const thoughtId=uid("thought");
       startTurn({id:uid("u"),role:"user",segments},startThought(thoughtId,agent.id),{id:responseId,role:"agent",agentId:agent.id,text:""});
@@ -498,23 +509,25 @@ export default function App() {
       let reveal=createWordReveal(value=>show(responseId,value));
       run.stopLocal=()=>reveal.stop();
       const mentionedFiles=segments.filter(segment=>segment.type==="chip"&&segment.chip?.kind==="file").map(segment=>segment.chip!.label);
-      const messages:unknown[]=[{role:"system",content:`You are Taro. Carry the user's request through using the selected role, the workspace contract, and the available tools. Use ListFiles, Glob, Grep and Read for workspace inspection. Resolve these mentioned paths relative to the workspace: ${JSON.stringify(mentionedFiles)}. If workspace access is required, ask the user to open a folder in Explorer. Report tool outcomes from evidence.`},...context,{role:"user",content:modelContent(segments)}];
+      const messages:unknown[]=[{role:"system",content:`You are Taro's Orchestrator. Carry the user's request through using the workspace contract, and the available tools. Use ListFiles, Glob, Grep and Read for workspace inspection. Resolve these mentioned paths relative to the workspace: ${JSON.stringify(mentionedFiles)}. If workspace access is required, ask the user to open a folder in Explorer. Report tool outcomes from evidence.`},...context,{role:"user",content:modelContent(segments)}];
       const updateActivity=(groupId:string,activity:ToolActivity)=>setThreads(prev=>prev.map(t=>t.id===threadId?{...t,messages:reconcileWebReads(t.messages.map(m=>m.id===groupId&&m.role==="activity-group"?{...m,summary:`${m.activities.some(a=>a.id===activity.id)?m.activities.length:m.activities.length+1} tool call(s)`,activities:m.activities.some(a=>a.id===activity.id)?m.activities.map(a=>a.id===activity.id?activity:a):[...m.activities,activity]}:m))}:t));
       const configured=settings.plugins.filter(p=>p.enabled&&p.transport&&(p.command||p.url));
-      const runtime=new ProfessionalToolRuntime({sessionId:threadId,workspaceRoot:workspaceRoot||"",agentId:agent.id,model:chosen,models:settings.models.customModels,plugins:configured,rules:compiledRules.text,agents:settings.agents,skills:workspaceSkills,
-        native:async(call,input,owner,approved,requestId)=>{const result=await executeAgentTool(call,input,owner.workspaceRoot,approved,call.name==="MCP"?configured.find(plugin=>plugin.id===input.server):undefined,requestId,{sessionId:owner.sessionId,readOnly:owner.readOnly,planningAncestors:owner.ancestors});recordAiCodeChange({eventId:`${threadId}:${requestId}`,workspaceId:rulesKey,toolName:call.name,result});if(['Write','Edit','NotebookEdit'].includes(call.name)&&result.artifact.before!==result.artifact.after&&result.artifact.status!=='failed')recordActivity({id:requestId,workspace:rulesKey,kind:'code',timestamp:Date.now()});return result;},
+      const runtime=new ProfessionalToolRuntime({adi:true,boardTasks:true,sessionId:threadId,workspaceRoot:workspaceRoot||"",agentId:agent.id,model:chosen,models:settings.models.customModels,plugins:configured,rules:compiledRules.text,agents:settings.agents,skills:workspaceSkills,
+        native:async(call,input,owner,approved,requestId)=>{const result=await executeAgentTool(call,input,owner.workspaceRoot,approved,call.name==="MCP"?configured.find(plugin=>plugin.id===input.server):undefined,requestId,{sessionId:owner.sessionId,readOnly:owner.readOnly,planningAncestors:owner.ancestors,adi:owner.adi});recordAiCodeChange({eventId:`${threadId}:${requestId}`,workspaceId:rulesKey,toolName:call.name,result});if(['Write','Edit','NotebookEdit'].includes(call.name)&&result.artifact.before!==result.artifact.after&&result.artifact.status!=='failed')recordActivity({id:requestId,workspace:rulesKey,kind:'code',timestamp:Date.now()});return result;},
         stream:streamModel,stopRequest:stopModel,
+        saveChild:saveChildCheckpoint,
         emit:message=>{pushMessages(threadId,message);if(message.role==='plan'&&message.kind==='Design Plan')recordDesignActivity({workspace:rulesKey,path:message.path,markdown:message.markdown});},
         updateChild:(childId,patch)=>setThreads(previous=>previous.map(thread=>thread.id===threadId?{...thread,messages:thread.messages.map(message=>message.role==="subagent"&&message.childId===childId?{...message,...patch}:message)}:thread)),
-        approve:async(call,input,{owner,force,plan})=>{
+        approve:async(call,input,{owner,force,plan,confirmation})=>{
           const server=call.name==="MCP"?String(input.server??""):"workspace";
           const permissionTool=call.name==="MCP"?String(input.tool??""):call.name;
           if(!force){const rule=resolvePermissionRule([...persistentPermissions.current,...sessionPermissions.current],server,permissionTool);if(rule!==undefined)return rule;}
           if(owner.signal.aborted)return false;
           progress("Waiting for approval…",`Waiting for permission: ${toolLabel(call.name,input)}`);
           const permissionId=uid("permission");
+          const pausedAt=Date.now();
           const approved=await new Promise<boolean>(resolve=>{
-            const finish=(allowed:boolean)=>{owner.signal.removeEventListener("abort",cancel);pendingApprovals.current.delete(permissionId);resolve(allowed);};
+            const finish=(allowed:boolean)=>{owner.signal.removeEventListener("abort",cancel);pendingApprovals.current.delete(permissionId);if(![...pendingApprovals.current.values()].some(item=>item.threadId===threadId)){const now=Date.now();setThreads(previous=>previous.map(thread=>thread.id===threadId?{...thread,messages:pauseRunClocks(thread.messages,false,now)}:thread));}resolve(allowed);};
             const cancel=()=>{setThreads(previous=>previous.map(thread=>thread.id===threadId?{...thread,messages:thread.messages.map(message=>message.id===permissionId&&message.role==="permission"?{...message,decision:{label:"Stopped",allowed:false,target:"tool",duration:"once"}}:message)}:thread));finish(false);};
             owner.signal.addEventListener("abort",cancel,{once:true});
             pendingApprovals.current.set(permissionId,{threadId,server,tool:permissionTool,force,resolve:finish});
@@ -522,9 +535,9 @@ export default function App() {
               if(thread.id!==threadId)return thread;
               const list=[...thread.messages];
               // Plans are already emitted immediately above their approval request.
-              const at=plan?-1:list.findIndex(message=>message.id===owner.groupId);
-              list.splice(at<0?list.length:at,0,{id:permissionId,role:"permission",agentId:agent.id,mcp:server==="workspace"?"workspace tool":configured.find(plugin=>plugin.id===server)?.name??server,tool:plan?`Approve ${plan.name} (${plan.path})`:server==="workspace"?toolLabel(call.name,input):permissionTool,live:true,onceOnly:force});
-              return {...thread,messages:list};
+              const at=plan||confirmation?-1:list.findIndex(message=>message.id===owner.groupId);
+              list.splice(at<0?list.length:at,0,{id:permissionId,role:"permission",agentId:agent.id,mcp:server==="workspace"?"workspace tool":configured.find(plugin=>plugin.id===server)?.name??server,planName:plan?.name,confirmation,tool:plan?plan.name:server==="workspace"?toolLabel(call.name,input):permissionTool,live:true,onceOnly:force});
+              return {...thread,messages:pauseRunClocks(list,true,pausedAt)};
             }));
           });
           progress("Using tools…",`${approved?"Permission granted":"Permission denied"}: ${toolLabel(call.name,input)}`);
@@ -532,7 +545,7 @@ export default function App() {
           return approved;
         },
       });
-      run.stopLocal=()=>{reveal.stop();runtime.stop();};
+      run.stopLocal=()=>{reconnect.abort();reveal.stop();runtime.stop();};
       void (async()=>{
         let messageLogged=false;
         if(workspaceRoot && configured.length){
@@ -546,21 +559,55 @@ export default function App() {
           const failures=listed.flatMap((r,i)=>r.status==="rejected"?[{plugin:configured[i],error:String(r.reason)}]:[]);
           if(failures.length){const failureGroupId=uid("activity");const firstResponseId=responseId;const group:ChatMessage={id:failureGroupId,role:"activity-group",summary:"MCP connection failed",activities:[],startedAt:Date.now()};setThreads(prev=>prev.map(t=>{if(t.id!==threadId)return t;const at=t.messages.findIndex(m=>m.id===firstResponseId);const list=[...t.messages];list.splice(at<0?list.length:at,0,group);return {...t,messages:list};}));for(const failure of failures)updateActivity(failureGroupId,{id:uid("mcp"),kind:"mcp",label:`Connect ${failure.plugin.name}`,status:"failed",errorTrace:failure.error});}
         }
-        let rounds=0;
-        const kickoff=runtime.kickoff(text,{hasReferences:segments.some(segment=>segment.type==="attachment"||segment.type==="chip")});
+        const references=segments.flatMap(segment=>segment.chip?.review?[segment.chip.review]:[]);
+        const feedback=await Promise.all(references.map(reference=>{
+          if(reviewScopeKey({workspace:workspaceRoot??"",sessionId:reference.scope.sessionId})!==reviewScopeKey(reference.scope) ||
+             reference.scope.sessionId!==threadId && (!linkedReviewScope||reviewScopeKey(linkedReviewScope)!==reviewScopeKey(reference.scope))){
+            throw Error("This Review reference belongs to another workspace or chat.");
+          }
+          return loadReviewFeedback(reference,reviewRepository);
+        }));
+        if(feedback.length)messages.push({role:"user",content:JSON.stringify({reviewFeedback:feedback,
+          instructions:workspaceRoot?"Address only the assigned Review threads. Use the current revision and preserve the original anchors.":"Discuss the assigned feedback. Open a workspace before attempting code changes."})});
+        let rounds=0, completionRepairs=0;
+        await runtime.prepareRun({text,reviewItem:workspaceRoot&&feedback.length?feedback:undefined,referenceIds:segments.flatMap(segment=>segment.type==="chip"&&segment.chip?[segment.chip.id]:segment.type==="attachment"?["attachment"]:[])});
+        if(recovery&&runtime.resumeChildren(recovery)<recovery.length)throw Error("Restore the saved child models and agent permissions before resuming this chat.");
         while(!run.stopRequested){
           if(++rounds>64)throw Error('The agent reached its 64-round tool limit. Review the retained outputs before continuing.');
           progress("Thinking…","Waiting for the model");
           run.requestId=uid("request");
           received="";
           let calls:Awaited<ReturnType<typeof streamModel>>;
-          if(rounds===1&&kickoff)calls=[kickoff];
-          else{
-            await runtime.reserveModelRequest(run.requestId);
-            calls=await streamModel({requestId:run.requestId,endpoint:chosen.endpoint,model:chosen.model||chosen.label,credentialId:chosen.id,messages:boundedModelContext([...messages,{role:"system",content:runtime.instructions()}]),tools:runtime.definitions()},delta=>{if(run.stopRequested)return;if(!received)progress("Writing response…","Receiving model response");received+=delta;if(settings.models.streamResponses)reveal.push(delta);});
+          {
+            for(let delay=1000;;delay=Math.min(delay*2,30000)){
+              await runtime.reserveModelRequest(run.requestId);
+              try{
+                calls=await streamModel({requestId:run.requestId,endpoint:chosen.endpoint,model:chosen.model||chosen.label,credentialId:chosen.id,messages:boundedModelContext([...messages,{role:"system",content:runtime.instructions()}]),tools:runtime.definitions(),designScope:runtime.modelDesignScope(text)},delta=>{if(run.stopRequested)return;if(!received)progress("Writing response…","Receiving model response");received+=delta;if(settings.models.streamResponses)reveal.push(delta);});
+                break;
+              }catch(error){
+                if(run.stopRequested||!isModelDisconnect(error)||!runtime.hasRunningChildren())throw error;
+                progress("Waiting for connection.","Resuming unfinished subagents on reconnect");
+                reveal.stop();
+                received="";
+                show(responseId,"");
+                reveal=createWordReveal(value=>show(responseId,value));
+                await waitForModelReconnect(reconnect.signal,delay);
+                runtime.markReconnected();
+                run.requestId=uid("request");
+              }
+            }
           }
           if(!messageLogged&&(received.trim()||calls.length)){recordAiMessage({eventId:`${threadId}:${thoughtId}`,workspaceId:rulesKey});recordActivity({id:`${threadId}:${thoughtId}`,workspace:rulesKey,kind:'message',timestamp:Date.now()});messageLogged=true;}
-          if(run.stopRequested || !calls.length) break;
+          if(run.stopRequested)break;
+          if(!calls.length){
+            const completion=await runtime.finalizeRun();
+            if(completion.status==="ready")break;
+            if(completion.status==="needs-work"&&completionRepairs++<2){
+              messages.push({role:"assistant",content:received||"I need more tool evidence."},{role:"system",content:"Design completion is pending. "+completion.missing.slice(0,12).join(" ")});
+              continue;
+            }
+            throw Error("The design verification did not finish. Review the latest task and preview before continuing.");
+          }
           if(settings.models.streamResponses)await reveal.finish();else if(received)show(responseId,received);
           messages.push({role:"assistant",content:received||null,tool_calls:calls.map(c=>({id:c.id,type:"function",function:{name:c.name,arguments:c.arguments}}))});
           const groupId=uid("activity");const roundResponseId=responseId;const group:ChatMessage={id:groupId,role:"activity-group",agentId:agent.id,summary:"Using tools",activities:[],startedAt:Date.now()};setThreads(prev=>prev.map(t=>t.id===threadId?{...t,messages:beginToolRound(t.messages,roundResponseId,group)}:t));
@@ -588,10 +635,8 @@ export default function App() {
           const nextResponseId=uid("a");responseId=nextResponseId;
           pushMessages(threadId,{id:nextResponseId,role:"agent",agentId:agent.id,text:""});
           reveal=createWordReveal(value=>show(nextResponseId,value));
-          run.stopLocal=()=>{reveal.stop();runtime.stop();};
         }
         if(run.stopRequested){reveal.stop();const partial=settings.models.streamResponses?reveal.shown():received;show(responseId,partial?`${partial}\n\n*Stopped*`:"Response stopped.");return;}
-        await runtime.settleChildren();
         if(settings.models.streamResponses){await reveal.finish();if(!received)show(responseId,"The model returned an empty response.");}else show(responseId,received||"The model returned an empty response.");
         if(run.stopRequested){const partial=settings.models.streamResponses?reveal.shown():received;show(responseId,partial?`${partial}\n\n*Stopped*`:"Response stopped.");}
       })().catch(error=>{
@@ -601,12 +646,35 @@ export default function App() {
         reveal.stop();
         const partial=settings.models.streamResponses?reveal.shown():received;
         show(responseId,run.stopRequested ? (partial ? `${partial}\n\n*Stopped*` : "Response stopped.") : received ? `${received}\n\n*Response interrupted: ${String(error)}*` : `The model could not respond. ${String(error)}`);
-      }).finally(()=>{setThreads(previous=>previous.map(thread=>thread.id===threadId?{...thread,messages:thread.messages.map(message=>message.id===thoughtId&&message.role==="thought"?settleThought(message,run.stopRequested?"stopped":completionStatus):message)}:thread));if(activeGeneration.current===run){activeGeneration.current=null;setThinking(false);setRunningThreadId(null);}});
+      }).finally(()=>{
+        setThreads(previous=>previous.map(thread=>thread.id===threadId?{...thread,messages:thread.messages.map(message=>message.id===thoughtId&&message.role==="thought"?settleThought(message,run.stopRequested?"stopped":completionStatus):message)}:thread));if(activeGeneration.current===run){activeGeneration.current=null;setThinking(false);setRunningThreadId(null);}});
       return;
     }
     startTurn({id:uid("u"),role:"user",segments},{id:uid("a"),role:"agent",agentId:agent.id,text:"Real model requests and tools require the Taro desktop app. Your message is saved."});
   };
 
+  React.useEffect(()=>{
+    if(!nativeStorageReady||!chatLoaded||thinking||!isTauri()||receptionTurn)return;
+    const waiting=new Set(activeThread.messages.flatMap(message=>message.role==="subagent"&&message.status==="running"&&message.waitingForConnection&&
+      !attemptedChildRecovery.current.has(message.childId)?[message.childId]:[]));
+    if(!waiting.size)return;
+    const original=[...activeThread.messages].reverse().find(message=>message.role==="user");
+    const role=configuredAgent;
+    if(original?.role!=="user"||activeGeneration.current||role?.enabled===false||!compileWorkspaceRules(workspaceRules).valid||
+      !settings.models.customModels.some(model=>role?model.id===role.model||model.label===role.model:model.id===settings.models.defaultModel))return;
+    let cancelled=false;
+    void loadChildCheckpoints(activeThread.id).then(rows=>{
+      if(cancelled||activeGeneration.current)return;
+      const recovery=rows.flatMap(({message,checkpoint})=>checkpoint&&checkpoint.root===(workspaceRoot??"")&&waiting.has(message.childId)&&
+        settings.models.customModels.some(model=>model.id===checkpoint.model.credentialId&&model.endpoint===checkpoint.model.endpoint)&&
+        (!checkpoint.owner.roleId||settings.agents.some(role=>role.id===checkpoint.owner.roleId&&role.enabled))?[{message,checkpoint}]:[]);
+      if(recovery.length){
+        for(const child of recovery)attemptedChildRecovery.current.add(child.message.childId);
+        handleSend(original.segments,activeThread.messages.slice(0,activeThread.messages.indexOf(original)),recovery);
+      }
+    }).catch(console.error);
+    return()=>{cancelled=true;};
+  },[nativeStorageReady,chatLoaded,thinking,activeThread,workspaceRoot,workspaceRules,settings,configuredAgent,receptionTurn]);
   React.useEffect(()=>{if(receptionTurn&&chatLoaded&&activeThread.id===receptionTurn.threadId){setReceptionTurn(null);handleSend(receptionTurn.segments);}},[receptionTurn,chatLoaded,activeThread.id]);
 
   const handleStop = () => {
@@ -740,7 +808,7 @@ export default function App() {
       setThreads(previous=>previous.map(thread=>({...thread,messages:thread.messages.map(message=>message.id===id&&message.role==="plan"?{...message,markdown:text}:message)})));
       if(source.workspaceRoot&&source.sessionId){
         const key=`${source.sessionId}:${source.path}`;
-        const save=(documentWrites.current.get(key)??Promise.resolve()).catch(()=>{}).then(async()=>{await executeAgentTool({id:uid("plan-save"),name:"Write",arguments:"{}"},{file_path:source.path,content:text},source.workspaceRoot!,true,undefined,uid("plan-save"),{sessionId:source.sessionId!});setDocumentSaveError("");});
+        const save=(documentWrites.current.get(key)??Promise.resolve()).catch(()=>{}).then(async()=>{await executeAgentTool({id:uid("plan-save"),name:"Write",arguments:"{}"},{file_path:source.path,content:text},source.workspaceRoot!,true,undefined,uid("plan-save"),{sessionId:source.sessionId!,interactive:true});setDocumentSaveError("");});
         documentWrites.current.set(key,save);
         void save.catch(error=>setDocumentSaveError(`Plan could not be saved: ${String(error)}`));
       }
@@ -797,6 +865,12 @@ export default function App() {
     setGalleryOpen(false);
     setStatisticsOpen(false);
     setMaximized(false);
+  };
+
+  const handleReviewHandoff=async(reference:ReviewReference,target:"composer"|"task")=>{
+    const queued=await queueReviewFix(reference,target,reviewRepository);
+    if(queued.taskId){setLinkedReviewTask(queued.taskId);setPanel("tasks");}
+    if(queued.chip){setChipInsertion({requestId:uid("review-chip"),threadId:activeThread.id,chip:queued.chip});setPanel(null);setMaximized(false);}
   };
 
   const handleSendToAgent = (payload: { quote?: string; range?: { startLine: number; endLine: number } }) => {
@@ -1069,7 +1143,6 @@ export default function App() {
             onNavChange={handleNavChange}
             onOpenSearch={() => setSearchOpen(true)}
             activeAgentId={activeAgent.id}
-            onAgentChange={setActiveAgentId}
             folders={folders}
             threads={threads}
             activeThreadId={activeThread.id}
@@ -1141,8 +1214,8 @@ export default function App() {
             {panel === "explorer" && (
               <ExplorerPanel key={activeFolder.id} root={workspaceRoot} folderName={activeFolder.name} onChooseFolder={handleChooseExplorerFolder} maximized={maximized} onToggleMaximize={() => setMaximized((m) => !m)} onClose={closePanel} />
             )}
-            {panel === "review" && <ReviewCanvas key={`${workspaceRoot??''}:${linkedReviewScope?.sessionId??activeThread.id}`} workspaceRoot={linkedReviewScope?.workspace??workspaceRoot} sessionId={linkedReviewScope?.sessionId??activeThread.id}/>}
-            {panel === "tasks" && <TasksBoard workspaceId={rulesKey} workspaceRoot={workspaceRoot} settings={workspaceSettings} onClose={closePanel} />}
+            {panel === "review" && <ReviewCanvas key={`${workspaceRoot??''}:${linkedReviewScope?.sessionId??activeThread.id}`} workspaceRoot={linkedReviewScope?.workspace??workspaceRoot} sessionId={linkedReviewScope?.sessionId??activeThread.id} onHandoff={handleReviewHandoff}/>}
+            {panel === "tasks" && <TasksBoard initialTaskId={linkedReviewTask} workspaceId={rulesKey} workspaceRoot={workspaceRoot} settings={workspaceSettings} onClose={closePanel} />}
             {panel === "git" && <GitPanel workspaceRoot={workspaceRoot} sourceControl={settings.sourceControl} onClose={closePanel} onOpenTasks={()=>setPanel('tasks')} />}
             {panel === "docs" && openDocId && (
               <DocsPanel

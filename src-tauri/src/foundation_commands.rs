@@ -9,7 +9,7 @@ impl FoundationService {
         Self(store.map(|store| Arc::new(Mutex::new(store))))
     }
 }
-async fn access<T: Send + 'static>(
+pub async fn access<T: Send + 'static>(
     state: &FoundationService,
     operation: impl FnOnce(&mut RunStore) -> StoreResult<T> + Send + 'static,
 ) -> StoreResult<T> {

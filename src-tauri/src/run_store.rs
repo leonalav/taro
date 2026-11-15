@@ -173,7 +173,7 @@ pub struct LoadedRun {
 }
 
 pub struct RunStore {
-    connection: Connection,
+    pub(crate) connection: Connection,
 }
 impl RunStore {
     pub fn open(path: &Path) -> StoreResult<Self> {
@@ -187,7 +187,7 @@ impl RunStore {
         let version: u32 = connection
             .pragma_query_value(None, "user_version", |r| r.get(0))
             .map_err(db)?;
-        if version > 2 {
+        if version > 3 {
             return Err(format!("Unsupported foundation schema {version}"));
         }
         if version == 0 {
@@ -204,7 +204,7 @@ impl RunStore {
                 transaction
                     .pragma_update(None, "user_version", 1)
                     .map_err(db)?;
-            } else if locked_version > 2 {
+            } else if locked_version > 3 {
                 return Err("Unsupported foundation schema".into());
             }
             transaction.commit().map_err(db)?;
@@ -221,6 +221,15 @@ impl RunStore {
                 transaction
                     .pragma_update(None, "user_version", 2)
                     .map_err(db)?;
+            }
+            transaction.commit().map_err(db)?;
+        }
+        if version < 3 {
+            let transaction = connection.transaction_with_behavior(TransactionBehavior::Immediate).map_err(db)?;
+            let locked: u32 = transaction.pragma_query_value(None, "user_version", |row| row.get(0)).map_err(db)?;
+            if locked < 3 {
+                transaction.execute_batch(include_str!("run_store/adi_schema.sql")).map_err(db)?;
+                transaction.pragma_update(None, "user_version", 3).map_err(db)?;
             }
             transaction.commit().map_err(db)?;
         }

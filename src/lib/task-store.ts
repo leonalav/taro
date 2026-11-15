@@ -1,6 +1,7 @@
 import type {ChatMessage,Task} from '@/data/mock';
 
 export interface WorkspaceTask extends Task {
+  chatRunId?:string;
   designJob?: import('./design-job').DesignJob;
   reviewItem?: {
     scope: import('./review-store').ReviewScope;

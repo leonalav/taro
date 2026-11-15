@@ -25,6 +25,10 @@ name = "taro"
 path = "src/main.rs"
 required-features = ["desktop"]
 
+[[example]]
+name = "web_smoke"
+required-features = ["desktop"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [], optional = true }
 

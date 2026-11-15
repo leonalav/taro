@@ -1,0 +1,143 @@
+{
+  "sourceId": "shneiderman",
+  "edition": "author website snapshot",
+  "rules": [
+    {
+      "id": "shneiderman:1",
+      "sourceId": "shneiderman",
+      "edition": "author website snapshot",
+      "locator": "Rule 1",
+      "contentHash": "163713db269c69e9b14b69fc879c119ee298d6cc2f05e21e3d9de3efaa40d495",
+      "title": "Rule 1",
+      "category": "interaction",
+      "authority": "heuristic",
+      "interpretation": "Keep terminology and action sequences consistent across comparable flows.",
+      "applicability": {},
+      "exceptions": [],
+      "relatedRuleIds": [],
+      "verificationMethods": [
+        "human"
+      ]
+    },
+    {
+      "id": "shneiderman:2",
+      "sourceId": "shneiderman",
+      "edition": "author website snapshot",
+      "locator": "Rule 2",
+      "contentHash": "f22b25c4e96c4351a5426a5c08fc585ae2fb3f338100fe3be49ad9d55f021886",
+      "title": "Rule 2",
+      "category": "interaction",
+      "authority": "heuristic",
+      "interpretation": "Support different experience levels, languages and input needs.",
+      "applicability": {},
+      "exceptions": [],
+      "relatedRuleIds": [],
+      "verificationMethods": [
+        "human"
+      ]
+    },
+    {
+      "id": "shneiderman:3",
+      "sourceId": "shneiderman",
+      "edition": "author website snapshot",
+      "locator": "Rule 3",
+      "contentHash": "302fed03f9b17ea77a0891daa8a5e811e7bc1497a798fd56aa16f99ac926e823",
+      "title": "Rule 3",
+      "category": "interaction",
+      "authority": "heuristic",
+      "interpretation": "Acknowledge each action with feedback proportionate to its impact.",
+      "applicability": {},
+      "exceptions": [],
+      "relatedRuleIds": [],
+      "verificationMethods": [
+        "human"
+      ]
+    },
+    {
+      "id": "shneiderman:4",
+      "sourceId": "shneiderman",
+      "edition": "author website snapshot",
+      "locator": "Rule 4",
+      "contentHash": "943f402ffc1bc29a6301e9c97c4f72e107593c9667a538fe09ebf3f841249860",
+      "title": "Rule 4",
+      "category": "interaction",
+      "authority": "heuristic",
+      "interpretation": "Mark the start, progress and completion of multi-step tasks.",
+      "applicability": {},
+      "exceptions": [],
+      "relatedRuleIds": [],
+      "verificationMethods": [
+        "human"
+      ]
+    },
+    {
+      "id": "shneiderman:5",
+      "sourceId": "shneiderman",
+      "edition": "author website snapshot",
+      "locator": "Rule 5",
+      "contentHash": "f1d7e32a2cf63b298ce8f4da6d9a4a53533f5d9b714bea7cb2d75f0fb6b854ce",
+      "title": "Rule 5",
+      "category": "interaction",
+      "authority": "heuristic",
+      "interpretation": "Constrain invalid choices and keep corrections local to the error.",
+      "applicability": {},
+      "exceptions": [],
+      "relatedRuleIds": [],
+      "verificationMethods": [
+        "human"
+      ]
+    },
+    {
+      "id": "shneiderman:6",
+      "sourceId": "shneiderman",
+      "edition": "author website snapshot",
+      "locator": "Rule 6",
+      "contentHash": "e3aab8a6fe33fbd7940493b344345daec527080a4df2d54ba6e8d96923d2b254",
+      "title": "Rule 6",
+      "category": "interaction",
+      "authority": "heuristic",
+      "interpretation": "Make actions reversible where feasible.",
+      "applicability": {},
+      "exceptions": [],
+      "relatedRuleIds": [],
+      "verificationMethods": [
+        "human"
+      ]
+    },
+    {
+      "id": "shneiderman:7",
+      "sourceId": "shneiderman",
+      "edition": "author website snapshot",
+      "locator": "Rule 7",
+      "contentHash": "f386d345799629ffdb86cccfdcb1914a4dcce46b9ba7a7decc4cc94b3e540e81",
+      "title": "Rule 7",
+      "category": "interaction",
+      "authority": "heuristic",
+      "interpretation": "Let people initiate and control meaningful changes.",
+      "applicability": {},
+      "exceptions": [],
+      "relatedRuleIds": [],
+      "verificationMethods": [
+        "human"
+      ]
+    },
+    {
+      "id": "shneiderman:8",
+      "sourceId": "shneiderman",
+      "edition": "author website snapshot",
+      "locator": "Rule 8",
+      "contentHash": "e267cbd635316e61808ca8448668b2b21466bfce426d4b2370161911ed244be3",
+      "title": "Rule 8",
+      "category": "interaction",
+      "authority": "heuristic",
+      "interpretation": "Keep information needed for the next decision visible.",
+      "applicability": {},
+      "exceptions": [],
+      "relatedRuleIds": [],
+      "verificationMethods": [
+        "human"
+      ]
+    }
+  ],
+  "sections": []
+}
