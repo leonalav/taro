@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "wcagCriteria": 86,
+  "wcagBaseline": 55,
+  "families": [
+    "wcag-2.2",
+    "aria-apg",
+    "iso-9241-110-2020",
+    "iso-9241-210-2019",
+    "iso-9241-112-2025",
+    "nielsen",
+    "shneiderman",
+    "apple-hig",
+    "fluent-2",
+    "material-3",
+    "carbon",
+    "atlassian",
+    "cognitive",
+    "composition",
+    "design-schools"
+  ]
+}

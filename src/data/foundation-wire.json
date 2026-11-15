@@ -1,0 +1,7 @@
+{
+ "scope":{"workspaceRoot":"/workspace/project","sessionId":"chat-1","runId":"run-1"},
+ "limits":{"requestLimit":128,"activeTimeLimitMs":1800000},
+ "intent":{"attemptId":"attempt-1","operationId":"operation-1","tool":"Write","input":{"file_path":"a.txt","content":"new"},"sideEffect":true},
+ "outcome":{"state":"succeeded","preview":"Saved a.txt","outputRef":null},
+ "context":{"sourceSequence":2,"model":"model-1","summary":{"objective":"Keep user changes"},"tailStart":2}
+}

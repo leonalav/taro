@@ -1,0 +1,50 @@
+import { test, after } from 'node:test';
+import assert from 'node:assert/strict';
+import http from 'node:http';
+import { createReviewBrowser } from './review-browser.mjs';
+const service=createReviewBrowser();
+const server=http.createServer((req,res)=>{res.setHeader('Content-Type','text/html');res.end('<!doctype html><style>body{margin:0}h1{margin:0;width:280px;height:80px}main{height:2000px}</style><h1 id="hero">Review actual geometry</h1><button onclick="this.textContent=\'Clicked\'">Test click</button><main>Scroll</main>');});
+await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+const url=`http://127.0.0.1:${server.address().port}`;
+after(async()=>{await service.close();server.close();});
+test('real browser measures actual geometry, viewport, selector, scroll and prototype input',async()=>{
+  const opened=await service.request({key:'session-a',action:'open',url,viewport:{width:920,height:720}});
+  assert.equal(opened.viewport.width,920);assert.match(opened.screenshot,/^data:image\/png;base64,/);
+  assert.ok(opened.source.includes('Review actual geometry'));
+  const measured=await service.request({key:'session-a',action:'inspect',selector:'#hero'});
+  assert.equal(measured.selection.rect.width,280);assert.equal(measured.selection.rect.height,80);
+  assert.equal(measured.selection.styles.fontSize,'32px');
+  const root=await service.request({key:'session-a',action:'inspect',selector:'html'});
+  assert.equal(root.selection.selector,'html');
+  await service.request({key:'session-a',action:'input',input:{type:'click',x:40,y:90}});
+  assert.ok((await service.request({key:'session-a',action:'inspect'})).components.some(c=>c.text==='Clicked'));
+  const mobile=await service.request({key:'session-a',action:'viewport',viewport:{width:393,height:852}});
+  assert.equal(mobile.viewport.width,393);assert.equal(mobile.viewport.height,852);
+  const scrolled=await service.request({key:'session-a',action:'input',input:{type:'scroll',deltaY:400,deltaX:0}});
+  assert.ok(scrolled.document.scrollY>0);
+  await assert.rejects(service.request({key:'session-a',action:'inspect',selector:'#missing'}),/not found/i);
+  await assert.rejects(service.request({key:'session-a',action:'viewport',viewport:{width:NaN,height:800}}),/viewport/i);
+});
+test('a prototype action still returns a capture when it removes the selected component',async()=>{
+  await service.request({key:'action-once',action:'open',html:'<h1 id="selected">Selected</h1><button id="action" onclick="this.textContent=String(Number(this.textContent)+1);document.getElementById(\'selected\')?.remove()">0</button>',viewport:{width:800,height:600}});
+  const button=await service.request({key:'action-once',action:'inspect',selector:'#action'});
+  const rect=button.selection.rect;
+  const result=await service.request({key:'action-once',action:'input',selector:'#selected',input:{type:'click',x:rect.x+4,y:rect.y+4}});
+  assert.equal(result.components.find(c=>c.selector==='#action').text,'1');assert.equal(result.selection,undefined);
+});
+test('wheel input scrolls the overflow container beneath the pointer',async()=>{
+  await service.request({key:'nested-scroll',action:'open',html:'<style>body{margin:0}</style><div id="scroller" style="width:300px;height:200px;overflow:auto"><section id="inner" style="height:2000px">Scrollable panel</section></div>',viewport:{width:800,height:600}});
+  const scrolled=await service.request({key:'nested-scroll',action:'input',input:{type:'scroll',x:100,y:100,deltaY:350,deltaX:0}});
+  const measured=await service.request({key:'nested-scroll',action:'inspect',selector:'#inner'});
+  assert.equal(scrolled.document.scrollY,0);assert.ok(measured.selection.rect.y<0,'nested content moved within its scroll container');
+});
+test('browser targets are isolated, HTML content remains exact, unsafe URLs and missing sessions fail clearly',async()=>{
+  const html='<!doctype html>\r\n<h1 id="saved">Saved 日本語</h1>';
+  const saved=await service.request({key:'session-b',action:'open',html,viewport:{width:800,height:600}});
+  assert.equal(saved.components.find(c=>c.selector==='#saved').text,'Saved 日本語');
+  const other=await service.request({key:'session-a',action:'inspect',selector:'#hero'});
+  assert.equal(other.selection.text,'Review actual geometry');
+  await assert.rejects(service.request({key:'none',action:'inspect'}),/open a preview/i);
+  await assert.rejects(service.request({key:'bad',action:'open',url:'javascript:alert(1)',viewport:{width:800,height:600}}),/HTTP/i);
+  await assert.rejects(service.request({key:'bad',action:'open',url:'http://127.0.0.1:1',viewport:{width:800,height:600}}),/navigation|ERR_/i);
+});

@@ -1,0 +1,692 @@
+/* ------------------------------------------------------------------
+ * Inline artifact sheets
+ * A quiet, monospaced editorial surface that matches the Explorer right
+ * panel (#0b0b0b / #1d1d1d) and the supplied artifact reference.
+ * ------------------------------------------------------------------ */
+:root {
+  --artifact-surface: #0b0b0b;
+  --artifact-raise: #101014;
+  --artifact-line: #1f1f25;
+  --artifact-line-strong: #2b2b33;
+  --artifact-text: #e9e7ee;
+  --artifact-strong: #f7f5fb;
+  --artifact-muted: #a8a3b3;
+  --artifact-faint: #918b9e;
+  --artifact-accent: #e9e3d6;
+  --artifact-accent-soft: #b5af9f;
+  --artifact-success: #7ee2a8;
+  --artifact-danger: #ff8f9a;
+}
+
+/* Sheet ----------------------------------------------------------- */
+.artifact-sheet {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--artifact-line);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #0d0d10 0%, var(--artifact-surface) 68%);
+  box-shadow: inset 0 1px 0 #ffffff08, 0 24px 48px -44px #000;
+  color: var(--artifact-text);
+  font-family: var(--font-mono);
+}
+
+.artifact-sheet__nodes {
+  position: absolute;
+  top: 34px;
+  right: -22px;
+  z-index: -1;
+  width: 128px;
+  height: 164px;
+  color: var(--artifact-accent);
+  opacity: 0.13;
+  pointer-events: none;
+}
+
+.artifact-sheet__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: space-between;
+  min-height: 38px;
+  padding: 9px 14px;
+  border-bottom: 1px solid var(--artifact-line);
+  background: #ffffff03;
+}
+
+.artifact-sheet__kind {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--artifact-muted);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.4;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.artifact-sheet__kind > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Three quiet pills echoing the reference's window controls. */
+.artifact-sheet__traffic {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 4px;
+}
+
+.artifact-sheet__traffic span {
+  display: block;
+  width: 14px;
+  height: 5px;
+  border-radius: 999px;
+  background: #ffffff1f;
+}
+
+.artifact-sheet__traffic span:first-child {
+  width: 18px;
+  background: #ffffff2b;
+}
+
+.artifact-sheet__body {
+  min-width: 0;
+  padding: 14px;
+}
+
+.artifact-sheet__foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  min-width: 0;
+  margin-top: auto;
+  padding: 9px 12px;
+  border-top: 1px solid var(--artifact-line);
+  background: #ffffff02;
+}
+
+.artifact-sheet__agent {
+  overflow: hidden;
+  flex: none;
+  max-width: 45%;
+  color: var(--artifact-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-sheet__actions {
+  display: flex;
+  flex: 1 1 180px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* Compact variant used by tool rows and disclosure groups. */
+.artifact-sheet--compact {
+  border-radius: 12px;
+  font-family: var(--font-sans);
+}
+
+.artifact-sheet--compact .artifact-sheet__body {
+  padding: 0;
+}
+
+/* Generic surface used by permission, question and subagent cards. */
+.artifact-surface {
+  border: 1px solid var(--artifact-line);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #0d0d10, var(--artifact-surface));
+  color: var(--artifact-text);
+  box-shadow: inset 0 1px 0 #ffffff08;
+}
+
+/* Labels ---------------------------------------------------------- */
+.artifact-label {
+  color: var(--artifact-muted);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.5;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.artifact-meta {
+  overflow: hidden;
+  color: var(--artifact-faint);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.5;
+  letter-spacing: 0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-dot {
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--artifact-success);
+}
+
+/* Actions --------------------------------------------------------- */
+.artifact-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  min-height: 26px;
+  padding: 3px 8px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--artifact-muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.artifact-action svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+}
+
+.artifact-action:hover {
+  border-color: var(--artifact-line-strong);
+  background: #ffffff09;
+  color: var(--artifact-strong);
+}
+
+.artifact-action[data-tone="accent"] {
+  color: var(--artifact-accent);
+}
+
+.artifact-action[data-tone="accent"]:hover {
+  border-color: #5a564d;
+  background: #ffffff12;
+  color: #fdfbf6;
+}
+
+.artifact-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.artifact-action:focus-visible,
+.artifact-row:focus-visible,
+.artifact-sheet a:focus-visible {
+  outline: 2px solid #f2eee6;
+  outline-offset: 2px;
+  border-radius: 7px;
+}
+
+/* Document preview ------------------------------------------------ */
+.artifact-doc {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.artifact-doc__title {
+  margin: 0;
+  overflow: hidden;
+  color: var(--artifact-strong);
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-doc__path {
+  margin: 0;
+  overflow: hidden;
+  color: var(--artifact-faint);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.5;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-doc__rule {
+  height: 1px;
+  margin: 11px 0 9px;
+  border: 0;
+  background: linear-gradient(90deg, #ffffff17, #ffffff05 70%, transparent);
+}
+
+.artifact-doc__lines {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.artifact-doc__line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  color: var(--artifact-muted);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  line-height: 1.6;
+}
+
+.artifact-doc__line span {
+  flex: none;
+  width: 12px;
+  color: #7f7890;
+}
+
+/* Agent prose ----------------------------------------------------- */
+.agent-reply {
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  line-height: 1.85;
+  color: var(--artifact-text);
+  letter-spacing: -0.002em;
+}
+
+.agent-reply > :first-child {
+  margin-top: 0;
+}
+
+.agent-reply > :last-child {
+  margin-bottom: 0;
+}
+
+.agent-reply p {
+  margin: 0 0 13px;
+  max-width: 68ch;
+  text-wrap: pretty;
+}
+
+.agent-reply strong {
+  color: var(--artifact-strong);
+  font-weight: 600;
+}
+
+.agent-reply em {
+  color: #dbd3ec;
+}
+
+.agent-reply h1,
+.agent-reply h2,
+.agent-reply h3 {
+  margin: 22px 0 8px;
+  color: var(--artifact-strong);
+  font-family: var(--font-mono);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.4;
+}
+
+.agent-reply h1 {
+  font-size: 16px;
+}
+
+.agent-reply h2 {
+  font-size: 15px;
+}
+
+.agent-reply h3 {
+  font-size: 14px;
+}
+
+.agent-reply ol,
+.agent-reply ul {
+  margin: 0 0 13px;
+  padding: 0;
+  list-style: none;
+}
+
+.agent-reply ol {
+  counter-reset: agent-reply;
+}
+
+.agent-reply ol > li {
+  position: relative;
+  padding-left: 2.1em;
+  counter-increment: agent-reply;
+}
+
+.agent-reply ol > li::before {
+  position: absolute;
+  left: 0;
+  color: #8f87a1;
+  content: counter(agent-reply) ".";
+}
+
+.agent-reply ul > li {
+  position: relative;
+  padding-left: 1.6em;
+}
+
+.agent-reply ul > li::before {
+  position: absolute;
+  left: 0;
+  color: #8f87a1;
+  content: "→";
+}
+
+.agent-reply li + li {
+  margin-top: 3px;
+}
+
+.agent-reply li > p {
+  margin: 0;
+}
+
+.agent-reply blockquote {
+  margin: 16px 0;
+  padding: 11px 15px;
+  border: 1px solid #2a2a32;
+  border-left: 2px solid #8f6cb8;
+  border-radius: 12px 12px 12px 4px;
+  background: #141419;
+  color: #cfc9da;
+}
+
+.agent-reply blockquote p {
+  margin: 0;
+}
+
+.agent-reply a {
+  color: var(--artifact-accent);
+  text-decoration: underline;
+  text-decoration-color: #e9e3d666;
+  text-underline-offset: 3px;
+}
+
+.agent-reply a:hover {
+  text-decoration-color: var(--artifact-accent);
+}
+
+.agent-reply code {
+  padding: 1px 5px;
+  border: 1px solid #2a2a32;
+  border-radius: 5px;
+  background: #15151a;
+  color: #e6dcf8;
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+.agent-reply pre {
+  margin: 0 0 13px;
+  overflow-x: auto;
+  border: 1px solid var(--artifact-line);
+  border-radius: 10px;
+  background: #060608;
+  padding: 11px 13px;
+  font-size: 12px;
+  line-height: 1.75;
+}
+
+.agent-reply pre code {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: #ddd7e8;
+}
+
+.agent-reply hr {
+  height: 1px;
+  margin: 18px 0;
+  border: 0;
+  background: var(--artifact-line);
+}
+
+.agent-reply table {
+  width: 100%;
+  margin: 0 0 13px;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.agent-reply th,
+.agent-reply td {
+  padding: 6px 9px;
+  border: 1px solid var(--artifact-line);
+  text-align: left;
+}
+
+.agent-reply th {
+  color: var(--artifact-strong);
+  background: #ffffff05;
+  font-weight: 600;
+}
+
+/* User message paper --------------------------------------------- */
+.artifact-message {
+  border: 1px solid #33333c;
+  border-radius: 14px 14px 14px 4px;
+  background: #1c1c22;
+  color: #ece9f2;
+  box-shadow: inset 0 1px 0 #ffffff0a, 0 18px 36px -34px #000;
+}
+
+.artifact-message__meta {
+  color: #b7b1c4;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.artifact-message a {
+  color: var(--artifact-accent);
+}
+
+/* Disclosure rows ------------------------------------------------ */
+.artifact-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 34px;
+  padding: 6px 11px;
+  border: 0;
+  background: transparent;
+  color: var(--artifact-muted);
+  text-align: left;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  line-height: 1.5;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.artifact-row:hover {
+  background: #ffffff07;
+  color: var(--artifact-text);
+}
+
+.artifact-row svg {
+  flex: none;
+}
+
+/* Reduced motion ------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .artifact-action,
+  .artifact-row {
+    transition: none;
+  }
+}
+
+/* ------------------------------------------------------------------
+ * Premium finish — inner sheen, grain, slower ornament drift
+ * ------------------------------------------------------------------ */
+.artifact-sheet {
+  border-color: #232329;
+  background:
+    radial-gradient(120% 90% at 100% -12%, #ffffff08, transparent 56%),
+    linear-gradient(180deg, #0f0f13 0%, #0b0b0b 68%);
+  box-shadow:
+    inset 0 1px 0 #ffffff0b,
+    0 30px 60px -52px #000,
+    0 0 70px -60px #00000055;
+  transition: border-color 220ms ease, box-shadow 220ms ease, transform 220ms ease;
+}
+
+.artifact-sheet::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 3;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent 6%, #ffffff1c 32%, #ffffff2b 62%, transparent 94%);
+}
+
+.artifact-sheet::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: inherit;
+  pointer-events: none;
+  background-image: url("../assets/grain.webp");
+  background-size: 180px 180px;
+  mix-blend-mode: soft-light;
+  opacity: 0.16;
+}
+
+.artifact-sheet:hover {
+  border-color: #30303a;
+  box-shadow:
+    inset 0 1px 0 #ffffff0d,
+    0 32px 64px -50px #000,
+    0 0 80px -56px #00000066;
+}
+
+.artifact-sheet__head {
+  border-bottom-color: #22222a;
+  background: linear-gradient(180deg, #ffffff05, #ffffff01);
+}
+
+.artifact-sheet__kind {
+  letter-spacing: 0.16em;
+}
+
+.artifact-sheet__traffic span:first-child {
+  background: #ffffff3d;
+}
+
+.artifact-sheet__traffic span:last-child {
+  background: #ffffff14;
+}
+
+.artifact-sheet__nodes {
+  animation: artifact-nodes-drift 32s ease-in-out infinite alternate;
+}
+
+.artifact-sheet__foot {
+  border-top-color: #22222a;
+  background: linear-gradient(180deg, #ffffff02, #ffffff04);
+}
+
+.artifact-doc__title {
+  font-family: "Instrument Serif", Georgia, "Times New Roman", serif;
+  font-size: 20px;
+  font-weight: 400;
+  line-height: 1.25;
+  letter-spacing: -0.005em;
+}
+
+.artifact-doc__rule {
+  background: linear-gradient(90deg, #ffffff1f, #ffffff1f 40%, #ffffff05 78%, transparent);
+}
+
+.agent-reply blockquote {
+  position: relative;
+  border-color: #2c2a35;
+  border-left: 2px solid #d8d0be;
+  border-radius: 3px 12px 12px 3px;
+  background: linear-gradient(180deg, #17161d, #121217);
+  box-shadow: inset 0 1px 0 #ffffff06, 0 16px 34px -30px #000;
+  padding-right: 34px;
+}
+
+.agent-reply blockquote::after {
+  content: "“";
+  position: absolute;
+  top: 2px;
+  right: 10px;
+  color: #ffffff2b;
+  font-family: "Instrument Serif", Georgia, serif;
+  font-size: 32px;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.artifact-action {
+  transition:
+    background 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease,
+    transform 150ms ease;
+}
+
+.artifact-action:hover {
+  transform: translateY(-1px);
+}
+
+.artifact-action:active {
+  transform: translateY(0);
+}
+
+@keyframes artifact-nodes-drift {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(3px, -9px, 0);
+  }
+}
+
+@media (forced-colors: active) {
+  .artifact-sheet::after,
+  .artifact-sheet::before {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .artifact-sheet__nodes {
+    animation: none;
+  }
+  .artifact-sheet,
+  .artifact-action {
+    transition: none;
+  }
+  .artifact-sheet:hover,
+  .artifact-action:hover {
+    transform: none;
+  }
+}
