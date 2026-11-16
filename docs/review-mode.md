@@ -30,9 +30,13 @@ Measurements come from the rendered DOM. The component list samples common seman
 
 ## Prototype interaction
 
-Switch to **Prototype** to send clicks, scrolling, typed characters, pasted text, and supported navigation keys to the live page. Click the viewport to focus it before typing. Back, Forward, and Reload act on the live browser target. Submitting a new URL in the address field saves a new revision of that preview.
+Switch to **Prototype** to send clicks, drags, scrolling, typed characters, pasted text, and supported navigation keys to the live page. Click the viewport to focus it before typing. Back, Forward, and Reload act on the live browser target. Submitting a new URL in the address field saves a new revision of that preview.
 
-The canvas displays Chromium captures rather than an embedded general-purpose browser. It refreshes at a bounded rate: approximately once per second in Prototype and once per 2.5 seconds in Inspect when visible and idle, with fresh captures after actions. Rendering and request time can make updates slower. Arbitrary keyboard shortcuts, drag interactions, and native file dialogs are not supported by this input bridge. Supported special keys are Enter, Tab, Backspace, Delete, Escape, arrows, Home, and End; modifier shortcuts are not forwarded. This is a prototype review surface, not a promise of full browser compatibility.
+While Prototype is visible, the canvas displays a bounded stream of Chromium compositor frames as the page repaints. Review stops streaming when it is hidden or you leave Prototype. The canvas falls back to ordinary captures when the live feed is unavailable. Inspect refreshes its screenshot and component measurements about every 2.5 seconds while visible and idle. Saved captures and motion filmstrips use PNG evidence. A filmstrip samples specific moments for review and cannot measure animation smoothness.
+
+Design-job QA checks for a change from the state before an action to the expected state after it. The replay must demonstrate that change at narrow and wide sizes on the assigned revision. Missing images, fonts, scripts, stylesheets, and scene resources can block verification even when an unrelated control still works.
+
+Supported special keys are Enter, Tab, Backspace, Delete, Escape, arrows, Home, and End. Browser-wide shortcuts and native file dialogs are outside the input bridge.
 
 ## Comments and revision history
 

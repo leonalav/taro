@@ -2,6 +2,7 @@ import {describe,it,expect,vi} from 'vitest';
 import {createTaskRepository,createTask} from './task-store';
 import {createTaskExecutor} from './task-runtime';
 import {defaultSettings} from '@/data/settings';
+import {modelCapabilityIdentity} from './model-capabilities';
 
 describe('task-owned execution',()=>{
   it('inspects the workspace, delegates investigation, and persists a build plan before writing',async()=>{
@@ -42,7 +43,9 @@ describe('task-owned execution',()=>{
     const native=vi.fn(async()=>({text:'Authorized',artifact:{kind:'agent-authorization',workspaceRoot:'A:/test'}}));
     const executor=createTaskExecutor(repository,{stream,native,stop:async()=>{},listMcp:async()=>({tools:[]})});
     const agents=['Orchestrator','Designer','Code','Type & QA'].map(role=>({id:role,name:role,role,model:'m',enabled:true,autonomy:'auto' as const,canWriteCode:true}));
-    const settings={...defaultSettings,agents,models:{...defaultSettings.models,customModels:[{id:'m',label:'m',endpoint:'http://localhost/v1'}],defaultModel:'m'}};
+    const model={id:'m',label:'m',endpoint:'http://localhost/v1'};
+    const designCheck={identity:modelCapabilityIdentity(model),checkedAt:1,image:'passed' as const,tools:'passed' as const,handoff:'passed' as const,detail:'Fixture'};
+    const settings={...defaultSettings,agents,models:{...defaultSettings.models,customModels:[{...model,designCheck}],defaultModel:'m'}};
     vi.stubGlobal('localStorage',{getItem:()=>null});
     try{await executor.start(workspace,'design','A:/test',settings);}
     finally{vi.unstubAllGlobals();}

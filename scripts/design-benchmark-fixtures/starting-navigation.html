@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Field Studio — Archive</title>
+<style>
+  body { color: #efe9da; background: #22221e; margin: 0; font: 1rem/1.5 system-ui; }
+  header, main { margin: 0 auto; max-width: 65rem; padding: 1.5rem; }
+  header { display: flex; gap: 1.75rem; flex-wrap: wrap; align-items: center; border-bottom: 1px solid #837d6c; }
+  a { color: inherit; }
+  a:focus-visible, [role=button]:focus-visible { outline: 2px solid #e2c489; outline-offset: .25rem; }
+  [role=button] { padding: .4rem .8rem; border: 1px solid; cursor: pointer; }
+  nav { flex-basis: 100%; }
+  nav a { margin-right: 1.5rem; }
+  h1 { font: 3rem Georgia, serif; }
+</style>
+<header>
+  <a href="#home">Field Studio</a>
+  <span id="menu-toggle" role="button" tabindex="0" aria-expanded="false" aria-controls="project-menu">Projects</span>
+  <a href="#contact">Contact</a>
+  <nav id="project-menu" hidden><a href="#shelter">Shelter study</a><a href="#courtyard">Courtyard archive</a></nav>
+</header>
+<main id="home">
+  <h1>Field Studio archive</h1>
+  <p id="shelter">Shelter study / 2024</p><p id="courtyard">Courtyard archive / 2025</p><p id="contact">Studio inquiries</p>
+</main>
+<script>
+  const trigger = document.querySelector('#menu-toggle');
+  const menu = document.querySelector('#project-menu');
+  trigger.addEventListener('click', () => {
+    menu.hidden = !menu.hidden;
+    trigger.setAttribute('aria-expanded', String(!menu.hidden));
+  });
+</script>
+</html>

@@ -7,7 +7,7 @@ export function createReviewEvidenceStorage(small:SmallStorage,large:ReviewStora
     async read(key){return await large.read(key)??small.getItem(`taro-review-v1:${key}`);},
     async write(key,value){
       const localKey=`taro-review-v1:${key}`;
-      if(!value.includes('"audits":')&&await large.read(key)===null){
+      if(!value.includes('"audits":')&&!value.includes('"browserEvidence":')&&await large.read(key)===null){
         try{small.setItem(localKey,value);return;}catch{/* screenshot/source payload exceeded localStorage quota */}
       }
       await large.write(key,value);

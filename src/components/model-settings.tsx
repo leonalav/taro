@@ -9,7 +9,8 @@ import {Segmented} from "@/components/ui/segmented";
 import {SettingsGroup, SettingsRow} from "@/components/settings/primitives";
 import type {SectionProps} from "@/components/settings/sections-personal";
 import {builtinModelOptions, MAX_CUSTOM_MODELS, type CustomModel} from "@/data/settings";
-import {resolveModelEndpoint} from "@/lib/model-stream";
+import {resolveModelEndpoint, stopModel, streamModel} from "@/lib/model-stream";
+import {checkModelCapabilities, currentDesignCheck, modelCapabilityIdentity} from "@/lib/model-capabilities";
 
 type SavedModel = CustomModel & {model?:string};
 type Draft = {id?:string;label:string;model:string;endpoint:string;key:string};
@@ -57,6 +58,9 @@ export function ModelsSettings({settings, update}: SectionProps) {
       }
       const saved:SavedModel={id,label:draft.label.trim(),model:draft.model.trim(),endpoint};
       const existing=current.current.customModels;
+      const previous=existing.find(model=>model.id===id);
+      const priorCheck=previous&&currentDesignCheck(previous);
+      if(!draft.key.trim()&&priorCheck?.identity===modelCapabilityIdentity(saved))saved.designCheck=priorCheck;
       patch({customModels:draft.id ? existing.map(model=>model.id===id?saved:model) : [...existing,saved],...(!draft.id ? {defaultModel:id}: {})});
       setDraft(null);
     } catch(cause) {setError(String(cause instanceof Error ? cause.message : cause));}
@@ -67,6 +71,7 @@ export function ModelsSettings({settings, update}: SectionProps) {
     try {
       if(!isTauri()) throw new Error("Open the desktop app to remove a stored API key.");
       await invoke("delete_model_key",{modelId:id});
+      patch({customModels:current.current.customModels.map(model=>model.id===id?{...model,designCheck:undefined}:model)});
       setKeys(existing=>({...existing,[id]:false}));
       setDraft(existing=>existing ? {...existing,key:""}:null);
     }catch(cause){setError(String(cause instanceof Error?cause.message:cause));}
@@ -84,6 +89,14 @@ export function ModelsSettings({settings, update}: SectionProps) {
     finally{setBusy(false);}
   };
   const options=[...models.customModels.map(model=>({value:model.id,label:model.label})),...builtinModelOptions.map(model=>({...model,label:`${model.label} · unconfigured`}))];
+  const runDesignCheck=async(model:CustomModel)=>{
+    setBusy(true);setError("");
+    try {
+      const designCheck=await checkModelCapabilities(model,streamModel,stopModel);
+      patch({customModels:current.current.customModels.map(saved=>saved.id===model.id&&modelCapabilityIdentity(saved)===designCheck.identity?{...saved,designCheck}:saved)});
+    } catch(cause) {setError(cause instanceof Error?cause.message:String(cause));}
+    finally {setBusy(false);}
+  };
   const change=(field:keyof Draft,value:string)=>setDraft(existing=>existing?{...existing,[field]:value}:null);
   const keyStatus=(id:string)=>!isTauri()?"Keys available in the desktop app":keys[id]===undefined?"Checking saved key status…":keys[id]==="unavailable"?"Saved key status unavailable":keys[id]?"Key saved on this device":"No saved key · optional for local endpoints";
   return <div className="space-y-8">
@@ -93,10 +106,13 @@ export function ModelsSettings({settings, update}: SectionProps) {
       <SettingsRow label="Custom models" description={`${models.customModels.length} of ${MAX_CUSTOM_MODELS} slots used.`}>
         <Button size="sm" variant="secondary" disabled={busy || models.customModels.length >= MAX_CUSTOM_MODELS} onClick={()=>{setError("");setDraft(emptyDraft());}}><Plus/>Add model</Button>
       </SettingsRow>
-      {models.customModels.map((saved:SavedModel)=><SettingsRow key={saved.id} label={saved.label} description={<><span className="block break-all font-mono">{saved.model || saved.label} · {saved.endpoint}</span><span>{keyStatus(saved.id)}</span></>}>
+      {models.customModels.map((saved:SavedModel)=>{
+        const designCheck=currentDesignCheck(saved);
+        return <SettingsRow key={saved.id} label={saved.label} description={<><span className="block break-all font-mono">{saved.model || saved.label} · {saved.endpoint}</span><span className="block">{keyStatus(saved.id)}</span><span className="block">{designCheck?`Image reading ${designCheck.image} · Tools ${designCheck.tools} · Handoff ${designCheck.handoff} · ${new Date(designCheck.checkedAt).toLocaleString()}`:"Design capabilities unknown"}</span>{designCheck&&<span className="block">{designCheck.detail}</span>}</>}>
+        <Button size="sm" variant="ghost" disabled={busy||!isTauri()} onClick={()=>void runDesignCheck(saved)} aria-label={`Check design capabilities for ${saved.label}`}>Check design</Button>
         <Button size="sm" variant="ghost" disabled={busy} onClick={()=>{setError("");setDraft({id:saved.id,label:saved.label,model:saved.model || saved.label,endpoint:saved.endpoint,key:""});}}>Edit</Button>
         <Button size="sm" variant="ghost" disabled={busy} aria-label={`Remove ${saved.label}`} onClick={()=>void remove(saved.id)}>Remove</Button>
-      </SettingsRow>)}
+      </SettingsRow>})}
       {draft && <form className="space-y-3 p-4" onSubmit={event=>void save(event)}>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <label className="space-y-1 text-xs">Display name<Input aria-label="Display name" value={draft.label} onChange={event=>change("label",event.target.value)} placeholder="My coding model" disabled={busy}/></label>

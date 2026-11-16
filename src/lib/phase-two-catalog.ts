@@ -2,6 +2,8 @@ import { agentToolDefinitions } from "./agent-tools";
 import {reviewToolNames} from './review-tool-definitions';
 import {artifactToolNames} from './artifact-tool-definitions';
 import {webToolNames} from './web-research';
+import {projectAssetToolDefinitions,projectAssetToolNames} from './project-assets';
+import {designRecipeToolDefinitions,designRecipeToolNames} from './design-recipe-tool-definitions';
 
 export type ToolDefinition=typeof agentToolDefinitions[number];
 const string={type:"string"};const boolean={type:"boolean"};const integer={type:"integer"};
@@ -21,15 +23,16 @@ export const phaseTwoDefinitions:ToolDefinition[]=[
   tool("ToolSearch","Discover deferred tools by keywords or select:ToolA,ToolB. Matching schemas become available on the next model request. Search does not execute tools.",{query:string,max_results:{...integer,minimum:1,maximum:20}},["query"]),
 ];
 
-export const readOnlyTools=new Set(["Read","ListFiles","Glob","Grep","LSP","ToolSearch","Skill","TaskOutput",...reviewToolNames,...artifactToolNames,...webToolNames]);
-const allDefinitions=[...agentToolDefinitions,...phaseTwoDefinitions];
+const reviewInputTools=new Set(['BrowserAction','BrowserReplay']);
+export const readOnlyTools=new Set(["Read","ListFiles","Glob","Grep","LSP","ToolSearch","Skill","TaskOutput",...[...reviewToolNames].filter(name=>!reviewInputTools.has(name)),...artifactToolNames,...webToolNames,...projectAssetToolNames,...designRecipeToolNames]);
+const allDefinitions=[...agentToolDefinitions,...phaseTwoDefinitions,...projectAssetToolDefinitions,...designRecipeToolDefinitions];
 const coreWorkflowTools=["Agent","TaskOutput","TaskStop","TaskTakeover","EnterPlanMode","ExitPlanMode","EnterWorktree","ExitWorktree"];
 export class DeferredToolCatalog {
-  private loaded=new Set([...agentToolDefinitions.map(tool=>tool.function.name),...coreWorkflowTools,"ToolSearch","Skill"]);
+  private loaded=new Set([...agentToolDefinitions.map(tool=>tool.function.name),...coreWorkflowTools,...projectAssetToolNames,...designRecipeToolNames,"ToolSearch","Skill"]);
   constructor(private readonly readOnly=false,private readonly allowedTools?:ReadonlySet<string>){ }
   snapshot(){return [...this.loaded];}
   restore(names:string[]){this.loaded=new Set(names);}
-  allowed(name:string){return allDefinitions.some(tool=>tool.function.name===name)&&(!this.readOnly||readOnlyTools.has(name)||name==="Agent")&&(!this.allowedTools||this.allowedTools.has(name)||name==="ToolSearch");}
+  allowed(name:string){return allDefinitions.some(tool=>tool.function.name===name)&&(!this.readOnly||readOnlyTools.has(name)||name==="Agent"||name==='BrowserReplay'&&this.allowedTools?.has(name))&&(!this.allowedTools||this.allowedTools.has(name)||name==="ToolSearch");}
   definitions(){return allDefinitions.filter(tool=>(this.loaded.has(tool.function.name)||this.allowedTools?.has(tool.function.name))&&this.allowed(tool.function.name));}
   search(query:string,maxResults=5){
     if(!query.trim())throw Error("query must not be empty");

@@ -162,6 +162,7 @@ export interface CustomModel {
   model?: string;
   /** API key for that endpoint, stored per model on this device. */
   apiKey?: string;
+  designCheck?: import('../lib/model-capabilities').ModelDesignCheck;
 }
 
 /** Lite plans may add at most two custom models; more requires Lite+. */

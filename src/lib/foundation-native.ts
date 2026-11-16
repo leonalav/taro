@@ -35,6 +35,7 @@ export class NativeRunLedger implements RunLedger {
   return new NativeRunLedger(run.scope);
  }
  static listRecoverable(){if(!isTauri())return Promise.reject(Error("Recovery requires the desktop runtime"));return invoke<RunRecord[]>("foundation_list_recoverable");}
+ static read(scope:Scope){if(!isTauri())return Promise.reject(Error("Recovery requires the desktop runtime"));return new NativeRunLedger(scope).load();}
  private call<T>(command:string,args:Record<string,unknown>={}):Promise<T>{return invoke<T>(command,{scope:this.scope,...args});}
  reserveRequest(attemptId:string,kind:RequestReservation["kind"]){return this.call<RequestReservation>("foundation_reserve_request",{attemptId,kind});}
  appendExchange(exchangeId:string,exchange:unknown){return this.call<number>("foundation_record_exchange",{exchangeId,exchange});}

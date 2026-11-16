@@ -52,10 +52,10 @@ fn frontend_path(path: &Path, root: &Path) -> bool {
     let name = path.file_name().and_then(|value| value.to_str()).unwrap_or("").to_ascii_lowercase();
     matches!(extension.as_str(), "css" | "scss" | "sass" | "less" | "styl" | "html" | "htm" | "tsx" | "jsx" |
         "vue" | "svelte" | "astro" | "swiftui" | "xaml" | "svg" | "woff" | "woff2" | "ttf" | "webp" | "png" |
-        "jpg" | "jpeg" | "avif" | "gif" | "ico") ||
+        "jpg" | "jpeg" | "avif" | "gif" | "ico" | "otf" | "glb" | "gltf" | "hdr" | "exr" | "dds" | "ktx2" | "mp4" | "webm") ||
         relative.components().filter_map(|item| item.as_os_str().to_str()).any(|item| matches!(item.to_ascii_lowercase().as_str(),
             "component" | "components" | "views" | "pages" | "screens" | "layouts" | "styles" | "themes" | "public" |
-            "assets" | "templates" | "locales" | "frontend" | "client")) ||
+            "assets" | "taro-assets" | "templates" | "locales" | "frontend" | "client")) ||
         ["vite.config.", "next.config.", "tailwind.config.", "webpack.config."].iter().any(|prefix| name.starts_with(prefix)) ||
         matches!(name.as_str(), "package.json" | "pnpm-lock.yaml" | "tauri.conf.json")
 }
@@ -143,6 +143,9 @@ pub fn snapshot_workspace(root: &str) -> Result<String, String> {
                 continue;
             }
             let path = entry.path();
+            if kind.is_dir() && name.starts_with(".pending-") && path.starts_with(root.join("taro-assets")) {
+                continue;
+            }
             if kind.is_dir() {
                 directories.push(path);
             } else if kind.is_file() && (frontend_path(&path, &root) ||

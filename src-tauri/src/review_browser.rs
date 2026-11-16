@@ -17,8 +17,14 @@ impl Bridge {
         let nonce = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_nanos();
         let profile_root = std::env::temp_dir().join(format!("taro-review-native-{}-{nonce}", std::process::id()));
         std::fs::create_dir(&profile_root).map_err(|e| format!("Could not create the isolated browser profile: {e}"))?;
+        // Keep the embedded worker off the command line. Windows limits process arguments to 32,767 UTF-16 units.
+        let worker = profile_root.join("review-browser.mjs");
+        if let Err(error) = std::fs::write(&worker, include_bytes!("../../scripts/review-browser.mjs")) {
+            let _ = std::fs::remove_dir_all(&profile_root);
+            return Err(format!("Could not write the bundled browser helper: {error}"));
+        }
         let mut command = Command::new("node");
-        command.args(["--input-type=module", "--eval", include_str!("../../scripts/review-browser.mjs"), "--", "--stdio"])
+        command.arg(&worker).arg("--stdio")
             .env("TARO_REVIEW_PROFILE_ROOT", &profile_root)
             .stdin(std::process::Stdio::piped()).stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::null()).kill_on_drop(true);
@@ -26,7 +32,7 @@ impl Bridge {
         command.creation_flags(0x08000000);
         #[cfg(unix)]
         command.process_group(0);
-        let mut child = command.spawn().map_err(|_| { let _ = std::fs::remove_dir(&profile_root); "Review previews require Node.js 22+ on PATH and Microsoft Edge or Google Chrome. Install them, then retry opening the preview.".to_string() })?;
+        let mut child = command.spawn().map_err(|_| { let _ = std::fs::remove_dir_all(&profile_root); "Review previews require Node.js 22+ on PATH and Microsoft Edge or Google Chrome. Install them, then retry opening the preview.".to_string() })?;
         #[cfg(windows)]
         let job = crate::terminals::ProcessJob::attach(child.raw_handle())?;
         let input = child.stdin.take().ok_or("Could not connect to the browser input.")?;
@@ -44,8 +50,8 @@ impl Bridge {
             .map_err(|_| "Preview browser timed out. Reopen the preview to retry.".to_string())?
             .map_err(|e| e.to_string())?;
         if size == 0 { return Err("The browser helper exited. Review requires Node.js 22+ and an installed Chromium browser.".into()); }
-        let value: Value = serde_json::from_str(&response).map_err(|_| "Invalid response from the preview browser.".to_string())?;
-        if value["ok"] == true { Ok(value["value"].clone()) } else { Err(value["error"].as_str().unwrap_or("Browser request failed.").to_string()) }
+        let mut value: Value = serde_json::from_str(&response).map_err(|_| "Invalid response from the preview browser.".to_string())?;
+        if value["ok"] == true { Ok(value["value"].take()) } else { Err(value["error"].as_str().unwrap_or("Browser request failed.").to_string()) }
     }
     async fn shutdown(mut self) {
         // EOF lets Node close Chromium and remove its profile before exiting.
@@ -103,6 +109,25 @@ mod tests {
         let inspected = bridge.request(serde_json::json!({"key":"native-review-test","action":"inspect","selector":"#hero"})).await.unwrap();
         assert_eq!(inspected["selection"]["rect"]["width"], 321);
         assert_eq!(inspected["selection"]["rect"]["height"], 87);
+        let element = bridge.request(serde_json::json!({"key":"native-review-test","action":"capture","capture":{"mode":"element","selector":"#hero"}})).await.unwrap();
+        assert_eq!(element["evidence"]["bounds"]["width"], 321);
+        let mut live_frame = None;
+        for _ in 0..20 {
+            let sample = bridge.request(serde_json::json!({"key":"native-review-test","action":"live-frame","liveId":"native-viewer"})).await.unwrap();
+            if sample["screenshot"].is_string() { live_frame = Some(sample); break; }
+            tokio::time::sleep(std::time::Duration::from_millis(85)).await;
+        }
+        let live_frame = live_frame.expect("the embedded worker delivered a compositor frame over stdio");
+        assert!(live_frame["screenshot"].as_str().unwrap().starts_with("data:image/jpeg;base64,"));
+        assert_eq!(live_frame["viewport"]["width"], 920);
+        let stopped = bridge.request(serde_json::json!({"key":"native-review-test","action":"stop-live","liveId":"native-viewer"})).await.unwrap();
+        assert_eq!(stopped["stopped"], true);
+        let replay = bridge.request(serde_json::json!({"key":"native-review-test","action":"replay","replay":{
+            "name":"Native replay",
+            "steps":[{"input":{"type":"hover","selector":"#hero"},"expect":{"selector":"#hero","text":"Native preview"}}]
+        }})).await.unwrap();
+        assert_eq!(replay["run"]["status"], "passed");
+        assert_eq!(replay["run"]["frames"].as_array().unwrap().len(), 2);
         // Closing stdin lets the helper shut down Chromium and remove its temporary profile.
         let profile = bridge.profile_root.clone();
         bridge.shutdown().await;

@@ -5,7 +5,11 @@ export type ArtifactTheme = 'light' | 'dark';
 const colorRoles = ['canvas', 'surface', 'raised', 'text', 'muted', 'border', 'accent', 'onAccent', 'success', 'onSuccess', 'warning', 'onWarning', 'info', 'onInfo', 'danger', 'onDanger', 'focus'] as const;
 type Colors = Record<typeof colorRoles[number], string>;
 const typeRoles = ['display', 'headline', 'title', 'body', 'caption', 'code'] as const;
-export interface ArtifactTypeRole { family: string; size: number; lineHeight: number; weight: number; tracking: number }
+export interface ArtifactTypeRole {
+  family: string; size: number; lineHeight: number; weight: number; tracking: number;
+  responsive?: { min: number; max: number; fromWidth: number; toWidth: number };
+  fontAssetId?: string;
+}
 export interface ArtifactDesign {
   version: 1; name: string; direction: ArtifactDirection;
   neutral: string[]; themes: Record<ArtifactTheme, Colors>;
@@ -16,7 +20,7 @@ export interface ArtifactDesign {
   motion: { fast: number; normal: number; slow: number; easing: [number, number, number, number] };
   grid: { columns: number; maxWidth: number; gutter: number; breakpoints: { sm: number; md: number; lg: number } };
   components: { target: number; controlPadding: number; cardPadding: number; focusWidth: number };
-  media: { ratio: 'landscape' | 'portrait' | 'square'; fit: 'cover' | 'contain'; treatment: string; emptyState: string };
+  media: { ratio: 'landscape' | 'portrait' | 'square'; fit: 'cover' | 'contain'; treatment: string; emptyState: string; focalPoint?: { x: number; y: number } };
   guidance: string;
 }
 const light: Colors = { canvas:'#fafaf8',surface:'#ffffff',raised:'#f0efeb',text:'#18231d',muted:'#536057',border:'#a8b0a9',accent:'#a63716',onAccent:'#ffffff',success:'#216340',onSuccess:'#ffffff',warning:'#845100',onWarning:'#ffffff',info:'#205b90',onInfo:'#ffffff',danger:'#aa2937',onDanger:'#ffffff',focus:'#205b90' };
@@ -48,7 +52,8 @@ export function validateArtifactDesign(value: unknown): ArtifactDesign {
   const shape=(actual:unknown,expected:unknown,path:string)=>{
     if(!expected||typeof expected!=='object'||Array.isArray(expected))return;
     if(!actual||typeof actual!=='object'||Array.isArray(actual))throw Error(`Missing ${path}.`);
-    for(const key of Object.keys(actual))if(!Object.prototype.hasOwnProperty.call(expected,key))throw Error(`Unknown ${path}.${key}.`);
+    const optional=path==='contract.media'?['focalPoint']:/^contract\.typography\.[^.]+$/.test(path)?['responsive','fontAssetId']:[];
+    for(const key of Object.keys(actual))if(!Object.prototype.hasOwnProperty.call(expected,key)&&!optional.includes(key))throw Error(`Unknown ${path}.${key}.`);
     for(const [key,child] of Object.entries(expected))shape((actual as Record<string,unknown>)[key],child,`${path}.${key}`);
   };
   shape(d,createArtifactDesign(),'contract');
@@ -61,6 +66,16 @@ export function validateArtifactDesign(value: unknown): ArtifactDesign {
   for(const theme of ['light','dark'] as const)for(const key of colorRoles)hex(d.themes?.[theme]?.[key]);
   for(const key of typeRoles){const r=d.typography?.[key];if(!r)throw Error(`Missing typography ${key}.`);text(r.family,160,'font family');if(!/^[\w\s,'"-]+$/.test(r.family))throw Error('Unsafe font family.');number(r.size,10,120,'font size');number(r.weight,100,900,'font weight');number(r.lineHeight,1,2.2,'line height');number(r.tracking,-0.04,0.2,'tracking');}
   const spaceKeys=['0','1','2','3','4','6','8','12','16','24'];
+  for(const key of typeRoles){
+    const {responsive:range,fontAssetId}=d.typography[key];
+    if(fontAssetId!==undefined&&(typeof fontAssetId!=='string'||!/^[a-z0-9:_-]{1,100}$/i.test(fontAssetId)))throw Error('Invalid font asset ID.');
+    if(range!==undefined){
+      shape(range,{min:0,max:0,fromWidth:0,toWidth:0},`contract.typography.${key}.responsive`);
+      number(range.min,10,120,'minimum responsive font size');number(range.max,10,120,'maximum responsive font size');
+      number(range.fromWidth,300,2560,'responsive type start width');number(range.toWidth,300,2560,'responsive type end width');
+      if(range.min>range.max||range.toWidth-range.fromWidth<100)throw Error('Responsive role sizes and viewport bounds must increase.');
+    }
+  }
   if(!d.spacing||Object.keys(d.spacing).length!==spaceKeys.length)throw Error('Invalid spacing scale.');
   for(const key of spaceKeys)number(d.spacing[key],0,256,'spacing');
   if(d.spacing['0']!==0||spaceKeys.some((key,i)=>i>0&&d.spacing[key]<=d.spacing[spaceKeys[i-1]]))throw Error('Spacing must be an increasing scale starting at zero.');
@@ -73,6 +88,7 @@ export function validateArtifactDesign(value: unknown): ArtifactDesign {
   const breaks=['sm','md','lg'] as const;for(const key of breaks)number(d.grid.breakpoints?.[key],320,2560,'breakpoint');if(d.grid.breakpoints.sm>=d.grid.breakpoints.md||d.grid.breakpoints.md>=d.grid.breakpoints.lg)throw Error('Breakpoints must increase.');
   number(d.components?.target,24,64,'minimum target');number(d.components.controlPadding,4,32,'control padding');number(d.components.cardPadding,8,64,'card padding');number(d.components.focusWidth,2,6,'focus width');
   if(!['landscape','portrait','square'].includes(d.media?.ratio)||!['cover','contain'].includes(d.media?.fit))throw Error('Invalid media treatment.');text(d.media.treatment,2000,'media direction');text(d.media.emptyState,1000,'empty state');text(d.guidance,4000,'guidance');
+  if(d.media.focalPoint!==undefined){shape(d.media.focalPoint,{x:0,y:0},'contract.media.focalPoint');number(d.media.focalPoint.x,0,1,'horizontal focal point');number(d.media.focalPoint.y,0,1,'vertical focal point');}
   return JSON.parse(JSON.stringify(d));
 }
 
@@ -82,11 +98,21 @@ export function artifactCss(input: ArtifactDesign): string {
   const colors=(theme:ArtifactTheme)=>colorRoles.map(key=>`--art-${key.replace(/[A-Z]/g,s=>`-${s.toLowerCase()}`)}:${d.themes[theme][key]}`).join(';');
   const tokens=[...d.neutral.map((v,i)=>`--art-neutral-${i}:${v}`),...Object.entries(d.spacing).map(([k,v])=>`--art-space-${k}:${v}px`),...Object.entries(d.radius).map(([k,v])=>`--art-radius-${k}:${v}px`),...Object.entries(d.elevation).map(([k,v])=>`--art-shadow-${k}:0 ${v.y}px ${v.blur}px rgb(0 0 0 / ${v.opacity})`),...Object.entries(d.blur).map(([k,v])=>`--art-blur-${k}:${v}px`),...(['fast','normal','slow'] as const).map(k=>`--art-motion-${k}:${d.motion[k]}ms`),...Object.entries(d.grid.breakpoints).map(([k,v])=>`--art-breakpoint-${k}:${v}px`),`--art-grid-columns:${d.grid.columns}`,`--art-ease:cubic-bezier(${d.motion.easing.join(',')})`,`--art-target:${d.components.target}px`,`--art-gutter:${d.grid.gutter}px`,`--art-max-width:${d.grid.maxWidth}px`];
   for(const key of typeRoles){const r=d.typography[key];tokens.push(`--art-font-${key}:${r.family}`,`--art-type-${key}:${r.size}px`,`--art-leading-${key}:${r.lineHeight}`,`--art-weight-${key}:${r.weight}`,`--art-tracking-${key}:${r.tracking}em`);}
-  return `${scope}{${tokens.join(';')};${colors('light')};color-scheme:light;display:block;min-height:100vh;background:var(--art-canvas);color:var(--art-text);font:var(--art-type-body)/var(--art-leading-body) var(--art-font-body);accent-color:var(--art-accent);caret-color:var(--art-accent);scrollbar-color:var(--art-border) var(--art-canvas)}
+  const typeSize=(key:typeof typeRoles[number])=>{
+    const range=d.typography[key].responsive;
+    if(!range)return key==='display'||key==='headline'?`clamp(${key==='display'?36:28}px,${key==='display'?6:4}vw,var(--art-type-${key}))`:`var(--art-type-${key})`;
+    const slope=(range.max-range.min)/(range.toWidth-range.fromWidth);
+    const intercept=(range.min-range.fromWidth*slope)/16;
+    return `clamp(${range.min/16}rem,calc(${Number(intercept.toFixed(5))}rem + ${Number((slope*100).toFixed(5))}vw),${range.max/16}rem)`;
+  };
+  const focal=d.media.focalPoint;
+  const position=focal?`${scope} .art-media{object-position:${focal.x*100}% ${focal.y*100}%}`:'';
+  return `${scope}{${tokens.join(';')};${colors('light')};color-scheme:light;display:block;min-height:100vh;background:var(--art-canvas);color:var(--art-text);font:${typeSize('body')}/var(--art-leading-body) var(--art-font-body);accent-color:var(--art-accent);caret-color:var(--art-accent);scrollbar-color:var(--art-border) var(--art-canvas)}
 ${scope}[data-theme=dark]{${colors('dark')};color-scheme:dark}
 @media(prefers-color-scheme:dark){${scope}:not([data-theme=light]){${colors('dark')};color-scheme:dark}}
 ${scope},${scope} *{box-sizing:border-box} ${scope} :where(h1,h2,h3,p){margin:0} ${scope} :where(h1,h2,h3){text-wrap:balance;overflow-wrap:anywhere} ${scope} p{max-width:70ch} ${scope} ::selection{background:var(--art-accent);color:var(--art-on-accent)}
-${typeRoles.map(key=>{const fluid=key==='display'||key==='headline';return `${scope} .art-${key}{font-family:var(--art-font-${key});font-size:${fluid?`clamp(${key==='display'?36:28}px,${key==='display'?6:4}vw,var(--art-type-${key}))`:`var(--art-type-${key})`};font-weight:var(--art-weight-${key});line-height:var(--art-leading-${key});letter-spacing:var(--art-tracking-${key})}`;}).join('\n')}
+${typeRoles.map(key=>`${scope} .art-${key}{font-family:var(--art-font-${key});font-size:${typeSize(key)};font-weight:var(--art-weight-${key});line-height:var(--art-leading-${key});letter-spacing:var(--art-tracking-${key})}`).join('\n')}
+${position}
 ${scope} .art-display em,${scope} .art-headline em{font-family:var(--art-font-display);font-style:italic} ${scope} .art-skip{position:absolute;top:8px;left:16px;transform:translateY(-200%);z-index:1;padding:var(--art-space-2);background:var(--art-surface)} ${scope} .art-skip:focus{transform:none}
 ${scope} .art-shell{width:min(100%,var(--art-max-width));margin-inline:auto;padding:var(--art-space-6) var(--art-gutter)} ${scope} .art-stack{display:flex;flex-direction:column;gap:var(--art-space-6)} ${scope} .art-cluster{display:flex;flex-wrap:wrap;align-items:center;gap:var(--art-space-3)} ${scope} .art-grid{display:grid;grid-template-columns:repeat(${d.grid.columns},minmax(0,1fr));gap:var(--art-gutter)} ${scope} .art-grid>*{min-width:0;grid-column:span ${Math.max(1,Math.floor(d.grid.columns/3))}} ${scope} .art-split{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(0,1fr);gap:var(--art-space-12);align-items:center}
 ${scope} .art-section{padding-block:var(--art-space-16)} ${scope} .art-card{padding:${d.components.cardPadding}px;border-radius:var(--art-radius-card);background:var(--art-surface)} ${scope} .art-elevated{box-shadow:var(--art-shadow-low)} ${scope} .art-muted{color:var(--art-muted)} ${scope} .art-rule{border:0;border-top:1px solid var(--art-border);margin:var(--art-space-6) 0}

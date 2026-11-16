@@ -2,6 +2,7 @@ import type { ToolOutput } from './agent-tools';
 import { artifactCss, createArtifactDesign, validateArtifactDesign, type ArtifactDesign, type ArtifactDesignRepository, type ArtifactDirection } from './artifact-design';
 import { artifactDesignRepository } from './artifact-design-persistence';
 import { artifactTemplate, type ArtifactTemplateKind } from './artifact-templates';
+import { artifactTokens } from './artifact-tokens';
 
 export interface ArtifactServices { repository:ArtifactDesignRepository }
 export interface ArtifactContext { workspace:string;readOnly:boolean;planning:boolean;signal?:AbortSignal;designIntent?:ArtifactDesign }
@@ -14,7 +15,7 @@ export const artifactComponentContract={
 };
 export async function executeArtifactTool(input:Record<string,unknown>,context:ArtifactContext,services:ArtifactServices={repository:artifactDesignRepository}):Promise<ToolOutput> {
   const active=()=>{if(context.signal?.aborted)throw Error('Artifact design tool stopped.');};active();
-  const action=input.action??'read';if(!['read','save','export','template'].includes(String(action)))throw Error('Unknown artifact design action.');
+  const action=input.action??'read';if(!['read','save','export','tokens','template'].includes(String(action)))throw Error('Unknown artifact design action.');
   const output=(value:unknown):ToolOutput=>({text:typeof value==='string'?value:JSON.stringify(value),artifact:{kind:'artifact-design',action}});
   if(action==='save'){
     if(context.designIntent)throw Error('The design job owns project memory updates after verification.');
@@ -28,6 +29,7 @@ export async function executeArtifactTool(input:Record<string,unknown>,context:A
   if(context.designIntent&&input.design!==undefined)throw Error('Use the approved job contract for this export.');
   const design=context.designIntent??(input.design!==undefined?validateArtifactDesign(input.design):saved?.design??createArtifactDesign((input.direction??'editorial') as ArtifactDirection));
   if(action==='export')return output(artifactCss(design));
+  if(action==='tokens')return output(artifactTokens(design));
   if(action==='template')return output(artifactTemplate(design,input.template as ArtifactTemplateKind,input.title===undefined?design.name:String(input.title)));
   return output({saved:!!saved,revision:saved?.revision??0,design,source:context.designIntent?'approved-design-intent':saved?'project-memory':'starter',componentContract:artifactComponentContract,templateKinds:['hero','dashboard','gallery','form','pricing','mobile'],note:context.designIntent?'Use the approved design intent for this job.':saved?'Preserve this project identity unless the user requests a change.':'Inspect existing project styles before adopting a starter. Save the adapted contract to retain it across chats.'});
 }

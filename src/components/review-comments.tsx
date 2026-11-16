@@ -54,6 +54,7 @@ export function ReviewThreadCard({thread,onReply,onResolve,onClose,onHandoff,can
       <ReviewMarkdown body={message.body}/>
     </div>)}
     {thread.anchor.selector&&<div className="review-anchor-label" title={thread.anchor.selector}><Code2/>{thread.anchor.selector}</div>}
+    {thread.anchor.evidenceId&&<div className="review-anchor-label"><Code2/>Saved browser evidence</div>}
     {error&&<p role="alert" className="review-error">{error}</p>}
     <div className="review-thread-actions"><button type="button" onClick={()=>setReply(value=>!value)}><MessageSquare/>Reply</button><button type="button" disabled={busy} onClick={async()=>{setBusy(true);setError('');try{await onResolve(!thread.resolved);}catch(error){setError(String(error));}finally{setBusy(false);}}}>{thread.resolved?<RotateCcw/>:<Check/>}{thread.resolved?'Reopen':'Resolve'}</button>{thread.resolved&&<span>{thread.resolution?"Verified fix":"Manually resolved"}</span>}{!thread.resolved&&onHandoff&&<><button type="button" onClick={()=>handoff('composer')}>Send to agent</button>{canOpenTask&&<button type="button" onClick={()=>handoff('task')}>Open task</button>}</>}</div>
     {reply&&<CommentComposer label="Reply to comment" submitLabel="Reply" onCancel={()=>setReply(false)} onSubmit={async body=>{await onReply(body);setReply(false);}}/>}

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { artifactCss, createArtifactDesign, createArtifactDesignRepository, validateArtifactDesign } from './artifact-design';
 import { artifactTemplate } from './artifact-templates';
+import { artifactTokens } from './artifact-tokens';
 
 describe('project artifact design', () => {
   it('exports independent artifact themes and responsive roles without changing app tokens', () => {
@@ -27,6 +28,17 @@ describe('project artifact design', () => {
     const validated = validateArtifactDesign(design);
     validated.name = 'Changed';
     expect(design.name).not.toBe('Changed');
+  });
+  it('exports a bounded fluid role and image focal point while preserving the font identity in portable tokens',()=>{
+    const design=createArtifactDesign();
+    design.typography.title={...design.typography.title,responsive:{min:16,max:32,fromWidth:320,toWidth:960},fontAssetId:'project-serifs'};
+    design.media.focalPoint={x:0.25,y:0.75};
+    const css=artifactCss(design);
+    expect(css).toContain('font-size:clamp(1rem,calc(0.5rem + 2.5vw),2rem)');
+    expect(css).toContain('object-position:25% 75%');
+    expect(artifactTokens(design)).toMatchObject({typography:{title:{$type:'typography',$extensions:{'app.taro.design':{fontAssetId:'project-serifs',responsive:design.typography.title.responsive}}}}});
+    expect(()=>artifactCss({...design,media:{...design.media,focalPoint:{x:2,y:1}}})).toThrow('focal point');
+    expect(()=>artifactCss({...design,typography:{...design.typography,title:{...design.typography.title,responsive:{min:20,max:15,fromWidth:320,toWidth:960}}}})).toThrow('increase');
   });
   it('prevents lost updates across repository instances when storage provides atomic compare-and-swap',async()=>{
     let raw:string|null=null;

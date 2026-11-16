@@ -1,5 +1,6 @@
 import {describe,it,expect} from "vitest";
-import {activityFromTool,agentToolDefinitions,approvalRequired,isInspectionBash,toolKind} from "./agent-tools";
+import {activityFromTool,agentToolDefinitions,approvalRequired,isInspectionBash,publicToolActivity,toolKind} from "./agent-tools";
+import { DesignHandoffRejection } from './design-handoff-diagnostic';
 
 describe("coding tool registry",()=>{
  it("exposes every requested tool to OpenAI-compatible models",()=>{
@@ -29,6 +30,15 @@ describe("coding tool registry",()=>{
  it("retains image reads for visual artifacts",()=>{
   const item=activityFromTool({id:"4",name:"Read",arguments:"{}"},{file_path:"a.png"},{text:"Image: a.png",artifact:{kind:"image",dataUrl:"data:image/png;base64,AAAA"}},undefined,1);
   expect(item.imageDataUrl).toBe("data:image/png;base64,AAAA");
+ });
+ it('shows a fixed public handoff reason and removes private fields or forged diagnostics',()=>{
+  const call={id:'handoff',name:'SubmitDesignHandoff',arguments:'{}'};
+  const marker='private-field-marker';
+  const error=new DesignHandoffRejection(Error(`Unsupported style contract field ${marker}`));
+  const activity=activityFromTool(call,{artifact:{[marker]:true}},undefined,error,16);
+  expect(publicToolActivity(activity)).toMatchObject({label:'Submit design handoff',status:'failed',errorTrace:'The style failed validation. Start from the assigned style and send only supported changes.'});
+  expect(JSON.stringify(activity)).not.toContain(marker);
+  expect(JSON.stringify(publicToolActivity({...activity,errorTrace:marker,detail:marker,output:marker}))).not.toContain(marker);
  });
  it("marks nonzero shell exits as failed artifacts",()=>{
   const item=activityFromTool({id:"5",name:"Bash",arguments:"{}"},{command:"false"},{text:"Exit code: 1",artifact:{kind:"bash",exitCode:1}},undefined,10);

@@ -20,7 +20,7 @@ export interface GateDecision { allowed: boolean; reason?: string; nextTool?: st
 const nonMutatingTools = new Set(['Read', 'ListFiles', 'Glob', 'Grep', 'LSP', 'ToolSearch', 'Skill',
   'TaskOutput', 'TaskStop', 'TaskTakeover', 'StopChildTasks', 'EnterPlanMode', 'ExitPlanMode',
   'Agent', 'DesignJob', 'SubmitDesignHandoff', 'BrowserInspect', 'BrowserAudit', 'BrowserViewport',
-  'BrowserComment', 'BrowserComments', 'WebSearch', 'WebFetch', 'EnterWorktree', 'ExitWorktree']);
+  'BrowserComment', 'BrowserComments', 'BrowserAction', 'BrowserCapture', 'BrowserReplay', 'DesignRecipe', 'ProjectAssets', 'WebSearch', 'WebFetch', 'EnterWorktree', 'ExitWorktree']);
 const editTools = new Set(['Write', 'Edit', 'NotebookEdit']);
 function describeTool(tool: string, input: Record<string, unknown>): MutationDescriptor {
   let effect: MutationDescriptor['effect'] = 'external-unknown';
@@ -79,6 +79,15 @@ export function createAdiRuntime({ registry, repository, commit }: Services, ide
           context, sourceReceipts: [], evidenceIds: [], mutationGeneration: 0, blockedReasons: [] }));
       });
     },
+    async applyProjectDirection(next: RunRequest) {
+      return sequence(async()=>{
+        const current=state();
+        if(current.contract)return;
+        request=next;
+        const context=classifyDesignContext(collectDesignSignals(request,workspace));
+        await save(value=>({...value,context}));
+      });
+    },
     beforeTool(tool: string, input: Record<string, unknown>, owner: Owner): Promise<GateDecision> {
       return sequence(async () => {
         const operation = describeTool(tool, input);
@@ -108,18 +117,21 @@ export function createAdiRuntime({ registry, repository, commit }: Services, ide
       return sequence(async () => {
         const current = state();
         const selection = baseline(current);
-        if (name === 'DesignContext') return output(name, { context: current.context, selection: {
+        if (name === 'DesignContext') {
+          const unread=missingReceipts(current,selection.requiredRuleIds);
+          return output(name, { context: current.context, selection: {
           requiredRuleIds: selection.requiredRuleIds, advisoryRuleIds: selection.advisoryRuleIds,
           rules: [...selection.requiredRuleIds, ...selection.advisoryRuleIds].map(id => ({ id, title: registry.getRule(id)?.title })),
-          unreadRequiredRuleIds: missingReceipts(current, selection.requiredRuleIds),
-        }, next: 'Read required rules with ConventionRead missing_required=true until remaining is 0. Use exact IDs in grouped DesignPlan decisions.' });
+          unreadRequiredRuleIds: unread,
+          }, next: unread.length?'Read the remaining required rules with ConventionRead missing_required=true.':'All required rules have receipts. Submit grouped DesignPlan decisions with the exact IDs and target files.' });
+        }
         if (name === 'ConventionSearch') return output(name, registry.search(input as ConventionQuery));
         if (name === 'DesignChecks') return output(name, {completion:decision(),checks:current.contract?evaluateCheckCoverage(buildCheckPlan(current.contract,registry),current.evidence??[]):[]});
         if (name === 'ConventionRead') {
           const missing = missingReceipts(current, selection.requiredRuleIds);
           const ids = input.missing_required === true ? missing.slice(0, 6) : input.rule_ids;
           if (!stringList(ids) || ids.length > 12 || (!ids.length && input.missing_required !== true)) throw Error('Supply one to 12 exact rule IDs or set missing_required to true.');
-          if (!ids.length) return output(name, { rules: [], remaining: 0 });
+          if (!ids.length) return output(name, { rules: [], remaining: 0, next:'All required rules have receipts. Submit DesignPlan with action=submit before writing files.' });
           const rules = [...new Set(ids)].map(id => {
             const rule = registry.getRule(id);
             if (!rule) throw Error('Unknown convention: ' + id);
@@ -213,13 +225,20 @@ export function createAdiRuntime({ registry, repository, commit }: Services, ide
       return {...outcome,receiptId};
     }); },
     contract: () => snapshot?.state.contract,
+    readyToSubmitPlan() {
+      const current=snapshot?.state;
+      return !!current&&needsPlan(current)&&!current.contract&&missingReceipts(current,baseline(current).requiredRuleIds).length===0;
+    },
     designContext:()=>snapshot?.state.context,
     contextFor() {
       const current = snapshot?.state;
       if (!current || !needsPlan(current)) return '';
-      return current.contract
-        ? 'ADI contract ' + current.contract.id + ' (' + current.contract.digest + '). Use DesignChecks for missing verification.'
-        : 'Before frontend work, call DesignContext and inspect the exact selected rule IDs. Call ConventionRead with missing_required=true until remaining is 0. Then submit DesignPlan with grouped concrete decisions, workspace-relative target files, and non-empty acceptance checks. Do not attempt Write or Edit until DesignPlan succeeds.';
+      if(current.contract)return 'ADI contract ' + current.contract.id + ' (' + current.contract.digest + '). Use DesignChecks for missing verification.';
+      const required=baseline(current).requiredRuleIds;
+      const unread=missingReceipts(current,required);
+      return unread.length
+        ? `ADI has ${unread.length} unread required rules. Call ConventionRead with missing_required=true until remaining is 0, then submit DesignPlan before writing files.`
+        : `All required ADI rules have receipts. Submit DesignPlan with action=submit now. Group the required IDs (${required.join(', ')}) into concrete decisions with workspace-relative target files and non-empty acceptance checks. Continue implementation after the plan is accepted.`;
     },
   };
 }

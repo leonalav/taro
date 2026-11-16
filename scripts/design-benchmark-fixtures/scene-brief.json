@@ -1,0 +1,18 @@
+{
+  "particleScene": {"seed":807143,"subject":"a dense amber core in a field of blue points","pauseLabel":"Pause motion"},
+  "cameraStory": [
+    {"title":"At a distance","target":"outline and negative space around the vessel","caption":"A broad shoulder above a narrow foot."},
+    {"title":"Along the rim","target":"asymmetry in the lip","caption":"The opening has a soft, uneven edge."},
+    {"title":"At the base","target":"the narrower circular foot","caption":"The form gathers inward near the surface."}
+  ],
+  "materials": [
+    {"name":"Ash porcelain","description":"A near-white ceramic with a broad matte highlight."},
+    {"name":"Slate slip","description":"A dusty blue finish with a subdued highlight."},
+    {"name":"Oiled iron","description":"A dark warm finish that catches a narrower highlight."}
+  ],
+  "objects": [
+    {"id":"upper-rim","label":"Rim","description":"A wavy upper outline around the opening."},
+    {"id":"vessel-shoulder","label":"Shoulder","description":"The rounded upper wall below the opening."},
+    {"id":"vessel-foot","label":"Foot","description":"The narrow ring supporting the vessel."}
+  ]
+}

@@ -19,18 +19,22 @@ import {
   X,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { DesignRecipesPanel } from "@/components/design-recipes-panel";
+import { ProjectAssetsPanel } from "@/components/project-assets-panel";
 import { Button } from "@/components/ui/button";
 import { Dialog } from "@/components/ui/dialog";
 import { DropdownMenu, type DropdownOption } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { mediaCategories, mediaItems, type MediaItem } from "@/data/media";
+import type { DesignRecipeSelection } from "@/lib/design-recipes";
 import type { Library, SavedMedia } from "@/lib/media-store";
+import { downloadProjectAsset, projectAssetsAvailable } from "@/lib/project-assets";
 import { cn } from "@/utils/cn";
 
 type SortId = "name-asc" | "name-desc" | "pro-desc" | "pro-asc" | "rating-desc" | "popular";
 type Access = "all" | "free" | "pro";
-type Tab = "browse" | "downloads" | "uploads";
+type Tab = "browse" | "downloads" | "uploads" | "recipes" | "assets";
 
 const sortOptions: DropdownOption<SortId>[] = [
   { value: "name-asc", label: "A → Z", icon: <ArrowDownAZ className="size-3.5" /> },
@@ -44,7 +48,13 @@ const sortOptions: DropdownOption<SortId>[] = [
 const PAGE_SIZE = 12;
 const proOnly = (item: MediaItem) => item.price > 0;
 
-export function GalleryPage({ onBack, library, onReuse }: { onBack: () => void; library: Library; onReuse: (item: MediaItem) => void }) {
+export function GalleryPage({ onBack, library, onReuse, workspaceRoot, onUseRecipe }: {
+  onBack: () => void;
+  library: Library;
+  onReuse: (item: MediaItem) => void;
+  workspaceRoot?: string;
+  onUseRecipe?: (selection: DesignRecipeSelection) => void;
+}) {
   const [tab, setTab] = React.useState<Tab>("browse");
   const [query, setQuery] = React.useState("");
   const [sort, setSort] = React.useState<SortId>("popular");
@@ -53,8 +63,12 @@ export function GalleryPage({ onBack, library, onReuse }: { onBack: () => void; 
   const [limit, setLimit] = React.useState(PAGE_SIZE);
   const [autoplay, setAutoplay] = React.useState(true);
   const [active, setActive] = React.useState<MediaItem | SavedMedia | null>(null);
+  const [stockImport, setStockImport] = React.useState<{ id: string; root: string; busy?: boolean; error?: string }>();
+  const activeScope = React.useRef({ root: workspaceRoot, id: active?.id });
+  activeScope.current = { root: workspaceRoot, id: active?.id };
   const [showMore, setShowMore] = React.useState(true);
   const sentinelRef = React.useRef<HTMLDivElement>(null);
+  const showMedia = tab === "browse" || tab === "downloads" || tab === "uploads";
 
   // Remove credentials saved by the retired remote-provider controls.
   React.useEffect(() => {
@@ -133,23 +147,43 @@ export function GalleryPage({ onBack, library, onReuse }: { onBack: () => void; 
   };
 
   const downloadItem = (item: MediaItem | SavedMedia) => {
-    library.saveDownload(item);
     const src = item.video || item.poster;
     void (async () => {
       try {
         const res = await fetch(src);
         if (!res.ok) throw new Error(String(res.status));
         const blob = await res.blob();
+        if (!blob.size) throw new Error("The download was empty.");
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
         a.download = `${item.title.replace(/\s+/g, "-").toLowerCase()}.${item.video ? "mp4" : "jpg"}`;
         a.click();
+        library.saveDownload(item);
         window.setTimeout(() => URL.revokeObjectURL(url), 1000);
       } catch {
         window.open(src, "_blank", "noopener");
       }
     })();
+  };
+
+  const addStockAsset = async (item: MediaItem) => {
+    const root = workspaceRoot;
+    if (!root || stockImport?.busy || !item.video) return;
+    setStockImport({ id: item.id, root, busy: true });
+    try {
+      const filename = `${item.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "background"}.mp4`;
+      await downloadProjectAsset(root, item.video, filename, {
+        origin: "downloaded", provider: "Pexels", pageUrl: item.pageUrl || undefined, creator: item.creator,
+      });
+      if (activeScope.current.root === root && activeScope.current.id === item.id) {
+        setActive(null);
+        setTab("assets");
+      }
+      setStockImport(undefined);
+    } catch (error) {
+      setStockImport({ id: item.id, root, error: error instanceof Error ? error.message : String(error) });
+    }
   };
 
   return (
@@ -161,16 +195,18 @@ export function GalleryPage({ onBack, library, onReuse }: { onBack: () => void; 
           </Button>
           <div className="min-w-0">
             <h1 className="text-lg font-semibold tracking-tight">Gallery</h1>
-            <p className="mt-0.5 text-[13px] text-muted-foreground">Animated backgrounds for your frames. Hover to preview, click to inspect.</p>
+            <p className="mt-0.5 text-[13px] text-muted-foreground">
+              {tab === "recipes" ? "Preview and adapt web and 3D examples." : tab === "assets" ? "Manage the files and source details for this project." : "Animated backgrounds for your frames. Hover to preview, click to inspect."}
+            </p>
           </div>
-          <div className="ml-auto flex items-center gap-2.5 pt-1">
+          {showMedia && <div className="ml-auto flex items-center gap-2.5 pt-1">
             <Play className="size-3.5 text-muted-foreground" />
             <span className="text-xs text-muted-foreground">Autoplay on hover</span>
             <Switch aria-label="Autoplay on hover" checked={autoplay} onCheckedChange={setAutoplay} />
-          </div>
+          </div>}
         </div>
 
-        <div className="mt-4 flex flex-wrap items-center gap-2">
+        {showMedia && <div className="mt-4 flex flex-wrap items-center gap-2">
           <div className="relative min-w-40 flex-1 md:max-w-xs">
             <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
             <Input
@@ -224,7 +260,7 @@ export function GalleryPage({ onBack, library, onReuse }: { onBack: () => void; 
               <input type="file" accept="video/*" multiple className="hidden" onChange={(e) => { onUpload(e.target.files); e.target.value = ""; }} />
             </label>
           )}
-        </div>
+        </div>}
 
         {tab === "browse" && (
           <div className="scrollbar-none mt-3 flex items-center gap-1.5 overflow-x-auto">
@@ -247,8 +283,10 @@ export function GalleryPage({ onBack, library, onReuse }: { onBack: () => void; 
         )}
       </header>
 
-      <div className="flex shrink-0 items-center gap-1 border-b border-border px-6">
+      <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border px-6">
         <TabButton active={tab === "browse"} onClick={() => setTab("browse")}>Browse</TabButton>
+        <TabButton active={tab === "recipes"} onClick={() => setTab("recipes")}>Recipes</TabButton>
+        <TabButton active={tab === "assets"} onClick={() => setTab("assets")}>Project assets</TabButton>
         <span className="mx-2 h-4 w-px bg-border" />
         <span className="mr-1 text-xs text-muted-foreground">Your Media</span>
         <TabButton active={tab === "downloads"} onClick={() => setTab("downloads")}><Download className="size-3.5" />Downloads<Count value={library.downloads.length} /></TabButton>
@@ -256,6 +294,9 @@ export function GalleryPage({ onBack, library, onReuse }: { onBack: () => void; 
       </div>
 
       <div data-gallery-scroll className="scrollbar-thin min-h-0 flex-1 overflow-y-auto">
+        {tab === "recipes" && <DesignRecipesPanel onUse={onUseRecipe} />}
+        {tab === "assets" && <ProjectAssetsPanel key={workspaceRoot} workspaceRoot={workspaceRoot} />}
+        {showMedia && <>
         {tab !== "browse" && (
           <div className="px-6 pt-5 pb-1">
             <p className="text-xs text-muted-foreground">
@@ -298,6 +339,7 @@ export function GalleryPage({ onBack, library, onReuse }: { onBack: () => void; 
             <p className="mt-2 text-center text-[11px] text-muted-foreground/60">Browse the curated animated background collection.</p>
           </div>
         )}
+        </>}
       </div>
 
       <Dialog open={active !== null} onOpenChange={(open) => !open && setActive(null)} labelledBy="media-preview-title" className="w-[min(960px,calc(100vw-48px))]">
@@ -311,8 +353,12 @@ export function GalleryPage({ onBack, library, onReuse }: { onBack: () => void; 
               </div>
               {proOnly(active) && <Badge variant="taro">Pro-only</Badge>}
               {"origin" in active && active.origin === "uploaded" ? <Badge variant="taro">Your upload</Badge> : "origin" in active || library.hasDownload(active.id) ? <Badge variant="success">In Your Media</Badge> : <Button variant="secondary" size="sm" onClick={() => downloadItem(active)}><Download />Download</Button>}
+              {workspaceRoot && active.source !== "upload" && active.video && projectAssetsAvailable() && <Button variant="secondary" size="sm" disabled={stockImport?.busy} onClick={() => void addStockAsset(active)}>
+                {stockImport?.busy && stockImport.id === active.id ? "Importing…" : "Add to project"}
+              </Button>}
               <Button size="sm" onClick={() => { const item = active; setActive(null); onReuse(item); }}><Layers />Reuse this media</Button>
               {active.pageUrl && <a href={active.pageUrl} target="_blank" rel="noreferrer" className="text-xs text-muted-foreground transition-colors hover:text-foreground">Source ↗</a>}
+              {stockImport?.id === active.id && stockImport.root === workspaceRoot && stockImport.error && <p role="alert" className="w-full text-xs text-destructive">{stockImport.error}</p>}
             </div>
           </div>
         )}

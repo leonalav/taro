@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
     fs,
+    io::{self, Read, Seek, Write},
     path::{Path, PathBuf},
 };
 
@@ -53,14 +54,14 @@ fn target(root: &Path, input: &str, write: bool) -> Result<PathBuf, String> {
     };
     if taro::private_design::private_workspace_path(root, &path) { return Err("Path is outside the readable workspace".into()); }
     let mut ancestor = path.as_path();
-    while !ancestor.exists() {
+    while !ancestor.try_exists().map_err(|e| e.to_string())? {
         ancestor = ancestor.parent().ok_or("Invalid path")?;
     }
     let canonical = fs::canonicalize(ancestor).map_err(|e| e.to_string())?;
     if !canonical.starts_with(root) {
         return Err("Path is outside the selected workspace".into());
     }
-    if !write && !path.exists() {
+    if !write && !path.try_exists().map_err(|e| e.to_string())? {
         return Err("File does not exist".into());
     }
     Ok(path)
@@ -72,6 +73,92 @@ fn required<'a>(v: &'a Value, key: &str) -> Result<&'a str, String> {
 }
 fn text_result(text: String, artifact: Value) -> ToolOutput {
     ToolOutput { text, artifact }
+}
+
+#[cfg(windows)]
+fn source_file_info(file: &fs::File) -> io::Result<windows_sys::Win32::Storage::FileSystem::BY_HANDLE_FILE_INFORMATION> {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Storage::FileSystem::{BY_HANDLE_FILE_INFORMATION, GetFileInformationByHandle};
+    let mut info = BY_HANDLE_FILE_INFORMATION::default();
+    if unsafe { GetFileInformationByHandle(file.as_raw_handle(), &mut info) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(info)
+}
+
+#[cfg(windows)]
+fn design_source_identity(file: &fs::File) -> Option<String> {
+    let info = source_file_info(file).ok()?;
+    Some(format!("{}:{}:{}:{}:{}", info.dwVolumeSerialNumber, info.nFileIndexHigh,
+        info.nFileIndexLow, info.ftCreationTime.dwHighDateTime, info.ftCreationTime.dwLowDateTime))
+}
+
+#[cfg(not(windows))]
+fn design_source_identity(_: &fs::File) -> Option<String> { None }
+
+fn open_design_source(root: &Path, path: &Path, create: bool, remove: bool) -> io::Result<fs::File> {
+    let mut options = fs::OpenOptions::new();
+    options.read(true).write(!remove).create_new(create);
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        use windows_sys::Win32::Storage::FileSystem::{DELETE, FILE_FLAG_OPEN_REPARSE_POINT, FILE_SHARE_READ};
+        use windows_sys::Win32::Foundation::GENERIC_READ;
+        options.share_mode(FILE_SHARE_READ).custom_flags(FILE_FLAG_OPEN_REPARSE_POINT);
+        if remove { options.access_mode(DELETE | GENERIC_READ); }
+    }
+    let file = options.open(path)?;
+    let metadata = file.metadata()?;
+    if !metadata.is_file() || fs::symlink_metadata(path)?.file_type().is_symlink() {
+        return Err(io::Error::other("The design source must be a regular workspace file"));
+    }
+    #[cfg(windows)]
+    {
+        use std::{ffi::OsString, os::windows::{ffi::OsStringExt, fs::MetadataExt, io::AsRawHandle}};
+        use windows_sys::Win32::Storage::FileSystem::{FILE_ATTRIBUTE_REPARSE_POINT, GetFinalPathNameByHandleW};
+        if metadata.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0 {
+            return Err(io::Error::other("Cannot restore a workspace reparse point"));
+        }
+        let mut buffer = vec![0; 32_768];
+        let length = unsafe { GetFinalPathNameByHandleW(file.as_raw_handle(), buffer.as_mut_ptr(), buffer.len() as u32, 0) } as usize;
+        if length == 0 || length >= buffer.len() {
+            return Err(io::Error::other("Could not confirm the design source path"));
+        }
+        let resolved = PathBuf::from(OsString::from_wide(&buffer[..length]));
+        if !resolved.starts_with(root) || taro::private_design::private_workspace_path(root, &resolved) {
+            return Err(io::Error::other("Design source moved outside the writable workspace"));
+        }
+    }
+    #[cfg(not(windows))]
+    if !fs::canonicalize(path)?.starts_with(root) {
+        return Err(io::Error::other("Design source moved outside the writable workspace"));
+    }
+    Ok(file)
+}
+
+fn replace_design_source(file: &mut fs::File, content: &str) -> io::Result<()> {
+    file.seek(io::SeekFrom::Start(0))?;
+    file.write_all(content.as_bytes())?;
+    file.set_len(content.len() as u64)
+}
+
+#[cfg(windows)]
+fn remove_design_source(file: &fs::File) -> io::Result<()> {
+    use std::os::windows::io::AsRawHandle;
+    use windows_sys::Win32::Storage::FileSystem::{FileDispositionInfo, FILE_DISPOSITION_INFO, SetFileInformationByHandle};
+    if source_file_info(file)?.nNumberOfLinks != 1 {
+        return Err(io::Error::other("The created source file now has other links"));
+    }
+    let info = FILE_DISPOSITION_INFO { DeleteFile: true };
+    if unsafe { SetFileInformationByHandle(file.as_raw_handle(), FileDispositionInfo, (&raw const info).cast(), size_of::<FILE_DISPOSITION_INFO>() as u32) } == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn remove_design_source(_: &fs::File) -> io::Result<()> {
+    Err(io::Error::other("Safe removal of created design source is unavailable on this platform"))
 }
 
 #[cfg(test)]
@@ -123,6 +210,15 @@ pub async fn execute(request: ToolRequest) -> Result<ToolOutput, String> {
         return Err("This child agent is read-only".into());
     }
     crate::session_tools::guard_tool(&original_root, scope, name, input)?;
+    let restore_design = input.get("restore_design_source").and_then(Value::as_bool) == Some(true);
+    let record_design = input.get("record_design_source").and_then(Value::as_bool) == Some(true);
+    let remove_created = input.get("delete_created_file").and_then(Value::as_bool) == Some(true);
+    if (record_design || restore_design) && (request.interactive || crate::session_tools::is_plan_mode(&original_root, scope)) {
+        return Err("Design source receipts are available only during a design implementation".into());
+    }
+    if (restore_design && name != "Edit") || (remove_created && !restore_design) {
+        return Err("Invalid design source restoration".into());
+    }
     let root = crate::session_tools::effective_root(&original_root, scope)?;
     if matches!(
         name,
@@ -164,7 +260,9 @@ pub async fn execute(request: ToolRequest) -> Result<ToolOutput, String> {
     match name {
         "Read" => {
             let p = target(&root, required(input, "file_path")?, false)?;
-            let bytes = fs::read(&p).map_err(|e| e.to_string())?;
+            let mut file = fs::File::open(&p).map_err(|e| e.to_string())?;
+            let mut bytes = Vec::new();
+            (&mut file).take(8_000_001).read_to_end(&mut bytes).map_err(|e| e.to_string())?;
             if bytes.len() > 8_000_000 {
                 return Err("File exceeds the 8 MB read limit".into());
             }
@@ -208,7 +306,7 @@ pub async fn execute(request: ToolRequest) -> Result<ToolOutput, String> {
                 .unwrap_or(200)
                 .min(2000) as usize;
             if input.get("raw").and_then(Value::as_bool) == Some(true) {
-                return Ok(text_result(body.clone(), json!({"kind":"read","path":p,"content":body})));
+                return Ok(text_result(body.clone(), json!({"kind":"read","path":p,"content":body,"sourceIdentity":design_source_identity(&file)})));
             }
             let selected = body
                 .lines()
@@ -235,6 +333,22 @@ pub async fn execute(request: ToolRequest) -> Result<ToolOutput, String> {
                     return Err("Path is outside the selected workspace".into());
                 }
             }
+            if record_design {
+                let (mut file, created) = match open_design_source(&root, &p, true, false) {
+                    Ok(file) => (file, true),
+                    Err(error) if error.kind() == io::ErrorKind::AlreadyExists =>
+                        (open_design_source(&root, &p, false, false).map_err(|e| e.to_string())?, false),
+                    Err(error) => return Err(error.to_string()),
+                };
+                let mut bytes = Vec::new();
+                file.read_to_end(&mut bytes).map_err(|e| e.to_string())?;
+                let before = String::from_utf8(bytes);
+                replace_design_source(&mut file, content).map_err(|e| e.to_string())?;
+                return Ok(text_result(format!("Wrote {}", p.display()), json!({
+                    "kind":"edit","path":p,"beforeUnknown":before.is_err(),"before":before.unwrap_or_default(),
+                    "after":content,"created":created,"sourceIdentity":design_source_identity(&file)
+                })));
+            }
             let before = fs::read_to_string(&p).unwrap_or_default();
             fs::write(&p, content).map_err(|e| e.to_string())?;
             Ok(text_result(
@@ -244,9 +358,40 @@ pub async fn execute(request: ToolRequest) -> Result<ToolOutput, String> {
         }
         "Edit" => {
             let p = target(&root, required(input, "file_path")?, false)?;
-            let before = fs::read_to_string(&p).map_err(|e| e.to_string())?;
             let old = required(input, "old_string")?;
+            let entire = input.get("match_entire_file").and_then(Value::as_bool) == Some(true);
+            if restore_design && !entire { return Err("Design restoration requires an exact full-file comparison".into()); }
+            let mut source = if record_design || restore_design {
+                Some(open_design_source(&root, &p, false, remove_created).map_err(|e| e.to_string())?)
+            } else { None };
+            let mut before = String::new();
+            if let Some(file) = &mut source {
+                file.read_to_string(&mut before).map_err(|e| e.to_string())?;
+            } else { before = fs::read_to_string(&p).map_err(|e| e.to_string())?; }
+            let identity = source.as_ref().and_then(design_source_identity);
+            let expected_identity = input.get("source_identity").and_then(Value::as_str);
+            if restore_design && (expected_identity.is_some() && identity.as_deref() != expected_identity || remove_created && expected_identity.is_none()) {
+                return Err("File identity changed since it was checked".into());
+            }
+            if remove_created {
+                if before != old { return Err("File changed since it was checked".into()); }
+                let file = source.ok_or("Missing source handle")?;
+                remove_design_source(&file).map_err(|e| e.to_string())?;
+                drop(file);
+                match fs::symlink_metadata(&p) {
+                    Err(error) if error.kind() == io::ErrorKind::NotFound => {},
+                    _ => return Err("Could not confirm the correction file was removed".into()),
+                }
+                return Ok(text_result(format!("Removed created file {}", p.display()), json!({"kind":"edit","path":p,"before":before,"removed":true})));
+            }
             let new = required(input, "new_string")?;
+            if entire {
+                if before != old {
+                    return Err("File changed since it was checked".into());
+                }
+                if let Some(file) = &mut source { replace_design_source(file, new) } else { fs::write(&p, new) }.map_err(|e| e.to_string())?;
+                return Ok(text_result(format!("Edited {}", p.display()), json!({"kind":"edit","path":p,"before":before,"after":new,"sourceIdentity":identity})));
+            }
             if old.is_empty() {
                 return Err("old_string cannot be empty".into());
             }
@@ -268,10 +413,10 @@ pub async fn execute(request: ToolRequest) -> Result<ToolOutput, String> {
             } else {
                 before.replacen(old, new, 1)
             };
-            fs::write(&p, &after).map_err(|e| e.to_string())?;
+            if let Some(file) = &mut source { replace_design_source(file, &after) } else { fs::write(&p, &after) }.map_err(|e| e.to_string())?;
             Ok(text_result(
                 format!("Edited {} ({count} replacement(s))", p.display()),
-                json!({"kind":"edit","path":p,"before":before,"after":after}),
+                json!({"kind":"edit","path":p,"before":before,"after":after,"sourceIdentity":identity}),
             ))
         }
         "ListFiles" => {
@@ -656,6 +801,60 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(fs::read_to_string(dir.path().join("a")).unwrap(), "y y");
+    }
+    #[tokio::test]
+    async fn whole_file_edit_preserves_intervening_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("demo.html");
+        let edited = "<main>Latest candidate</main>\n<!-- user edit -->";
+        fs::write(&file, edited).unwrap();
+        let rejected = execute(request("Edit", json!({
+            "file_path":"demo.html", "old_string":"<main>Latest candidate</main>", "new_string":"<main>Earlier candidate</main>", "match_entire_file":true
+        }), dir.path(), true)).await.unwrap_err();
+        assert!(rejected.contains("File changed"));
+        assert_eq!(fs::read_to_string(&file).unwrap(), edited);
+        execute(request("Edit", json!({
+            "file_path":"demo.html", "old_string":edited, "new_string":"<main>Earlier candidate</main>", "match_entire_file":true
+        }), dir.path(), true)).await.unwrap();
+        assert_eq!(fs::read_to_string(file).unwrap(), "<main>Earlier candidate</main>");
+    }
+    #[tokio::test]
+    async fn design_write_distinguishes_new_files_from_empty_preimages() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::write(dir.path().join("empty.css"), "").unwrap();
+        for (path, created) in [("empty.css", false), ("new.css", true)] {
+            let output = execute(request("Write", json!({
+                "file_path":path,"content":"body {}","record_design_source":true
+            }), dir.path(), true)).await.unwrap();
+            assert_eq!(output.artifact["created"], created);
+            assert_eq!(output.artifact["before"], "");
+        }
+    }
+    #[cfg(windows)]
+    #[tokio::test]
+    async fn design_restore_only_removes_the_original_unchanged_created_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("correction.css");
+        let make = || request("Write", json!({
+            "file_path":"correction.css","content":"body {}","record_design_source":true
+        }), dir.path(), true);
+        let created = execute(make()).await.unwrap();
+        let restore = |identity: &Value, approved| request("Edit", json!({
+            "file_path":"correction.css","old_string":"body {}","new_string":null,
+            "match_entire_file":true,"restore_design_source":true,"delete_created_file":true,"source_identity":identity
+        }), dir.path(), approved);
+        let identity = &created.artifact["sourceIdentity"];
+        assert!(identity.as_str().is_some());
+        assert!(execute(restore(identity, false)).await.is_err());
+        fs::write(&path, "newer contents").unwrap();
+        assert!(execute(restore(identity, true)).await.is_err());
+        assert_eq!(fs::read_to_string(&path).unwrap(), "newer contents");
+        fs::rename(&path, dir.path().join("user-copy.css")).unwrap();
+        let replacement = execute(make()).await.unwrap();
+        assert!(execute(restore(identity, true)).await.is_err());
+        assert_eq!(fs::read_to_string(&path).unwrap(), "body {}");
+        assert_eq!(execute(restore(&replacement.artifact["sourceIdentity"], true)).await.unwrap().artifact["removed"], true);
+        assert!(!path.exists());
     }
     #[tokio::test]
     async fn permissions_and_workspace_boundary() {

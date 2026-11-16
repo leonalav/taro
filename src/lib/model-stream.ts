@@ -1,6 +1,7 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 
-export type StreamEvent = { type: "delta"; text: string } | { type: "done" } | {type:"stopped"};
+export interface ModelUsage { input: number; output: number }
+export type StreamEvent = { type: "delta"; text: string } | { type: "done" } | {type:"stopped"} | ({type:'usage'} & ModelUsage);
 export type ModelContent = string | Array<{type:"text";text:string}|{type:"image_url";image_url:{url:string}}|{type:"file";file:{filename:string;file_data:string}}>;
 export interface ModelDesignScope {intent:string;platforms:string[];brief:string}
 export type ToolCall = {id:string;name:string;arguments:string};
@@ -16,12 +17,12 @@ export function resolveModelEndpoint(endpoint: string): {url:string;protocol:"ch
   url.pathname = path.endsWith('/responses') || path.endsWith('/chat/completions') ? path : path ? `${path}/chat/completions` : '/v1/chat/completions';
   return {url:url.toString(),protocol};
 }
-export async function streamModel(input: { requestId: string; endpoint: string; model: string; credentialId: string; messages: unknown[]; tools?:unknown[]; designScope?:ModelDesignScope }, onDelta: (text: string) => void):Promise<ToolCall[]> {
+export async function streamModel(input: { requestId: string; endpoint: string; model: string; credentialId: string; messages: unknown[]; tools?:unknown[]; designScope?:ModelDesignScope }, onDelta: (text: string) => void, onUsage?: (usage: ModelUsage) => void):Promise<ToolCall[]> {
   resolveModelEndpoint(input.endpoint);
   if (!input.model.trim()) throw new Error("Set the provider's model ID in Models settings.");
   const channel = new Channel<StreamEvent>();
   let stopped = false;
-  channel.onmessage = (event) => { if (event.type === "delta") onDelta(event.text); if(event.type === "stopped") stopped = true; };
+  channel.onmessage = (event) => { if (event.type === "delta") onDelta(event.text); if(event.type === "stopped") stopped = true; if(event.type==='usage'&&[event.input,event.output].every(value=>Number.isSafeInteger(value)&&value>=0))onUsage?.({input:event.input,output:event.output}); };
   const calls = await invoke<ToolCall[]>("stream_chat", { request: input, onEvent: channel });
   if(stopped) throw new DOMException("Model request stopped.", "AbortError");
   return calls;

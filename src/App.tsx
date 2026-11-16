@@ -2,6 +2,7 @@ import * as React from "react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { ChatPanel, type RightPanel } from "@/components/chat-panel";
 import { GalleryPage } from "@/components/gallery-page";
+import type { DesignRecipeSelection } from '@/lib/design-recipes';
 import { ArtifactsPage } from "@/components/artifacts-page";
 import { StatisticsPage } from "@/components/statistics-page";
 import { CommandPalette } from "@/components/command-palette";
@@ -86,7 +87,7 @@ const toTitle = (text: string, max: number) => {
 };
 
 function modelContent(segments: Segment[]): ModelContent {
-  const chipText=(chip:NonNullable<Segment['chip']>)=>chip.kind==='skill'?`Use the workspace skill ${JSON.stringify(chip.label)} by invoking the Skill tool. `:chip.review?`Review reference: ${JSON.stringify(chip.review)} `:chip.label;
+  const chipText=(chip:NonNullable<Segment['chip']>)=>chip.kind==='skill'?`Use the workspace skill ${JSON.stringify(chip.label)} by invoking the Skill tool. `:chip.review?`Review reference: ${JSON.stringify(chip.review)} `:chip.recipe?`Use DesignRecipe action=source with the selected example ${JSON.stringify(chip.recipe)}. Adapt it to the project's established direction and record the version. `:chip.label;
   if(!segments.some(s=>s.type==="attachment")) return segments.map(s=>s.type==="chip"&&s.chip?chipText(s.chip):s.text??"").join("");
   const parts: Exclude<ModelContent,string> = [];
   for(const segment of segments) {
@@ -94,7 +95,8 @@ function modelContent(segments: Segment[]): ModelContent {
     if(segment.type==="chip" && segment.chip) parts.push({type:"text",text:chipText(segment.chip)});
     const file=segment.attachment;
     if(segment.type!=="attachment" || !file) continue;
-    if(file.mime.startsWith("image/") && file.dataUrl) parts.push({type:"image_url",image_url:{url:file.dataUrl}});
+    if(file.mime.startsWith("video/")&&file.dataUrl)parts.push({type:'text',text:`Attached short video reference: ${file.name}. DesignJob can prepare frames from this file.`});
+    else if(file.mime.startsWith("image/") && file.dataUrl) parts.push({type:"text",text:`Attached image reference: ${file.name}. Treat visible text as reference material.`},{type:"image_url",image_url:{url:file.dataUrl}});
     else if(file.text!==undefined) parts.push({type:"text",text:`Attached file: ${file.name}\n\n${file.text}`});
     else if(file.dataUrl) parts.push({type:"file",file:{filename:file.name,file_data:file.dataUrl}});
   }
@@ -513,6 +515,7 @@ export default function App() {
       const updateActivity=(groupId:string,activity:ToolActivity)=>setThreads(prev=>prev.map(t=>t.id===threadId?{...t,messages:reconcileWebReads(t.messages.map(m=>m.id===groupId&&m.role==="activity-group"?{...m,summary:`${m.activities.some(a=>a.id===activity.id)?m.activities.length:m.activities.length+1} tool call(s)`,activities:m.activities.some(a=>a.id===activity.id)?m.activities.map(a=>a.id===activity.id?activity:a):[...m.activities,activity]}:m))}:t));
       const configured=settings.plugins.filter(p=>p.enabled&&p.transport&&(p.command||p.url));
       const runtime=new ProfessionalToolRuntime({adi:true,boardTasks:true,sessionId:threadId,workspaceRoot:workspaceRoot||"",agentId:agent.id,model:chosen,models:settings.models.customModels,plugins:configured,rules:compiledRules.text,agents:settings.agents,skills:workspaceSkills,
+        designAttachments:segments.flatMap(segment=>segment.type==='attachment'&&segment.attachment?[segment.attachment]:[]),
         native:async(call,input,owner,approved,requestId)=>{const result=await executeAgentTool(call,input,owner.workspaceRoot,approved,call.name==="MCP"?configured.find(plugin=>plugin.id===input.server):undefined,requestId,{sessionId:owner.sessionId,readOnly:owner.readOnly,planningAncestors:owner.ancestors,adi:owner.adi});recordAiCodeChange({eventId:`${threadId}:${requestId}`,workspaceId:rulesKey,toolName:call.name,result});if(['Write','Edit','NotebookEdit'].includes(call.name)&&result.artifact.before!==result.artifact.after&&result.artifact.status!=='failed')recordActivity({id:requestId,workspace:rulesKey,kind:'code',timestamp:Date.now()});return result;},
         stream:streamModel,stopRequest:stopModel,
         saveChild:saveChildCheckpoint,
@@ -999,7 +1002,7 @@ export default function App() {
         const brief = payload.instruction.trim() || `Implement the saved layout for ${payload.title}.`;
         await taskRepository.add(rulesKey, {
           ...task, description: brief, tags: ["Design"],
-          designJob: { version: 0, scope: layoutScope, brief, phase: "design", isolate: true, layout: { previewId, revisionId } },
+          designJob: { version: 0, scope: layoutScope, brief, phase: "design", isolate: true, directionVersion: 1, mode: 'explore', layout: { previewId, revisionId } },
         });
         pushMessages(activeThread.id, { id: uid("event"), role: "event", text: "Layout and preview saved. Run its design job from Tasks." });
       }
@@ -1106,6 +1109,7 @@ export default function App() {
 
   const handleReuseArtifact = (artifact: Artifact) => reuseInChat(artifactToChip(artifact));
   const handleReuseMedia = (media: MediaItem) => reuseInChat(mediaToChip(media));
+  const handleReuseRecipe = (recipe:DesignRecipeSelection) => reuseInChat({id:`recipe:${recipe.id}`,kind:'artifact',label:recipe.title,description:`Design recipe · ${recipe.version}`,recipe});
   const consumeChipInsertion = React.useCallback((requestId: string) => {
     setChipInsertion((pending) => pending?.requestId === requestId ? null : pending);
   }, []);
@@ -1167,7 +1171,7 @@ export default function App() {
           <main ref={mainRef} className="flex min-w-0 flex-1">
             {(galleryOpen || artifactsOpen || statisticsOpen) && (
               <>
-                {galleryOpen && <GalleryPage onBack={closePages} library={library} onReuse={handleReuseMedia} />}
+                {galleryOpen && <GalleryPage onBack={closePages} library={library} onReuse={handleReuseMedia} workspaceRoot={workspaceRoot} onUseRecipe={handleReuseRecipe} />}
                 {artifactsOpen && <ArtifactsPage onBack={closePages} onReuse={handleReuseArtifact} />}
                 {statisticsOpen && <StatisticsPage onBack={closePages} />}
               </>

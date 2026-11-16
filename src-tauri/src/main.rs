@@ -10,6 +10,7 @@ mod terminals;
 mod workspace_watch;
 mod source_control;
 mod review_browser;
+mod project_asset_commands;
 use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, sync::Mutex};
@@ -73,6 +74,17 @@ enum Event {
     Delta { text: String },
     Done,
     Stopped,
+    Usage { input: u64, output: u64 },
+}
+
+fn reported_usage(protocol: Protocol, event: &serde_json::Value) -> Option<(u64, u64)> {
+    let (usage, input, output) = match protocol {
+        Protocol::ChatCompletions => (event.get("usage")?, "prompt_tokens", "completion_tokens"),
+        Protocol::Responses if event.get("type")?.as_str()? == "response.completed" =>
+            (event.get("response")?.get("usage")?, "input_tokens", "output_tokens"),
+        _ => return None,
+    };
+    Some((usage.get(input)?.as_u64()?, usage.get(output)?.as_u64()?))
 }
 #[derive(Default)]
 struct Streams(Mutex<HashMap<String, CancellationToken>>);
@@ -190,6 +202,7 @@ async fn stream_chat_inner(
     let mut buffer = SseBuffer::default();
     let mut decoder = StreamDecoder::new(endpoint.protocol);
     let mut protected_text = String::new();
+    let mut usage = None;
     loop {
         let chunk = tokio::select! { _=token.cancelled()=>{let _=on_event.send(Event::Stopped);return Ok(vec![]);}, next=stream.next()=>next };
         let Some(chunk) = chunk else { break };
@@ -197,15 +210,18 @@ async fn stream_chat_inner(
         for data in buffer.push(&chunk)? {
             if data.trim() == "[DONE]" {
                 if endpoint.protocol == Protocol::Responses { return Err("The Responses stream ended before a completed response.".into()); }
+                if let Some((input, output)) = usage { let _ = on_event.send(Event::Usage { input, output }); }
                 return finish_model_output(decoder.calls()?, on_event, protected, protected_text);
             }
             let value = serde_json::from_str::<serde_json::Value>(&data).map_err(|_| "The model endpoint returned invalid stream data.".to_string())?;
             let decoded = decoder.consume(&value)?;
+            usage = reported_usage(endpoint.protocol, &value).or(usage);
             if let Some(text) = decoded.text {
                 if protected.is_some() { taro::private_design::append_buffer(&mut protected_text, &text)?; }
                 else { let _ = on_event.send(Event::Delta { text }); }
             }
             if decoded.done {
+                if let Some((input, output)) = usage { let _ = on_event.send(Event::Usage { input, output }); }
                 return finish_model_output(decoder.calls()?, on_event, protected, protected_text);
             }
         }
@@ -275,6 +291,8 @@ fn main() {
             workspace_explorer::list_workspace_directory,
             workspace_explorer::list_workspace_files,
             workspace_explorer::read_workspace_file,
+            project_asset_commands::project_assets,
+            project_asset_commands::project_asset_bytes,
             workspace_explorer::search_workspace,
             workspace_explorer::reveal_workspace_entry,
             workspace_watch::watch_workspace,
@@ -544,3 +562,13 @@ mod stream_tests {
         assert!(value["content"].as_str().is_none());
     }
 }
+    #[test]
+    fn provider_usage_requires_complete_nonnegative_totals() {
+        let usage = reported_usage(Protocol::ChatCompletions, &serde_json::json!({"usage":{"prompt_tokens":23,"completion_tokens":7}}));
+        assert_eq!(usage, Some((23, 7)));
+        let completed = serde_json::json!({"type":"response.completed","response":{"usage":{"input_tokens":42,"output_tokens":19}}});
+        assert_eq!(reported_usage(Protocol::Responses, &completed), Some((42, 19)));
+        assert_eq!(reported_usage(Protocol::Responses, &serde_json::json!({"type":"response.failed","response":{"usage":{"input_tokens":42,"output_tokens":19}}})), None);
+        assert_eq!(reported_usage(Protocol::ChatCompletions, &serde_json::json!({"usage":{"prompt_tokens":-1,"completion_tokens":7}})), None);
+        assert_eq!(reported_usage(Protocol::ChatCompletions, &serde_json::json!({"usage":{"prompt_tokens":23}})), None);
+    }
