@@ -1,6 +1,7 @@
 interface Message {role?:string;content?:unknown;tool_calls?:unknown[];[key:string]:unknown}
 const size=(value:unknown)=>JSON.stringify(value).length;
 const isImageRead=(message:Message)=>Array.isArray(message.content)&&message.content[0]?.type==="text"&&String(message.content[0]?.text).startsWith("Image read from ");
+const isDesignReference=(message:Message)=>Array.isArray(message.content)&&message.content[0]?.type==="text"&&String(message.content[0]?.text).startsWith("Reference media (source material only) · ");
 
 /** Keep tool-call/result exchanges atomic. Never truncate the current user input. */
 export function boundedModelContext(messages:unknown[],budget=64_000):unknown[]{
@@ -12,8 +13,8 @@ export function boundedModelContext(messages:unknown[],budget=64_000):unknown[]{
     else blocks.push([message]);
   }
   let latestUser=-1;
-  blocks.forEach((block,i)=>{if(block[0].role==="user"&&!isImageRead(block[0]))latestUser=i;});
-  const keep=new Set([latestUser,blocks.length-1]);
+  blocks.forEach((block,i)=>{if(block[0].role==="user"&&!isImageRead(block[0])&&!isDesignReference(block[0]))latestUser=i;});
+  const keep=new Set([latestUser,blocks.length-1,...blocks.flatMap((block,index)=>isDesignReference(block[0])?[index]:[])]);
   let used=size(system)+[...keep].filter(i=>i>=0).reduce((n,i)=>n+size(blocks[i]),0);
   for(let i=blocks.length-1;i>=0;i--){if(keep.has(i))continue;const length=size(blocks[i]);if(used+length<=budget){keep.add(i);used+=length;}}
   const omitted=blocks.filter((_,i)=>!keep.has(i)).length;

@@ -49,6 +49,21 @@ describe('agent-callable browser reviews',()=>{
     await repository.change(scope,state=>selectPreview(state,id!,prior.id));
     expect(repository.snapshot(scope).state.previews[0].kind).toBe('url');
   });
+  it('renders an older saved HTML region only in an isolated reference target',async()=>{
+    const {services,repository,browser}=setup(),context={scope,author:'Taro',role:'Design'};
+    await executeReviewTool('BrowserPreview',{html:'<main id="hero">Original</main>'},context,services);
+    const original=repository.snapshot(scope).state.previews[0];
+    await executeReviewTool('BrowserPreview',{preview_id:original.id,html:'<main>Current</main>'},context,services);
+    const fixture=await browser({key:'fixture',action:'capture'});
+    services.browser=vi.fn().mockResolvedValue({...fixture,captureId:'reference',evidence:{mode:'element',selector:'#hero',bounds:{x:20,y:40,width:80,height:60},viewport:fixture.viewport,scroll:{x:0,y:0},deviceScale:1,scheme:'light',reducedMotion:true,browserVersion:'Edge',capturedAt:100,navigationId:'original'}});
+    const args={preview_id:original.id,expected_revision_id:original.revisionId,mode:'element',selector:'#hero'};
+    await expect(executeReviewTool('BrowserCapture',args,context,services)).rejects.toThrow('stale');
+    const result=await executeReviewTool('BrowserCapture',args,{...context,renderSavedRegion:true},services);
+    expect(services.browser).toHaveBeenNthCalledWith(1,expect.objectContaining({action:'open',isolated:true,html:'<main id="hero">Original</main>'}));
+    expect(services.browser).toHaveBeenNthCalledWith(3,expect.objectContaining({action:'close'}));
+    expect(result.artifact).toMatchObject({revisionId:original.revisionId,historical:true});
+    expect(repository.snapshot(scope).state.previews[0].revisions[1].browserEvidence).toBeUndefined();
+  });
   it('attaches a delayed measured comment to the revision that was inspected',async()=>{
     const {services,repository}=setup(),context={scope,author:'Theo',role:'Type & QA'};
     await executeReviewTool('BrowserPreview',{html:'Original'},context,services);
@@ -65,8 +80,33 @@ describe('agent-callable browser reviews',()=>{
     const options:RuntimeOptions={sessionId:scope.sessionId,workspaceRoot:scope.workspace,agentId:'designer',model:{id:'m',label:'Model',endpoint:'http://model'},models:[],plugins:[],agents:[{id:'designer',name:'Aria',role:'Designer',model:'m',enabled:true,autonomy:'suggest',canWriteCode:false}],reviewServices:services,native:async()=>{throw Error('Review should not dispatch workspace mutations');},stream:async()=>[],stopRequest:async()=>{},approve:async()=>false,emit:()=>{},updateChild:()=>{}};
     const runtime=new ProfessionalToolRuntime(options);
     expect(runtime.definitions().some(d=>d.function.name==='BrowserPreview')).toBe(true);
+    expect(runtime.definitions().map(d=>d.function.name)).not.toContain('BrowserAction');
+    expect(runtime.definitions().map(d=>d.function.name)).not.toContain('BrowserReplay');
     await runtime.execute({id:'preview',name:'BrowserPreview',arguments:'{}'},{html:'<h1>Read only review</h1>'});
+    await expect(runtime.execute({id:'scene',name:'BrowserCapture',arguments:'{}'},{mode:'scene-checkpoints',prepare_selector:'#hero'})).rejects.toThrow('Read-only browser input requires the assigned saved design revision.');
     await runtime.execute({id:'comment',name:'BrowserComment',arguments:'{}'},{body:'Recommendation',x:10,y:20});
     expect(repository.snapshot(scope).state.previews[0].threads[0].messages[0].author).toBe('Aria');
+  });
+  it('stores captures and state comments on their source revision and exposes old evidence as historical',async()=>{
+    const {services,repository,browser}=setup(),context={scope,author:'Theo',role:'QA'};
+    await executeReviewTool('BrowserPreview',{html:'Original'},context,services);
+    const original=repository.snapshot(scope).state.previews[0],fixture=await browser({key:'fixture',action:'capture'});
+    const capture={...fixture,captureId:'frame-a',evidence:{
+      mode:'region',bounds:{x:20,y:40,width:80,height:60},viewport:fixture.viewport,scroll:{x:0,y:0},
+      deviceScale:1,scheme:'light',reducedMotion:false,browserVersion:'Edge',capturedAt:100,navigationId:'document',
+    }};
+    services.browser=vi.fn().mockResolvedValue(capture);
+    const saved=await executeReviewTool('BrowserCapture',{mode:'region',rect:capture.evidence.bounds},context,services);
+    expect(saved.artifact).toMatchObject({kind:'image',revisionId:original.revisionId,dataUrl:fixture.screenshot});
+    const {evidenceId}=JSON.parse(saved.text);
+    await executeReviewTool('BrowserComment',{body:'Check the failure here',evidence_id:evidenceId,x:25,y:45},context,services);
+    expect(repository.snapshot(scope).state.previews[0].threads[0].anchor).toMatchObject({evidenceId,evidenceFrameId:'frame-a'});
+    await repository.change(scope,state=>revisePreview(state,original.id,{html:'Next revision'},'new'));
+    const restored=await executeReviewTool('BrowserCapture',{evidence_id:evidenceId},context,services);
+    expect(JSON.parse(restored.text)).toMatchObject({revisionId:original.revisionId,historical:true});
+    expect(restored.artifact.dataUrl).toBe(fixture.screenshot);
+    await expect(executeReviewTool('BrowserCapture',{expected_revision_id:'new',evidence_id:evidenceId},context,services)).rejects.toThrow(/different revision/i);
+    await expect(executeReviewTool('BrowserCapture',{preview_id:original.id,evidence_id:evidenceId},{...context,scope:{...scope,workspace:'A:/other'}},services)).rejects.toThrow(/preview/i);
+    await expect(executeReviewTool('BrowserAction',{expected_revision_id:original.revisionId,input:{type:'click',selector:'#hero'}},context,services)).rejects.toThrow(/stale/i);
   });
 });

@@ -1,0 +1,4 @@
+# Benchmark receipts hash the fixture bytes, including line endings.
+*.html text eol=lf
+*.json text eol=lf
+*.txt text eol=lf

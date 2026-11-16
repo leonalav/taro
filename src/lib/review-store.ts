@@ -1,15 +1,16 @@
 import { validateArtifactAudit, type ArtifactAuditReport } from './artifact-audit';
+import { validateBrowserEvidence, type SavedBrowserEvidence } from './review-browser-evidence';
 export interface ReviewScope { workspace: string; sessionId: string }
 export interface Viewport { width: number; height: number }
 export interface ReviewRect { x: number; y: number; width: number; height: number }
 export interface ReviewComponent {
   selector: string; layerId?:string; tag: string; text: string; rect: ReviewRect; styles: Record<string, string>;
 }
-export interface ReviewAnchor { x: number; y: number; selector?: string; viewport?: Viewport; percent?: boolean; version?: 2; kind?: import('./review-anchors').ReviewAnchorV2['kind'] }
+export interface ReviewAnchor { x: number; y: number; selector?: string; viewport?: Viewport; percent?: boolean; version?: 2; kind?: import('./review-anchors').ReviewAnchorV2['kind'];evidenceId?:string;evidenceFrameId?:string }
 export interface ReviewMessage { id: string; body: string; author: string; role: string; createdAt: number }
 export interface ReviewThread { id: string; revisionId: string; anchor: ReviewAnchor; messages: ReviewMessage[]; resolved: boolean; generation?: number; ruleIds?: string[]; resolution?: import("./review-resolution").VerifiedResolution }
 export interface ReviewObservation { captureId?:string; navigationId?:string; capturedAt?:number; resourceFingerprint?:string; url:string;title:string;viewport:Viewport;document:{width:number;height:number;scrollX:number;scrollY:number};components:ReviewComponent[];componentsTruncated?:boolean;selection?:ReviewComponent;anchors:Record<string,ReviewRect> }
-export interface ReviewRevision { id: string; createdAt: number; url?: string; html?: string; capture?: string; source?: string; observation?:ReviewObservation; audits?:ArtifactAuditReport[]; layout?: import('./layout-designer').SavedLayout }
+export interface ReviewRevision { id: string; createdAt: number; url?: string; html?: string; capture?: string; source?: string; observation?:ReviewObservation; audits?:ArtifactAuditReport[]; browserEvidence?:SavedBrowserEvidence[]; layout?: import('./layout-designer').SavedLayout }
 export interface ReviewPreview {
   id: string; title: string; kind: 'nike' | 'html' | 'url'; revisions: ReviewRevision[]; revisionId: string;
   viewport: Viewport; threads: ReviewThread[];
@@ -72,6 +73,19 @@ export function attachArtifactAudit(state:ReviewState,id:string,revisionId:strin
     return {...p,revisions:p.revisions.map(r=>r.id===revisionId?{...r,audits:[...r.audits??[],validated]}:r)};
   });
 }
+export function attachBrowserEvidence(state:ReviewState,id:string,revisionId:string,report:SavedBrowserEvidence):ReviewState {
+  validateBrowserEvidence(report,revisionId);
+  return updatePreview(state,id,p=>{
+    const revision=p.revisions.find(item=>item.id===revisionId);
+    if(!revision)throw Error('Saved revision was not found.');
+    const previous=revision.browserEvidence??[];
+    if(previous.some(item=>item.id===report.id))return p;
+    const browserEvidence=[...previous,report];
+    const imageLength=browserEvidence.flatMap(item=>item.frames).reduce((total,frame)=>total+frame.screenshot.length,0);
+    if(browserEvidence.length>40||imageLength>24_000_000)throw Error('This revision has reached its saved browser evidence limit.');
+    return {...p,revisions:p.revisions.map(item=>item===revision?{...item,browserEvidence}:item)};
+  });
+}
 export const setReviewViewport=(state:ReviewState,id:string,viewport:Viewport)=>updatePreview(state,id,p=>({...p,viewport:validateViewport(viewport)}));
 export function addReviewComment(state:ReviewState,id:string,input:{id?:string;revisionId?:string;body:string;author:string;role:string;anchor:ReviewAnchor}):ReviewState {
   if(!input.body.trim())throw Error('Comment text is required.');
@@ -106,7 +120,7 @@ function restore(raw:string|null):ReviewState {
     ids.add(p.id);validateViewport(p.viewport);
     if(!p.revisions.some(r=>r.id===p.revisionId))throw Error('Missing saved artifact revision.');
     const revisions=new Set<string>();
-    for(const r of p.revisions){if(!r||typeof r.id!=='string'||revisions.has(r.id)||!Number.isFinite(r.createdAt)||['url','html','capture','source'].some(key=>r[key as keyof ReviewRevision]!==undefined&&typeof r[key as keyof ReviewRevision]!=='string'))throw Error('Invalid saved artifact content.');if(r.audits!==undefined){if(!Array.isArray(r.audits))throw Error('Invalid saved audits.');r.audits=r.audits.map(validateArtifactAudit);}revisions.add(r.id);}
+    for(const r of p.revisions){if(!r||typeof r.id!=='string'||revisions.has(r.id)||!Number.isFinite(r.createdAt)||['url','html','capture','source'].some(key=>r[key as keyof ReviewRevision]!==undefined&&typeof r[key as keyof ReviewRevision]!=='string'))throw Error('Invalid saved artifact content.');if(r.audits!==undefined){if(!Array.isArray(r.audits))throw Error('Invalid saved audits.');r.audits=r.audits.map(validateArtifactAudit);}if(r.browserEvidence!==undefined){if(!Array.isArray(r.browserEvidence))throw Error('Invalid saved browser evidence.');r.browserEvidence=r.browserEvidence.map(report=>validateBrowserEvidence(report,r.id));}revisions.add(r.id);}
     const threads=new Set<string>();
     for(const t of p.threads){if(!t||typeof t.id!=='string'||threads.has(t.id)||!revisions.has(t.revisionId)||typeof t.resolved!=='boolean'||!t.anchor||![t.anchor.x,t.anchor.y].every(n=>Number.isFinite(n)&&n>=0)||!Array.isArray(t.messages)||!t.messages.length||t.messages.some(m=>!m||typeof m.id!=='string'||typeof m.body!=='string'||typeof m.author!=='string'||typeof m.role!=='string'||!Number.isFinite(m.createdAt)))throw Error('Invalid saved review thread.');threads.add(t.id);}
   }

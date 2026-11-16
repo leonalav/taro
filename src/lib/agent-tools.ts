@@ -4,6 +4,7 @@ import type { ToolCall } from "@/lib/model-stream";
 import { reviewToolDefinitions } from './review-tool-definitions';
 import { artifactToolDefinitions } from './artifact-tool-definitions';
 import { webToolDefinitions, webActivity, webLabel } from './web-research';
+import { DesignHandoffRejection, publicDesignHandoffDiagnostics } from './design-handoff-diagnostic';
 
 const object=(properties:Record<string,unknown>,required:string[])=>({type:"object",properties,required,additionalProperties:false});
 const str={type:"string"};
@@ -14,7 +15,7 @@ export const agentToolDefinitions=[
  ...webToolDefinitions,
  fn("Read","Read a workspace file, line range, PDF text, or image",object({file_path:str,offset:{type:"integer"},limit:{type:"integer"}},["file_path"])),
  fn("Write","Create or overwrite a workspace file",object({file_path:str,content:str},["file_path","content"])),
- fn("Edit","Replace exact text in a workspace file",object({file_path:str,old_string:str,new_string:str,replace_all:{type:"boolean"}},["file_path","old_string","new_string"])),
+ fn("Edit","Replace exact text in a workspace file. match_entire_file compares the full current file with old_string before replacing it.",object({file_path:str,old_string:str,new_string:str,replace_all:{type:"boolean"},match_entire_file:{type:"boolean"}},["file_path","old_string","new_string"])),
  fn("ListFiles","List files and folders in a workspace directory without using Bash; use recursive true for a tree",object({path:str,recursive:{type:"boolean"}},[])),
  fn("Glob","Find workspace files by glob pattern",object({pattern:str,path:str},["pattern"])),
  fn("Grep","Search text in workspace files with a regular expression",object({pattern:str,path:str},["pattern"])),
@@ -34,6 +35,7 @@ export function toolLabel(name:string,input:Record<string,unknown>) {
  if(name==="DesignJob")return input.action==="resume"?"Resume design job":input.action==="read"?"Read workspace jobs":`Start design job · ${String(input.title??"Design")}`;
  if(name==="ArtifactDesign")return input.action==="export"?"Export design tokens":input.action==="template"?"Create design starter":input.action==="save"?"Save project design":"Load project design tokens";
  const subject=String(input.file_path??input.filePath??input.notebook_path??input.pattern??input.command??input.tool??input.task_id??input.skill??input.query??input.description??(name==="ListFiles"?input.path??".":""));
+ if(name==="Edit"&&input.delete_created_file===true)return `Remove correction file ${subject}`;
  return name==="Skill"?`Invoked skill: /${subject}`:`${name==="PowerShell"?"Ran":name} ${subject}`.trim();
 }
 const privateDesignLabels=new Set(["Classify design context","Find design conventions","Read pinned conventions","Save ADI design plan","Read ADI design plan","Record design decisions","Review verification coverage","Export design tokens","Create design starter","Save project design","Load project design tokens","Submit design handoff","Read workspace jobs","Resume design job"]);
@@ -41,7 +43,8 @@ const containsDesignCode=(value?:string)=>/\[data-taro-artifact\]|--art-[a-z][a-
 export function publicToolActivity(activity:ToolActivity):ToolActivity {
  if(!privateDesignLabels.has(activity.label)&&!activity.label.startsWith("Start design job · ")&&
    ![activity.detail,activity.output,activity.errorTrace].some(containsDesignCode)&&!activity.edit?.diff.some(line=>containsDesignCode(line.text)))return activity;
- return {id:activity.id,kind:activity.kind,label:activity.label,status:activity.status};
+ const errorTrace=activity.label==='Submit design handoff'&&activity.status==='failed'&&activity.errorTrace&&publicDesignHandoffDiagnostics.has(activity.errorTrace)?activity.errorTrace:undefined;
+ return {id:activity.id,kind:activity.kind,label:activity.label,status:activity.status,...(errorTrace&&{errorTrace})};
 }
 export interface ToolOutput {text:string;artifact:{kind:string;path?:string;before?:string;after?:string;content?:string;matches?:string[];output?:string;dataUrl?:string;[key:string]:unknown}};
 export interface McpConfig {id:string;transport?:string;command?:string;args?:string[];url?:string}
@@ -52,7 +55,7 @@ export async function executeAgentTool(call:ToolCall,input:Record<string,unknown
 export function activityFromTool(call:ToolCall,input:Record<string,unknown>,result:ToolOutput|undefined,error:unknown,durationMs:number):ToolActivity {
  const artifact=result?.artifact;
  const label=toolLabel(call.name,input);
- if(privateDesignLabels.has(label)||call.name==="DesignJob")return {id:call.id,kind:toolKind(call.name),label,status:error||artifact?.status==="failed"?"failed":"done"};
+ if(privateDesignLabels.has(label)||call.name==="DesignJob")return {id:call.id,kind:toolKind(call.name),label,status:error||artifact?.status==="failed"?"failed":"done",...(call.name==='SubmitDesignHandoff'&&error instanceof DesignHandoffRejection&&{errorTrace:error.diagnostic})};
  const web=webActivity(call.name,input,artifact);
  if(web){const status=error?(/stopp|abort|cancel|interrupt/i.test(String(error))?'stopped':'failed'):'done';return {id:call.id,kind:toolKind(call.name),...web,label:webLabel(web.web,status),status,durationMs,errorTrace:error?String(error):undefined};}
  const before=artifact?.before?.split("\n")??[];const after=artifact?.after?.split("\n")??[];

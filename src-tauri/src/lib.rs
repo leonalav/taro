@@ -6,6 +6,7 @@ pub mod private_design;
 #[cfg(feature = "desktop")]
 pub mod adi_commands;
 pub mod model_endpoint;
+pub mod project_assets;
 
 #[cfg(feature = "desktop")]
 pub mod foundation_commands;

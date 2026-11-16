@@ -16,6 +16,19 @@
 @media(max-width:1000px){.review-toolbar{padding-inline:8px;gap:4px}.review-toolbar .review-tool-label{display:none}.review-side-panel{position:absolute;inset:0 0 0 auto;z-index:50;max-width:90%;box-shadow:-12px 0 30px #0008}.review-stage{padding:28px 20px}.review-meta{font-size:10px}.review-dimensions select{max-width:110px}}
 @media(prefers-reduced-motion:reduce){.review-loading svg{animation:none}}
 @container(max-width:650px){.review-body>.review-side-panel{position:absolute;inset:0 0 0 auto;z-index:50;width:300px;max-width:90%;box-shadow:-12px 0 30px #0008}.review-toolbar .review-tool-label{display:none}.review-stage{padding:28px 20px}.review-meta{font-size:10px;flex-wrap:wrap}.review-meta .review-meta-right{font-size:9px}}
+.review-viewport[data-tool=prototype]{touch-action:none}
+.review-evidence-actions{display:flex;flex-wrap:wrap;gap:5px;margin-bottom:10px}
+.review-evidence-actions button,.review-evidence-steps button{border:1px solid var(--border);border-radius:4px;padding:4px 7px;text-align:left}
+.review-evidence-actions button:hover,.review-evidence-actions button[aria-pressed=true],.review-evidence-steps button:hover{background:var(--accent)}
+.review-evidence-actions button:disabled,.review-evidence-steps button:disabled{opacity:.55}
+.review-evidence-result,.review-evidence-diagnostics{display:grid;gap:8px;margin-top:10px;border-top:1px solid var(--border);padding-top:10px;overflow-wrap:anywhere}
+.review-evidence-steps{display:grid;gap:6px;padding-left:18px;list-style:decimal}
+.review-evidence-steps p,.review-evidence-diagnostics li,.review-evidence-result>p,.review-evidence-frame figcaption{color:var(--muted-foreground);font-size:11px}
+.review-evidence-frame button{position:relative;display:block;width:100%;cursor:crosshair}
+.review-evidence-frame img{display:block;width:100%;height:auto;background:white}
+.review-evidence-frame figcaption{margin-top:5px}
+.review-evidence-frame .review-pin{pointer-events:none}
+.review-evidence-thread{border-top:1px solid var(--border);padding-top:8px}
 /* Visual evidence uses Taro chrome; artifact screenshots retain their own themes. */
 .artifact-audit-panel { display:flex; flex-direction:column; gap:14px; }
 .artifact-audit-panel .artifact-audit-run { min-height:36px; justify-content:center; gap:8px; }

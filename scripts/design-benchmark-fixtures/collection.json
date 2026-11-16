@@ -1,0 +1,7 @@
+{
+  "products": [
+    {"name":"Cairn vessel in slate with a softly folded rim","image":"cairn-vessel-still.png","description":"A vessel with a low foot and irregular shoulder."},
+    {"name":"Field Studio hillside print from the late-summer archive","image":"field-studio.png","description":"A landscape print from the Field Studio archive."},
+    {"name":"Incomplete winter archive print with the original mounting notes","image":"winter-archive.png","description":"The original image is absent. The surviving mounting note records a matte board and warm white border."}
+  ]
+}

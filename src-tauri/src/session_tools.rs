@@ -164,6 +164,26 @@ pub fn effective_root(root: &Path, scope: &str) -> Result<PathBuf, String> {
     }
 }
 
+pub fn with_owned_worktree<T>(
+    root: &Path,
+    scope: &str,
+    expected: &Path,
+    action: impl FnOnce(&Path) -> Result<T, String>,
+) -> Result<T, String> {
+    let key = key(root, scope)?;
+    let registry = sessions().lock().map_err(|_| "Session registry is unavailable")?;
+    let session = registry.get(&key);
+    guard_session(&key.0, session, "Stage project assets", &Value::Null)?;
+    let worktree = session.and_then(|session| session.worktree.as_ref())
+        .ok_or("This session has no owned worktree.")?;
+    if !expected.is_absolute() || fs::canonicalize(expected).ok().as_ref() != Some(&worktree.path) {
+        return Err("The expected worktree is not the active worktree for this session.".into());
+    }
+    validate_worktree(&key.0, worktree)?;
+    // Prevent ExitWorktree or another assignment while the asset snapshot is published.
+    action(&worktree.path)
+}
+
 pub fn is_plan_mode(root: &Path, scope: &str) -> bool {
     key(root, scope)
         .ok()
@@ -1194,6 +1214,32 @@ mod tests {
         git(root, &["add", "tracked.txt"]).unwrap();
         git(root, &["commit", "-m", "Initial"]).unwrap();
         dir
+    }
+
+    #[tokio::test]
+    async fn stages_assets_only_in_the_active_worktree_owned_by_this_scope() {
+        use crate::project_asset_commands::{project_assets, AssetRequest};
+        use taro::project_assets::{AssetOptions, ProjectAssets, Source};
+
+        let dir = repository();
+        let root = fs::canonicalize(dir.path()).unwrap();
+        let source = ProjectAssets::open(&root).unwrap();
+        let asset = source.import("brand.woff2", b"wOF2fixture", Source::default(), AssetOptions::default()).unwrap();
+        fs::write(root.join("ordinary-untracked.txt"), "outside asset collection").unwrap();
+        let output = execute("EnterWorktree", &json!({}), &root, "asset-stage", true).await.unwrap();
+        let target = PathBuf::from(output.artifact["worktreePath"].as_str().unwrap());
+        let request = |scope: &str, worktree: PathBuf| project_assets(root.to_string_lossy().into_owned(), AssetRequest::StageWorktree {
+            session_id: scope.into(), expected_worktree: worktree, asset_ids: vec![asset.id.clone()],
+        });
+        assert!(request("another-scope", target.clone()).await.unwrap_err().contains("owned worktree"));
+        assert!(request("asset-stage", root.clone()).await.unwrap_err().contains("expected worktree"));
+        assert!(!target.join(&asset.original.path).exists());
+        let staged = request("asset-stage", target.clone()).await.unwrap();
+        assert_eq!(staged[0]["id"], asset.id);
+        assert_eq!(fs::read(target.join(&asset.original.path)).unwrap(), b"wOF2fixture");
+        assert!(!target.join("ordinary-untracked.txt").exists());
+        execute("EnterPlanMode", &json!({}), &root, "asset-stage", false).await.unwrap();
+        assert!(request("asset-stage", target.clone()).await.unwrap_err().contains("plan mode"));
     }
 
     #[tokio::test]

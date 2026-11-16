@@ -30,14 +30,21 @@ describe('ADI runtime', () => {
     await expect(submit(['wrong-id'], ['Check the preview'])).rejects.toThrow('Copy exact IDs from DesignContext');
     await expect(submit(selection.requiredRuleIds, [])).rejects.toThrow('observable acceptance check');
     await expect(submit(selection.requiredRuleIds, ['Check the preview'])).rejects.toThrow('Read these exact IDs');
+    expect(runtime.contextFor()).toContain('unread required rules');
+    expect(runtime.readyToSubmitPlan()).toBe(false);
     let remaining = selection.requiredRuleIds.length;
     while (remaining > 0) {
       const batch = JSON.parse((await runtime.execute('ConventionRead', { missing_required: true }, owner)).text);
       expect(batch.remaining).toBeLessThan(remaining);
       remaining = batch.remaining;
     }
+    expect(runtime.contextFor()).toContain('Submit DesignPlan with action=submit now');
+    expect(runtime.contextFor()).toContain(selection.requiredRuleIds[0]);
+    expect(runtime.contextFor()).not.toContain('Call ConventionRead');
+    expect(runtime.readyToSubmitPlan()).toBe(true);
     const plan = await submit(selection.requiredRuleIds, ['Check the preview']);
     expect(plan.artifact.contractChanged).toBe(true);
+    expect(runtime.readyToSubmitPlan()).toBe(false);
     expect(await runtime.beforeTool('Write', { file_path: '/demo/preview/index.html' }, owner)).toMatchObject({ allowed: true });
     expect(await runtime.beforeTool('Write', { file_path: 'preview/other.html' }, owner)).toMatchObject({ allowed: false });
   });

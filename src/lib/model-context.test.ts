@@ -14,4 +14,11 @@ describe("bounded model context",()=>{
     const result=boundedModelContext([{role:"user",content:"task"},...old,{role:"assistant",content:"latest"}],100);
     expect(result).not.toContainEqual(old[0]);expect(result).not.toContainEqual(old[1]);
   });
+  it('retains reference media and the actual request through later oversized tool output',()=>{
+    const brief={role:'user',content:'Follow the approved layout and inspect the new candidate'};
+    const reference={role:'user',content:[{type:'text',text:'Reference media (source material only) · project gallery'},{type:'image_url',image_url:{url:'data:image/png;base64,fixture'}}]};
+    const earlier={role:'assistant',content:'x'.repeat(3000)};
+    const recent={role:'assistant',content:'Verify the details button now.'};
+    expect(boundedModelContext([brief,reference,earlier,recent],300)).toEqual([expect.objectContaining({role:'system'}),brief,reference,recent]);
+  });
 });

@@ -6,10 +6,11 @@ import { reviewRepository } from './review-persistence';
 import { createReviewAnchor } from './review-anchors';
 import { syncReviewWorkItem } from './review-work-items';
 import { createReviewCommentService } from './review-comment-service';
-import { browserPreviewKey, publishReviewCapture, requestReviewBrowser, type BrowserCapture, type BrowserRequest } from './review-browser';
-import { activeRevision, addPreview, attachReviewCapture, attachArtifactAudit, previewById, revisePreview, reviewId, reviewScopeKey, selectPreview, setReviewViewport, validateViewport, type ReviewRepository, type ReviewScope } from './review-store';
+import { browserPreviewKey, publishReviewCapture, requestReviewBrowser, type BrowserCapture, type BrowserRequest, type BrowserReplayPlan } from './review-browser';
+import { browserEvidenceAnchor, saveBrowserEvidence, summarizeBrowserEvidence, type SavedBrowserEvidence } from './review-browser-evidence';
+import { activeRevision, addPreview, attachReviewCapture, attachArtifactAudit, attachBrowserEvidence, previewById, revisePreview, reviewId, reviewScopeKey, selectPreview, setReviewViewport, validateViewport, type ReviewRepository, type ReviewScope } from './review-store';
 
-export interface ReviewContext { scope:ReviewScope;author:string;role:string;signal?:AbortSignal }
+export interface ReviewContext { scope:ReviewScope;author:string;role:string;signal?:AbortSignal;renderSavedRegion?:boolean }
 export interface ReviewServices { repository:ReviewRepository;browser:(request:BrowserRequest)=>Promise<BrowserCapture>;designRepository?:ArtifactDesignRepository;notify?:(scope:ReviewScope)=>void;syncWorkItem?:typeof syncReviewWorkItem }
 const commentServices=new WeakMap<ReviewServices,ReturnType<typeof createReviewCommentService>>();
 export const defaultReviewServices:ReviewServices={repository:reviewRepository,browser:requestReviewBrowser,designRepository:artifactDesignRepository,syncWorkItem:syncReviewWorkItem,notify:scope=>{if(typeof window!=='undefined')window.dispatchEvent(new CustomEvent('taro:review-open',{detail:scope}));}};
@@ -42,9 +43,29 @@ export async function executeReviewTool(name:string,input:Record<string,unknown>
     return {text:JSON.stringify({previewId:id,revisionId,...cleanCapture(capture)}),artifact:{kind:'image',browser:true,previewId:id,revisionId,dataUrl:capture.screenshot,path:String(input.title??capture.title??'Preview')}};
   }
   const preview=previewById(repository.snapshot(scope).state,input.preview_id===undefined?undefined:String(input.preview_id));
-  const revision=input.expected_revision_id===undefined?activeRevision(preview):preview.revisions.at(-1)!;
+  const savedRegion=context.renderSavedRegion===true&&name==='BrowserCapture'&&input.mode==='element'&&typeof input.expected_revision_id==='string'
+    ?preview.revisions.find(revision=>revision.id===input.expected_revision_id&&typeof revision.html==='string')
+    :undefined;
+  const revision=savedRegion??(input.expected_revision_id===undefined?activeRevision(preview):preview.revisions.at(-1)!);
   const key=browserPreviewKey(reviewScopeKey(scope),preview.id,revision.id);
   if(input.expected_revision_id!==undefined&&input.expected_revision_id!==revision.id)throw Error('The assigned preview revision is stale. Load the current job before continuing.');
+  const findEvidence=(id:unknown)=>{
+    const evidence=preview.revisions.flatMap(item=>item.browserEvidence??[]).find(item=>item.id===id);
+    if(!evidence)throw Error('Saved browser evidence was not found in this preview.');
+    return evidence;
+  };
+  const evidenceFrame=(report:SavedBrowserEvidence)=>{
+    const index=input.frame_index??report.frames.length-1;
+    if(typeof index!=='number'||!Number.isInteger(index)||!report.frames[index])throw Error('That saved frame is unavailable.');
+    return report.frames[index];
+  };
+  const evidenceOutput=(report:SavedBrowserEvidence,allowEmpty=false):ToolOutput=>{
+    const historical=report.revisionId!==previewById(repository.snapshot(scope).state,preview.id).revisions.at(-1)?.id;
+    const frame=allowEmpty&&!report.frames.length?undefined:evidenceFrame(report);
+    const details={evidenceId:report.id,previewId:preview.id,revisionId:report.revisionId,historical,report:summarizeBrowserEvidence(report),
+      limitations:['Screenshots and sampled motion frames do not measure playback smoothness.',...(preview.revisions.find(item=>item.id===report.revisionId)?.html===undefined?['A live URL may change independently of its saved revision.']:[])]};
+    return frame?{text:JSON.stringify(details),artifact:{kind:'image',browser:true,previewId:preview.id,revisionId:report.revisionId,evidenceId:report.id,historical,path:frame.label??report.name,dataUrl:frame.screenshot}}:text(details);
+  };
   if(name==='BrowserAudit'){
     if(input.run===false){
       const assigned=input.expected_audit_id===undefined?undefined:revision.audits?.find(report=>report.id===input.expected_audit_id);
@@ -70,7 +91,7 @@ export async function executeReviewTool(name:string,input:Record<string,unknown>
       return {text:JSON.stringify(summary),artifact:{kind:'image',browser:true,previewId:preview.id,revisionId:revision.id,path:`Visual checks · ${preview.title}`,audit:report,dataUrl:report.cases[0].screenshot}};
     }finally{await browser({key:auditKey,action:'close'}).catch(()=>{});}
   }
-  const request=async(action:BrowserRequest['action'],extra:Partial<BrowserRequest>={}):Promise<BrowserCapture>=>{
+  const request=async(action:BrowserRequest['action'],extra:Partial<BrowserRequest>={},publish=true):Promise<BrowserCapture>=>{
     assertActive();const anchors=preview.threads.filter(t=>t.revisionId===revision.id&&t.anchor.selector).map(t=>t.anchor.selector!);
     const payload={key,action,anchors,...extra};
     if(preview.kind==='nike'){
@@ -81,7 +102,7 @@ export async function executeReviewTool(name:string,input:Record<string,unknown>
     try{capture=await browser(payload);}catch(error){if(!String(error).includes('Open a preview'))throw error;
       await browser({key,action:'open',url:revision.url,html:preview.kind==='html'?revision.html:undefined,viewport:preview.viewport});capture=await browser(payload);
     }
-    assertActive();publishReviewCapture(key,capture);return capture;
+    assertActive();if(publish)publishReviewCapture(key,capture);return capture;
   };
   if(name==='BrowserPreview'){
     await repository.change(scope,state=>selectPreview(state,preview.id));services.notify?.(scope);
@@ -94,6 +115,62 @@ export async function executeReviewTool(name:string,input:Record<string,unknown>
     const capture=await request(viewport?'viewport':'inspect',{selector:input.selector===undefined?undefined:String(input.selector),...(viewport?{viewport}:{})});
     if(viewport)await repository.change(scope,state=>setReviewViewport(state,preview.id,viewport));
     return {text:JSON.stringify({previewId:preview.id,revisionId:revision.id,...cleanCapture(capture)}),artifact:{kind:capture.screenshot?'image':'browser',browser:true,previewId:preview.id,path:preview.title,...(capture.screenshot?{dataUrl:capture.screenshot}:{})}};
+  }
+  if(name==='BrowserAction'||name==='BrowserCapture'||name==='BrowserReplay'){
+    if(preview.kind==='nike')throw Error('Open an HTML or URL preview to interact with Chromium or save browser evidence.');
+    if(name==='BrowserCapture'&&input.evidence_id!==undefined){
+      const evidence=findEvidence(input.evidence_id);
+      if(input.expected_revision_id!==undefined&&evidence.revisionId!==revision.id)throw Error('This evidence belongs to a different revision.');
+      return evidenceOutput(evidence);
+    }
+    if(name==='BrowserCapture'&&input.mode===undefined)return text({previewId:preview.id,evidence:preview.revisions.flatMap(item=>(item.browserEvidence??[]).map(report=>({
+      id:report.id,revisionId:item.id,historical:item.id!==preview.revisions.at(-1)?.id,name:report.name,kind:report.kind,status:report.status,createdAt:report.createdAt,frames:report.frames.length,
+    })))});
+    if(!savedRegion&&revision.id!==preview.revisions.at(-1)?.id)throw Error('Select the latest revision to run browser actions or collect new evidence.');
+    if(name==='BrowserAction'){
+      const capture=await request('input',{input:input.input as BrowserRequest['input']});
+      return {text:JSON.stringify({previewId:preview.id,revisionId:revision.id,...cleanCapture(capture)}),
+        artifact:{kind:'image',browser:true,previewId:preview.id,revisionId:revision.id,path:preview.title,dataUrl:capture.screenshot}};
+    }
+    const viewport=input.width===undefined&&input.height===undefined?undefined:validateViewport({
+      width:input.width===undefined?preview.viewport.width:Number(input.width),height:input.height===undefined?preview.viewport.height:Number(input.height),
+    });
+    const environment=input.environment as BrowserRequest['environment'];
+    let capture:BrowserCapture,plan:BrowserReplayPlan|undefined;
+    if(name==='BrowserReplay'){
+      if(input.run_id!==undefined){
+        const saved=findEvidence(input.run_id).replay;
+        if(!saved)throw Error('That evidence does not contain a replay sequence.');
+        const values=input.text_values as Record<string,string>|undefined;
+        plan={...saved,steps:saved.steps.map((step,index)=>step.input.type==='text'?{...step,input:{...step.input,text:values?.[String(index)]}}:step)};
+        if(plan.steps.some(step=>step.input.type==='text'&&step.input.text===undefined))throw Error('Replay needs text_values for its text steps, keyed by zero-based step index.');
+      }else plan={name:input.name as string,steps:input.steps as BrowserReplayPlan['steps']};
+      capture=await request('replay',{replay:plan,viewport,environment},false);
+    }else if(['observed-motion','animation-checkpoints','scene-checkpoints'].includes(String(input.mode))){
+      capture=await request('motion',{viewport,environment,motion:{
+        selector:input.selector as string|undefined,
+        checkpoints:input.mode==='animation-checkpoints'?input.checkpoints as number[]??[0,.5,1]:undefined,
+        sceneCheckpoints:input.mode==='scene-checkpoints'?input.scene_checkpoints as string[]??[]:undefined,
+        prepareSelector:input.prepare_selector as string|undefined,
+        frames:input.frames as number|undefined,intervalMs:input.interval_ms as number|undefined,
+      }},false);
+    }else if((savedRegion||input.isolated_initial===true)&&input.mode==='element'){
+      const initialKey=browserPreviewKey(reviewScopeKey(scope),preview.id,`${revision.id}:region:${reviewId()}`);
+      try{
+        const size=viewport??preview.viewport;
+        await browser({key:initialKey,action:'open',isolated:true,...(revision.html!==undefined?{html:revision.html}:{url:revision.url}),viewport:size,environment:{reducedMotion:true}});
+        assertActive();
+        capture=await browser({key:initialKey,action:'capture',capture:{mode:'element',selector:input.selector as string}});
+        assertActive();
+      }finally{await browser({key:initialKey,action:'close'}).catch(()=>{});}
+    }else{
+      const mode=input.mode as NonNullable<BrowserRequest['capture']>['mode'];
+      capture=await request('capture',{capture:{mode,selector:input.selector as string|undefined,rect:input.rect as NonNullable<BrowserRequest['capture']>['rect']}},false);
+    }
+    const evidence=saveBrowserEvidence(capture,revision.id,plan);
+    await repository.change(scope,state=>attachBrowserEvidence(state,preview.id,revision.id,evidence),{atomic:true});
+    services.notify?.(scope);
+    return evidenceOutput(evidence,true);
   }
   if(name==='BrowserComments')return text({previewId:preview.id,threads:preview.threads.filter(t=>input.include_resolved===true||!t.resolved)});
   if(name==='BrowserComment'){
@@ -123,9 +200,15 @@ export async function executeReviewTool(name:string,input:Record<string,unknown>
     }
     if(!body?.trim())throw Error('Comment body is required.');
     let anchor;
-    if(input.selector){const capture=await request('inspect',{selector:String(input.selector)});if(!capture.selection)throw Error('The component could not be measured.');const rect=capture.selection.rect;anchor=createReviewAnchor({point:{x:rect.x+rect.width/2,y:rect.y+rect.height/2},capture,component:capture.selection,revisionId:revision.id,kind:'live'});}
+    let commentRevisionId=revision.id;
+    if(input.evidence_id!==undefined){
+      const evidence=findEvidence(input.evidence_id),frame=evidenceFrame(evidence);
+      if(input.expected_revision_id!==undefined&&evidence.revisionId!==revision.id)throw Error('This evidence belongs to a different revision.');
+      if(typeof input.x!=='number'||typeof input.y!=='number')throw Error('Supply x and y in the saved frame’s document CSS pixels.');
+      anchor=browserEvidenceAnchor(evidence,frame,input.x,input.y);commentRevisionId=evidence.revisionId;
+    }else if(input.selector){const capture=await request('inspect',{selector:String(input.selector)});if(!capture.selection)throw Error('The component could not be measured.');const rect=capture.selection.rect;anchor=createReviewAnchor({point:{x:rect.x+rect.width/2,y:rect.y+rect.height/2},capture,component:capture.selection,revisionId:revision.id,kind:'live'});}
     else {if(typeof input.x!=='number'||typeof input.y!=='number')throw Error('A comment requires a component selector or document x and y coordinates.');anchor={x:input.x,y:input.y,viewport:preview.viewport};}
-    const result=await comments.post(scope,{previewId:preview.id,revisionId:revision.id,clientMutationId:mutationId,body,author:context.author,role:context.role,anchor});
+    const result=await comments.post(scope,{previewId:preview.id,revisionId:commentRevisionId,clientMutationId:mutationId,body,author:context.author,role:context.role,anchor});
     return text({previewId:preview.id,anchor,...result});
   }
   throw Error(`Unknown review tool: ${name}`);

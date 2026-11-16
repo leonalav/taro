@@ -48,6 +48,7 @@ export interface ChipRef {
   artifact?: ArtifactReference;
   comment?: CommentReference;
   review?: import("@/lib/review-feedback").ReviewReference;
+  recipe?: import('@/lib/design-recipes').DesignRecipeSelection;
 }
 
 export interface ChipInsertion {

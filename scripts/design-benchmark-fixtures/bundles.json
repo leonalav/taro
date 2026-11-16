@@ -1,0 +1,192 @@
+{
+  "editorial": {
+    "brief": "Build a polished editorial portfolio for Field Studio from the attached layout reference. Name the lead case study A quiet place to make things, preserve inputs/field-studio.png and the supplied Instrument Serif font at inputs/instrument-serif.woff2, and include a clearly visible View work link that scrolls to the named work. Preserve a long headline and clear narrow-screen hierarchy, with keyboard focus. Create a self-contained static preview at index.html.",
+    "attachment": "inputs/layout-reference.png",
+    "files": [
+      {
+        "path": "editorial/field-studio.png",
+        "destination": "inputs/field-studio.png",
+        "sha256": "c373cb307aa9904c772493731b1304317fab0aef7480243e099085411c227273"
+      },
+      {
+        "path": "editorial/instrument-serif-OFL.txt",
+        "destination": "inputs/instrument-serif-OFL.txt",
+        "sha256": "b6106a757902d2d412e09d94dc4a226fe3da80485208a98003969f1b8b6b1d74"
+      },
+      {
+        "path": "editorial/instrument-serif.woff2",
+        "destination": "inputs/instrument-serif.woff2",
+        "sha256": "5eb09b5ac0e28b67c2f041c8ba6d244604ca0c0980d65912ab2d47fed84ddc31"
+      },
+      {
+        "path": "editorial/layout-reference.png",
+        "destination": "inputs/layout-reference.png",
+        "sha256": "c8fed5f566f8ab57ed40a73d4409e2a2a5b47910bd453191670a693a551c29e5"
+      }
+    ]
+  },
+  "product-viewer": {
+    "brief": "Build a product page for the Cairn vessel using inputs/cairn-vessel.glb and the attached still. Provide pointer drag and keyboard rotation, a clearly visible Details control that reveals product information, and a useful static fallback using inputs/cairn-vessel-still.png when 3D fails. Keep the Details control available in the fallback. Support narrow layouts and reduced motion. Create a self-contained static preview at index.html.",
+    "attachment": "inputs/cairn-vessel-still.png",
+    "files": [
+      {
+        "path": "product-viewer/cairn-vessel-still.png",
+        "destination": "inputs/cairn-vessel-still.png",
+        "sha256": "22ceedbc92d58667e46f0de58394c6429be265d0f398c5d9612e633d19f7d079"
+      },
+      {
+        "path": "product-viewer/cairn-vessel.glb",
+        "destination": "inputs/cairn-vessel.glb",
+        "sha256": "747abe1e44a03d4b3c0f776cb574869a5c50606527124f7d081cd5a08bc537e3"
+      }
+    ]
+  },
+  "case-study": {
+    "brief": "Extend the existing Field Studio portfolio in index.html with a second project named Courtyard archive, a reachable Next project link and a visible focus indicator. Preserve the header, Instrument Serif typography, and the existing lead image crop at all sizes. Use the provided art for the new case study with appropriate alternative text.",
+    "files": [
+      {
+        "path": "starting-portfolio.html",
+        "destination": "index.html",
+        "sha256": "fb74f16072600e98c5061960feea069581f00b962f6d1b90f068b5a4a32c9b74"
+      },
+      {
+        "path": "editorial/instrument-serif.woff2",
+        "destination": "inputs/instrument-serif.woff2",
+        "sha256": "5eb09b5ac0e28b67c2f041c8ba6d244604ca0c0980d65912ab2d47fed84ddc31"
+      },
+      {
+        "path": "editorial/instrument-serif-OFL.txt",
+        "destination": "inputs/instrument-serif-OFL.txt",
+        "sha256": "b6106a757902d2d412e09d94dc4a226fe3da80485208a98003969f1b8b6b1d74"
+      },
+      {
+        "path": "editorial/field-studio.png",
+        "destination": "inputs/field-studio.png",
+        "sha256": "c373cb307aa9904c772493731b1304317fab0aef7480243e099085411c227273"
+      }
+    ]
+  },
+  "carousel": {
+    "brief": "Build a product carousel in index.html using the first two products and their names exactly as provided in inputs/collection.json. Give each item a View details action. Make pointer gestures, touch and arrow buttons select slides, expose which slide is current, provide keyboard selection and avoid horizontal viewport overflow.",
+    "files": [
+      {
+        "path": "collection.json",
+        "destination": "inputs/collection.json",
+        "sha256": "fbcd929d1c0dd79c1ec2adbd8b6a61ed6889401d3998740d5d125f046fba1af0"
+      },
+      {
+        "path": "editorial/field-studio.png",
+        "destination": "inputs/field-studio.png",
+        "sha256": "c373cb307aa9904c772493731b1304317fab0aef7480243e099085411c227273"
+      },
+      {
+        "path": "product-viewer/cairn-vessel-still.png",
+        "destination": "inputs/cairn-vessel-still.png",
+        "sha256": "22ceedbc92d58667e46f0de58394c6429be265d0f398c5d9612e633d19f7d079"
+      }
+    ]
+  },
+  "gallery": {
+    "brief": "Build an image gallery in index.html using all three entries and captions from inputs/collection.json. The winter archive image is deliberately absent. Preserve its caption and present a useful missing-image state. Let people open and dismiss the other images with either keyboard or pointer, and restore focus on dismissal.",
+    "files": [
+      {
+        "path": "collection.json",
+        "destination": "inputs/collection.json",
+        "sha256": "fbcd929d1c0dd79c1ec2adbd8b6a61ed6889401d3998740d5d125f046fba1af0"
+      },
+      {
+        "path": "editorial/field-studio.png",
+        "destination": "inputs/field-studio.png",
+        "sha256": "c373cb307aa9904c772493731b1304317fab0aef7480243e099085411c227273"
+      },
+      {
+        "path": "product-viewer/cairn-vessel-still.png",
+        "destination": "inputs/cairn-vessel-still.png",
+        "sha256": "22ceedbc92d58667e46f0de58394c6429be265d0f398c5d9612e633d19f7d079"
+      }
+    ]
+  },
+  "navigation": {
+    "brief": "Fix only the broken keyboard operation of the Projects control in the existing index.html. Enter and Space should toggle the menu. Escape should close an open menu and return focus to Projects. Use the pre-seeded Review comment on #menu-toggle, keep the visible styling and neighboring links, and verify that evidence for the old preview cannot resolve the comment on the new preview.",
+    "files": [
+      {
+        "path": "starting-navigation.html",
+        "destination": "index.html",
+        "sha256": "a94a6b485b7919096baf02c73ba816b97bc056ab2b863649549e1833b763c090"
+      }
+    ]
+  },
+  "materials": {
+    "brief": "Build a material and lighting showcase in index.html using the supplied Cairn vessel and the three materials described in inputs/scene-brief.json. Keep the geometry unchanged. Material selection must produce visually distinct renderings and provide meaningful text descriptions with keyboard access.",
+    "attachment": "inputs/cairn-vessel-still.png",
+    "files": [
+      {
+        "path": "scene-brief.json",
+        "destination": "inputs/scene-brief.json",
+        "sha256": "be085921fda066c3fdf3d1fab3cf897b6d3210853e478dc44a01c558c6cce154"
+      },
+      {
+        "path": "product-viewer/cairn-vessel.glb",
+        "destination": "inputs/cairn-vessel.glb",
+        "sha256": "747abe1e44a03d4b3c0f776cb574869a5c50606527124f7d081cd5a08bc537e3"
+      },
+      {
+        "path": "product-viewer/cairn-vessel-still.png",
+        "destination": "inputs/cairn-vessel-still.png",
+        "sha256": "22ceedbc92d58667e46f0de58394c6429be265d0f398c5d9612e633d19f7d079"
+      }
+    ]
+  },
+  "particles": {
+    "brief": "Build a particle composition in index.html using the seeded subject and Pause motion label in inputs/scene-brief.json. Keep the focal point clear. Give Pause motion a working keyboard interaction, honor reduced motion on initial load and when the setting changes, and keep the main action available while paused.",
+    "files": [
+      {
+        "path": "scene-brief.json",
+        "destination": "inputs/scene-brief.json",
+        "sha256": "be085921fda066c3fdf3d1fab3cf897b6d3210853e478dc44a01c558c6cce154"
+      }
+    ]
+  },
+  "camera": {
+    "brief": "Build a scroll-controlled camera story in index.html using the Cairn vessel and all three moments named in inputs/scene-brief.json. Give each moment a distinct view, a readable in-page link and the supplied caption. Keep narrow layouts readable and preserve access to each moment when reduced motion is enabled.",
+    "attachment": "inputs/cairn-vessel-still.png",
+    "files": [
+      {
+        "path": "scene-brief.json",
+        "destination": "inputs/scene-brief.json",
+        "sha256": "be085921fda066c3fdf3d1fab3cf897b6d3210853e478dc44a01c558c6cce154"
+      },
+      {
+        "path": "product-viewer/cairn-vessel.glb",
+        "destination": "inputs/cairn-vessel.glb",
+        "sha256": "747abe1e44a03d4b3c0f776cb574869a5c50606527124f7d081cd5a08bc537e3"
+      },
+      {
+        "path": "product-viewer/cairn-vessel-still.png",
+        "destination": "inputs/cairn-vessel-still.png",
+        "sha256": "22ceedbc92d58667e46f0de58394c6429be265d0f398c5d9612e633d19f7d079"
+      }
+    ]
+  },
+  "selection": {
+    "brief": "Build a product viewer in index.html from the attached layout reference and the three named vessel regions in inputs/scene-brief.json. Pointer selection in the upper, middle and lower regions opens details for Rim, Shoulder and Foot respectively. A keyboard-accessible list must reach the same details. Keep selection across camera interaction or viewport changes.",
+    "attachment": "inputs/cairn-vessel-still.png",
+    "files": [
+      {
+        "path": "scene-brief.json",
+        "destination": "inputs/scene-brief.json",
+        "sha256": "be085921fda066c3fdf3d1fab3cf897b6d3210853e478dc44a01c558c6cce154"
+      },
+      {
+        "path": "product-viewer/cairn-vessel.glb",
+        "destination": "inputs/cairn-vessel.glb",
+        "sha256": "747abe1e44a03d4b3c0f776cb574869a5c50606527124f7d081cd5a08bc537e3"
+      },
+      {
+        "path": "product-viewer/cairn-vessel-still.png",
+        "destination": "inputs/cairn-vessel-still.png",
+        "sha256": "22ceedbc92d58667e46f0de58394c6429be265d0f398c5d9612e633d19f7d079"
+      }
+    ]
+  }
+}

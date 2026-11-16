@@ -1,10 +1,12 @@
 import type { DesignContext } from './types';
+import type { ProjectDirection } from '../project-direction';
 
 export interface RunRequest {
   text: string;
   referenceIds: string[];
   reviewItem?: unknown;
   explicitScope?: 'frontend' | 'non-ui' | 'discussion';
+  projectDirection?: ProjectDirection;
 }
 export interface WorkspaceDesignSnapshot {
   files: string[];
@@ -20,8 +22,8 @@ export interface MutationDescriptor {
   canonicalPaths?: string[];
   effect: 'read' | 'run-metadata' | 'project-design' | 'workspace-write' | 'external-unknown';
 }
-const uiPath = /\.(?:css|scss|sass|less|styl|html?|tsx|jsx|vue|svelte|astro|swiftui|xaml|svg|woff2?|ttf|webp|png|jpe?g|avif|gif|ico)$/i;
-const uiDirectory = /(?:^|\/)(?:components?|views?|pages?|screens?|layouts?|styles?|themes?|public|assets|templates|locales|frontend|client)(?:\/|$)/i;
+const uiPath = /\.(?:css|scss|sass|less|styl|html?|tsx|jsx|vue|svelte|astro|swiftui|xaml|svg|woff2?|ttf|otf|webp|png|jpe?g|avif|gif|ico|glb|gltf|hdr|exr|dds|ktx2|mp4|webm)$/i;
+const uiDirectory = /(?:^|\/)(?:components?|views?|pages?|screens?|layouts?|styles?|themes?|public|assets|taro-assets|templates|locales|frontend|client)(?:\/|$)/i;
 const backendDirectory = /(?:^|\/)(?:server|backend|migrations?|api|workers?|database|db|src-tauri)(?:\/|$)/i;
 const configPath = /(?:^|\/)(?:vite\.config\.|next\.config\.|tailwind\.config\.|webpack\.config\.|package\.json$|pnpm-lock\.yaml$|tauri\.conf\.json$)/i;
 const componentKinds = ['accordion', 'alert', 'button', 'checkbox', 'combobox', 'dialog-modal', 'disclosure', 'grid', 'link', 'listbox', 'menu-button', 'radio', 'slider', 'switch', 'table', 'tabs', 'toolbar', 'tooltip', 'treeview'];
@@ -67,14 +69,15 @@ export function classifyDesignContext({ request, workspace }: DesignSignals, pro
     : 'discussion';
   const kinds = unique([...workspace.componentKinds, ...componentKinds.filter(kind => new RegExp('\\b' + kind + '\\b', 'i').test(text))]);
   const platforms = requestedPlatforms.length ? requestedPlatforms : workspace.platformEvidence.length ? workspace.platformEvidence : ['web'];
+  const direction=request.projectDirection;
   return {
-    intent, platforms, audience: [], primaryActions: [], aesthetic: [],
-    constraints: brandChange ? [] : ['Preserve existing project identity'],
+    intent, platforms, audience: direction?[direction.audience]:[], primaryActions: direction?[direction.primaryAction]:[], aesthetic: direction?[direction.selectedDirection]:[],
+    constraints: unique([...(brandChange?[]:['Preserve existing project identity']),...direction?.constraints??[]]),
     inputMethods: platforms.includes('ios') || platforms.includes('android') ? ['touch', 'assistive-technology'] : ['keyboard', 'pointer', 'assistive-technology'],
     domain: [], surfaces: kinds, referenceIds: [...request.referenceIds],
     evidence: unique([...workspace.files.filter(path => uiPath.test(path)).slice(0, 20), ...request.referenceIds]),
     uncertainty: [...(!requestedPlatforms.length && !workspace.platformEvidence.length ? ['Target platform inferred as web.'] : []),
       ...(!visual && !backend && !discussion && !request.reviewItem ? ['Request does not identify the affected surface.'] : [])],
-    fingerprint: JSON.stringify([workspace.fingerprint, intent, platforms, kinds, request.referenceIds]),
+    fingerprint: JSON.stringify([workspace.fingerprint, intent, platforms, kinds, request.referenceIds, direction?.selectedDirection]),
   };
 }

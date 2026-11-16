@@ -13,6 +13,7 @@ import {taskRepository} from '@/lib/task-persistence';
 import {reviewRepository} from '@/lib/review-persistence';
 import {selectPreview} from '@/lib/review-store';
 import type {DesignJob} from '@/lib/design-job';
+import {DesignJobDetails} from '@/components/design-job-details';
 import {createTask,completeTask,type WorkspaceTask} from '@/lib/task-store';
 import {createTaskExecutor} from '@/lib/task-runtime';
 import {executeAgentTool} from '@/lib/agent-tools';
@@ -137,6 +138,7 @@ function TaskDetail({task,settings,onRun,onStop,onSave,onOpenDoc,onDecide,onRevi
         Use a Git worktree
       </label>}
       {job?.worktree&&<p className='break-all'>Worktree {job.worktree}</p>}
+      {job?.directionVersion&&<DesignJobDetails job={job} jobId={task.id} busy={busy}/>}
       {job?.verdict&&<ul className='list-disc space-y-1 pl-4'>{job.verdict.findings.map((finding,index)=><li key={index}>{finding}</li>)}</ul>}
       {job?.previousPreviews?.length?<DesignComparison job={job}/>:null}
       {task.reviewItem&&<p className='break-all'>{task.reviewItem.resolved?'Resolved':'Open'} · {task.reviewItem.anchor.selector??`${Math.round(task.reviewItem.anchor.x)}, ${Math.round(task.reviewItem.anchor.y)}`}</p>}

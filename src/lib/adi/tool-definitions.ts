@@ -21,3 +21,6 @@ export const adiToolDefinitions = [
   }),
 ];
 export const adiToolNames = new Set(adiToolDefinitions.map(tool => tool.function.name));
+export const submitReadyDesignPlan=tool('DesignPlan','Submit the required implementation decisions now. Use the exact required rule IDs, target files and concrete acceptance checks.',{
+  action:{type:'string',enum:['submit']},decisions,
+},['action','decisions']);
